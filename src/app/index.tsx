@@ -1,98 +1,88 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { router } from 'expo-router';
+import { FlatList, Image, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { CreateListButton } from '@/components/CreateListButton';
+import { EmptyState } from '@/components/EmptyState';
+import { TripCard } from '@/components/TripCard';
+import { useTrips } from '@/context/TripsContext';
+import { colors, spacing } from '@/theme/theme';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+export default function ListsOverviewScreen() {
+  const { trips, createList } = useTrips();
+  const sorted = [...trips].sort((a, b) => b.createdAt - a.createdAt);
+
+  const handleCreate = (name: string) => {
+    const id = createList(name);
+    router.push({ pathname: '/trip/[id]', params: { id } });
+  };
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <View style={styles.header}>
+        <View style={styles.logoBadge}>
+          <Image source={require('@/assets/images/logo-mark.png')} style={styles.logo} resizeMode="contain" />
+        </View>
+        <View style={styles.titleBlock}>
+          <Text style={styles.title}>Note Shop List</Text>
+          <Text style={styles.subtitle}>by Eri</Text>
+        </View>
+      </View>
 
-export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+      <View style={styles.content}>
+        <Text style={styles.sectionLabel}>Listat e tua</Text>
+        <FlatList
+          data={sorted}
+          keyExtractor={(trip) => trip.id}
+          style={styles.list}
+          renderItem={({ item: trip }) => (
+            <TripCard trip={trip} onPress={() => router.push({ pathname: '/trip/[id]', params: { id: trip.id } })} />
+          )}
+          ListEmptyComponent={
+            <EmptyState
+              icon="list-outline"
+              title="Nuk ke ende asnjë listë"
+              subtitle="Krijo listën tënde të parë me butonin + më poshtë!"
+            />
+          }
+          contentContainerStyle={sorted.length === 0 ? styles.flex : styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+      <View style={styles.footer}>
+        <CreateListButton onCreate={handleCreate} />
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
+  flex: { flex: 1 },
+  safeArea: { flex: 1, backgroundColor: colors.background },
+  header: {
     flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
     alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
-  heroSection: {
+  logoBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: colors.card,
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
   },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
+  logo: { width: 30, height: 30 },
+  titleBlock: { flex: 1 },
+  title: { fontSize: 20, fontWeight: '700', color: colors.text },
+  subtitle: { fontSize: 12, color: colors.textMuted },
+  content: { flex: 1, paddingHorizontal: spacing.md },
+  sectionLabel: { fontSize: 13, fontWeight: '600', color: colors.textMuted, marginBottom: spacing.sm },
+  list: { flex: 1 },
+  listContent: { paddingBottom: spacing.sm },
+  footer: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm, alignItems: 'flex-end' },
 });
