@@ -1,11 +1,18 @@
 import type { ShoppingItem, ShoppingTrip } from '@/types/models';
+import { normalizePriority } from '@/utils/priority';
 
 export function tripIncomeTotal(trip: ShoppingTrip): number {
   return (trip.incomes ?? []).reduce((sum, income) => sum + income.amount, 0);
 }
 
-export function sortBoughtLast<T extends { bought: boolean }>(items: T[]): T[] {
-  return [...items.filter((item) => !item.bought), ...items.filter((item) => item.bought)];
+// Unchecked items first, most urgent on top (same priority keeps its original order); checked items go last.
+export function sortBoughtLast<T extends { bought: boolean; priority?: number }>(items: T[]): T[] {
+  const open = items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => !item.bought)
+    .sort((a, b) => normalizePriority(b.item.priority) - normalizePriority(a.item.priority) || a.index - b.index)
+    .map(({ item }) => item);
+  return [...open, ...items.filter((item) => item.bought)];
 }
 
 export function computeSpentTotal(items: ShoppingItem[]): number {

@@ -10,7 +10,7 @@ const initialBills: ShoppingItem[] = [
 
 interface BillsContextValue {
   bills: ShoppingItem[];
-  addBill: (name: string, price: number | null) => void;
+  addBill: (name: string, price: number | null, priority?: number) => void;
   toggleBill: (id: string, tripId?: string) => void;
   releaseTrip: (tripId: string) => void;
   updateBill: (id: string, patch: Partial<ShoppingItem>) => void;
@@ -23,10 +23,10 @@ const BillsContext = createContext<BillsContextValue | null>(null);
 export function BillsProvider({ children }: { children: ReactNode }) {
   const [bills, setBills] = useState<ShoppingItem[]>(initialBills);
 
-  const addBill = (name: string, price: number | null) => {
+  const addBill = (name: string, price: number | null, priority = 1) => {
     setBills((prev) => [
       ...prev,
-      { id: String(Date.now()), name, quantity: '', price, bought: false, createdAt: Date.now() },
+      { id: String(Date.now()), name, quantity: '', price, bought: false, createdAt: Date.now(), priority },
     ]);
   };
 

@@ -9,7 +9,7 @@ const initialWishlist: ShoppingItem[] = [
 
 interface WishlistContextValue {
   wishlist: ShoppingItem[];
-  addWish: (name: string, price: number | null) => void;
+  addWish: (name: string, price: number | null, priority?: number) => void;
   toggleWish: (id: string, tripId?: string) => void;
   releaseTrip: (tripId: string) => void;
   updateWish: (id: string, patch: Partial<ShoppingItem>) => void;
@@ -22,10 +22,10 @@ const WishlistContext = createContext<WishlistContextValue | null>(null);
 export function WishlistProvider({ children }: { children: ReactNode }) {
   const [wishlist, setWishlist] = useState<ShoppingItem[]>(initialWishlist);
 
-  const addWish = (name: string, price: number | null) => {
+  const addWish = (name: string, price: number | null, priority = 1) => {
     setWishlist((prev) => [
       ...prev,
-      { id: String(Date.now()), name, quantity: '', price, bought: false, createdAt: Date.now() },
+      { id: String(Date.now()), name, quantity: '', price, bought: false, createdAt: Date.now(), priority },
     ]);
   };
 

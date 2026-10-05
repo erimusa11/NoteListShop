@@ -6,6 +6,8 @@ export interface ShoppingItem {
   bought: boolean;
   createdAt: number;
   boughtInTripId?: string | null;
+  /** 1 = normal … 5 = urgent. Missing means 1. */
+  priority?: number;
 }
 
 export interface IncomeEntry {

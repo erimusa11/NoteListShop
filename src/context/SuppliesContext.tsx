@@ -4,7 +4,7 @@ import type { ShoppingItem } from '@/types/models';
 
 interface SuppliesContextValue {
   supplies: ShoppingItem[];
-  addSupply: (name: string, price: number | null) => void;
+  addSupply: (name: string, price: number | null, priority?: number) => void;
   toggleSupply: (id: string, tripId?: string) => void;
   releaseTrip: (tripId: string) => void;
   updateSupply: (id: string, patch: Partial<ShoppingItem>) => void;
@@ -17,10 +17,10 @@ const SuppliesContext = createContext<SuppliesContextValue | null>(null);
 export function SuppliesProvider({ children }: { children: ReactNode }) {
   const [supplies, setSupplies] = useState<ShoppingItem[]>([]);
 
-  const addSupply = (name: string, price: number | null) => {
+  const addSupply = (name: string, price: number | null, priority = 1) => {
     setSupplies((prev) => [
       ...prev,
-      { id: String(Date.now()), name, quantity: '', price, bought: false, createdAt: Date.now() },
+      { id: String(Date.now()), name, quantity: '', price, bought: false, createdAt: Date.now(), priority },
     ]);
   };
 

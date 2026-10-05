@@ -24,7 +24,7 @@ interface TripsContextValue {
   addIncome: (tripId: string, name: string, amount: number) => void;
   updateIncome: (tripId: string, incomeId: string, patch: Partial<IncomeEntry>) => void;
   removeIncome: (tripId: string, incomeId: string) => void;
-  addItem: (tripId: string, name: string, quantity: string, price: number | null) => void;
+  addItem: (tripId: string, name: string, quantity: string, price: number | null, priority?: number) => void;
   toggleItem: (tripId: string, itemId: string) => void;
   updateItem: (tripId: string, itemId: string, patch: Partial<ShoppingItem>) => void;
   removeItem: (tripId: string, itemId: string) => void;
@@ -78,10 +78,10 @@ export function TripsProvider({ children }: { children: ReactNode }) {
     updateTripIncomes(tripId, (incomes) => incomes.filter((i) => i.id !== incomeId));
   };
 
-  const addItem = (tripId: string, name: string, quantity: string, price: number | null) => {
+  const addItem = (tripId: string, name: string, quantity: string, price: number | null, priority = 1) => {
     updateTripItems(tripId, (items) => [
       ...items,
-      { id: String(Date.now()), name, quantity, price, bought: false, createdAt: Date.now() },
+      { id: String(Date.now()), name, quantity, price, bought: false, createdAt: Date.now(), priority },
     ]);
   };
 

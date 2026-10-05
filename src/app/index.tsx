@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { FlatList, Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { FlatList, Image, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '@/components/BottomSheet';
@@ -22,6 +22,15 @@ import { colors, spacing } from '@/theme/theme';
 import { buildListSpend, buildSectionSpend } from '@/utils/reports';
 import { tripIncomeTotal } from '@/utils/totals';
 
+// Lower-case and strip accents so "shtator" finds "Shtator" and "mire" finds "Mirë".
+function normalizeText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .trim();
+}
+
 export default function ListsOverviewScreen() {
   const { trips, createList } = useTrips();
   const { user, signOut } = useAuth();
@@ -34,6 +43,14 @@ export default function ListsOverviewScreen() {
   const { wishlist } = useWishlist();
   const sorted = [...trips].sort((a, b) => b.createdAt - a.createdAt);
   const [tab, setTab] = useState<'lists' | 'reports'>('lists');
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  const needle = normalizeText(query);
+  const visibleTrips = needle ? sorted.filter((trip) => normalizeText(trip.name).includes(needle)) : sorted;
+  const closeSearch = () => {
+    setSearching(false);
+    setQuery('');
+  };
   const latestSections = buildSectionSpend(sorted.slice(0, 1), supplies, bills, wishlist);
   const recent = buildListSpend(trips)
     .slice(-12)
@@ -57,10 +74,41 @@ export default function ListsOverviewScreen() {
         <View style={styles.logoBadge}>
           <Image source={require('@/assets/images/logo-mark.png')} style={styles.logo} resizeMode="contain" />
         </View>
-        <View style={styles.titleBlock}>
-          <Text style={styles.title}>Note Shop List</Text>
-          <Text style={styles.subtitle}>Mirë se erdhe, {firstName}</Text>
-        </View>
+        {searching && tab === 'lists' ? (
+          <View style={styles.searchBox}>
+            <Ionicons name="search" size={18} color={colors.textMuted} />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Kërko listën…"
+              placeholderTextColor={colors.textMuted}
+              style={styles.searchInput}
+              autoFocus
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            <Pressable onPress={closeSearch} hitSlop={8} accessibilityRole="button" accessibilityLabel="Mbyll kërkimin">
+              <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <View style={styles.titleBlock}>
+              <Text style={styles.title}>Note Shop List</Text>
+              <Text style={styles.subtitle}>Mirë se erdhe, {firstName}</Text>
+            </View>
+            {tab === 'lists' && trips.length > 1 && (
+              <Pressable
+                onPress={() => setSearching(true)}
+                style={styles.searchButton}
+                accessibilityRole="button"
+                accessibilityLabel="Kërko listë"
+              >
+                <Ionicons name="search" size={20} color={colors.primaryDark} />
+              </Pressable>
+            )}
+          </>
+        )}
         <Pressable
           onPress={() => setProfileOpen(true)}
           style={styles.avatar}
@@ -113,11 +161,11 @@ export default function ListsOverviewScreen() {
       <View style={styles.content}>
         {tab === 'lists' ? (
           <FlatList
-            data={sorted}
+            data={visibleTrips}
             keyExtractor={(trip) => trip.id}
             style={styles.list}
             ListHeaderComponent={
-              recent.length > 0 ? (
+              recent.length > 0 && !needle ? (
                 <>
                   <MiniColumns data={recent} onPressColumn={openTrip} />
                   <LatestListPie
@@ -132,12 +180,17 @@ export default function ListsOverviewScreen() {
               <TripCard index={index} trip={trip} onPress={() => openTrip(trip.id)} />
             )}
             ListEmptyComponent={
-              <EmptyState
-                icon="list-outline"
-                title="Nuk ke ende asnjë listë"
-                subtitle="Krijo listën tënde të parë me butonin + më poshtë!"
-              />
+              needle ? (
+                <EmptyState icon="search-outline" title="Asnjë listë nuk u gjet" subtitle={`Nuk ka listë me "${query.trim()}"`} />
+              ) : (
+                <EmptyState
+                  icon="list-outline"
+                  title="Nuk ke ende asnjë listë"
+                  subtitle="Krijo listën tënde të parë me butonin + më poshtë!"
+                />
+              )
             }
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
           />
@@ -222,6 +275,25 @@ const styles = StyleSheet.create({
   },
   signOutText: { fontSize: 15, fontWeight: '700', color: colors.danger },
   titleBlock: { flex: 1 },
+  searchButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchBox: {
+    flex: 1,
+    height: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    paddingHorizontal: spacing.md,
+  },
+  searchInput: { flex: 1, fontSize: 15, color: colors.text, paddingVertical: 0 },
   title: { fontSize: 20, fontWeight: '700', color: colors.text },
   subtitle: { fontSize: 12, color: colors.textMuted },
   content: { flex: 1, paddingHorizontal: spacing.md },

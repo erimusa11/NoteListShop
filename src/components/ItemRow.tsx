@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Animated, {
   Easing,
@@ -20,10 +20,13 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { BottomSheet } from '@/components/BottomSheet';
 import { InlineEditableField } from '@/components/InlineEditableField';
+import { PrioritySelector } from '@/components/PrioritySelector';
 import { makeSlap, STAMP_MS, SUCK, TEAR } from '@/theme/motion';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { ShoppingItem } from '@/types/models';
+import { normalizePriority, priorityInfo } from '@/utils/priority';
 import { formatNumber } from '@/utils/totals';
 
 interface ItemRowProps {
@@ -96,6 +99,9 @@ function DeleteAction({
 
 export function ItemRow({ item, onToggle, onUpdate, onRemove, showQuantity = true }: ItemRowProps) {
   const reduced = useReducedMotion();
+  const [priorityOpen, setPriorityOpen] = useState(false);
+  const priority = priorityInfo(item.priority);
+  const urgent = normalizePriority(item.priority) > 1;
 
   const stamp = useSharedValue(item.bought ? 1 : 0);
   const strike = useSharedValue(item.bought ? 1 : 0);
@@ -295,6 +301,18 @@ export function ItemRow({ item, onToggle, onUpdate, onRemove, showQuantity = tru
                   textStyle={styles.quantity}
                 />
               )}
+              {!item.bought && (
+                <Pressable
+                  onPress={() => setPriorityOpen(true)}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Rëndësia: ${priority.label}. Ndrysho`}
+                  style={[styles.priorityTag, urgent && { backgroundColor: priority.color + '22' }]}
+                >
+                  <Ionicons name={urgent ? 'flag' : 'flag-outline'} size={13} color={priority.color} />
+                  {urgent && <Text style={[styles.priorityText, { color: priority.color }]}>{priority.label}</Text>}
+                </Pressable>
+              )}
             </View>
 
             <View style={styles.right}>
@@ -318,6 +336,15 @@ export function ItemRow({ item, onToggle, onUpdate, onRemove, showQuantity = tru
             </View>
           </Animated.View>
         </ReanimatedSwipeable>
+        <BottomSheet visible={priorityOpen} onClose={() => setPriorityOpen(false)} title="Sa e rëndësishme është?">
+          <PrioritySelector
+            value={item.priority}
+            onChange={(level) => {
+              onUpdate({ priority: level });
+              setPriorityOpen(false);
+            }}
+          />
+        </BottomSheet>
       </Animated.View>
     </Animated.View>
   );
@@ -382,6 +409,17 @@ const styles = StyleSheet.create({
   name: { fontSize: 16, fontWeight: '600', color: colors.text },
   nameBought: { color: colors.textMuted },
   quantity: { fontSize: 13, color: colors.textMuted },
+  priorityTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    borderRadius: radii.pill,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    marginTop: 2,
+  },
+  priorityText: { fontSize: 11, fontWeight: '700' },
   right: { alignItems: 'flex-end', gap: spacing.xs },
   price: { fontSize: 15, fontWeight: '600', color: colors.primaryDark },
   priceBought: { color: colors.success },

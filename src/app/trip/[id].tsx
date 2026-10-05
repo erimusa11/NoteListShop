@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AddItemButton } from '@/components/AddItemButton';
 import { BillsSummaryBar } from '@/components/BillsSummaryBar';
+import { OverBudgetCard } from '@/components/OverBudgetCard';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { InlineEditableField } from '@/components/InlineEditableField';
 import { IncomeRow } from '@/components/IncomeRow';
@@ -97,6 +98,8 @@ export default function TripDetailScreen() {
     [wishlist, checkedHere],
   );
   const combinedSpent = productsSpent + suppliesSpent + billsPaid + wishlistSpent;
+  // Only meaningful once some income was added; otherwise every purchase would count as "over".
+  const overBy = incomeTotal > 0 ? combinedSpent - incomeTotal : 0;
   const tripItems = trip?.items;
   const tagOptions = useMemo<TagOption<Section>[]>(
     () => [
@@ -194,6 +197,7 @@ export default function TripDetailScreen() {
                     paidAmount={combinedSpent}
                     totalLabel="Të ardhurat gjithsej"
                   />
+                  {overBy > 0 && <OverBudgetCard amount={overBy} />}
                   <FlatList
                     data={incomes}
                     keyExtractor={(income) => income.id}
@@ -219,6 +223,7 @@ export default function TripDetailScreen() {
                     spentTotal={combinedSpent}
                     onPressIncome={() => setSection('income')}
                   />
+                  {overBy > 0 && <OverBudgetCard amount={overBy} />}
                   <LayoutAnimationConfig skipEntering>
                     <FlatList
                       data={sortBoughtLast(trip.items)}
@@ -247,6 +252,7 @@ export default function TripDetailScreen() {
                     paidAmount={combinedSpent}
                     totalLabel="Gjithsej detergjente & extra"
                   />
+                  {overBy > 0 && <OverBudgetCard amount={overBy} />}
                   <LayoutAnimationConfig skipEntering>
                     <FlatList
                       data={sortBoughtLast(supplies)}
@@ -272,6 +278,7 @@ export default function TripDetailScreen() {
               {section === 'bills' && (
                 <>
                   <BillsSummaryBar totalAmount={billsTotal} paidAmount={combinedSpent} />
+                  {overBy > 0 && <OverBudgetCard amount={overBy} />}
                   <LayoutAnimationConfig skipEntering>
                     <FlatList
                       data={sortBoughtLast(bills)}
@@ -301,6 +308,7 @@ export default function TripDetailScreen() {
                     paidAmount={combinedSpent}
                     totalLabel="Gjithsej dëshirat"
                   />
+                  {overBy > 0 && <OverBudgetCard amount={overBy} />}
                   <LayoutAnimationConfig skipEntering>
                     <FlatList
                       data={sortBoughtLast(visibleWishlist)}
@@ -338,13 +346,13 @@ export default function TripDetailScreen() {
               )}
               {section === 'products' && (
                 <AddItemButton
-                  onAdd={(name, quantity, price) => addItem(trip.id, name, quantity, price)}
+                  onAdd={(name, quantity, price, priority) => addItem(trip.id, name, quantity, price, priority)}
                   suggestions={productSuggestions}
                 />
               )}
               {section === 'supplies' && (
                 <AddItemButton
-                  onAdd={(name, _quantity, price) => addSupply(name, price)}
+                  onAdd={(name, _quantity, price, priority) => addSupply(name, price, priority)}
                   showQuantity={false}
                   title="Shto artikull"
                   suggestions={supplySuggestions}
@@ -352,7 +360,7 @@ export default function TripDetailScreen() {
               )}
               {section === 'bills' && (
                 <AddItemButton
-                  onAdd={(name, _quantity, price) => addBill(name, price)}
+                  onAdd={(name, _quantity, price, priority) => addBill(name, price, priority)}
                   showQuantity={false}
                   title="Shto faturë"
                   suggestions={billSuggestions}
@@ -360,7 +368,7 @@ export default function TripDetailScreen() {
               )}
               {section === 'wishlist' && (
                 <AddItemButton
-                  onAdd={(name, _quantity, price) => addWish(name, price)}
+                  onAdd={(name, _quantity, price, priority) => addWish(name, price, priority)}
                   showQuantity={false}
                   title="Shto dëshirë"
                   suggestions={wishSuggestions}

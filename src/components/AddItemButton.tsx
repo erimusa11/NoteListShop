@@ -3,12 +3,14 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { BottomSheet } from '@/components/BottomSheet';
+import { PrioritySelector } from '@/components/PrioritySelector';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import { pickSuggestions, type Suggestion } from '@/utils/suggestions';
 import { formatNumber } from '@/utils/totals';
 
 interface AddItemButtonProps {
-  onAdd: (name: string, quantity: string, price: number | null) => void;
+  onAdd: (name: string, quantity: string, price: number | null, priority: number) => void;
+  showPriority?: boolean;
   showQuantity?: boolean;
   title?: string;
   suggestions?: Suggestion[];
@@ -27,17 +29,20 @@ export function AddItemButton({
   priceLabel = 'Çmimi (opsionale)',
   submitLabel = 'Shto në listë',
   requirePrice = false,
+  showPriority = true,
 }: AddItemButtonProps) {
   const [visible, setVisible] = useState(false);
   const [name, setName] = useState('');
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
+  const [priority, setPriority] = useState(1);
 
   const close = () => {
     setVisible(false);
     setName('');
     setQuantity('');
     setPrice('');
+    setPriority(1);
   };
 
   const priceValue = parseFloat(price.replace(',', '.'));
@@ -45,14 +50,14 @@ export function AddItemButton({
   const shown = useMemo(() => pickSuggestions(suggestions, name), [suggestions, name]);
 
   const pick = (s: Suggestion) => {
-    onAdd(s.name, showQuantity ? s.quantity : '', s.price);
+    onAdd(s.name, showQuantity ? s.quantity : '', s.price, priority);
     close();
   };
 
   const submit = () => {
     if (!canSubmit) return;
     const parsedPrice = parseFloat(price.replace(',', '.'));
-    onAdd(name.trim(), quantity.trim(), Number.isFinite(parsedPrice) ? parsedPrice : null);
+    onAdd(name.trim(), quantity.trim(), Number.isFinite(parsedPrice) ? parsedPrice : null, priority);
     close();
   };
 
@@ -135,6 +140,13 @@ export function AddItemButton({
           </>
         )}
 
+        {showPriority && (
+          <View style={styles.priority}>
+            <Text style={styles.label}>Rëndësia</Text>
+            <PrioritySelector value={priority} onChange={setPriority} />
+          </View>
+        )}
+
         <Pressable
           onPress={submit}
           disabled={!canSubmit}
@@ -182,6 +194,7 @@ const styles = StyleSheet.create({
   chipPrice: { fontSize: 12, color: colors.textMuted },
   row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   rowItem: { flex: 1 },
+  priority: { marginTop: spacing.sm },
   submitButton: {
     backgroundColor: colors.primary,
     borderRadius: radii.sm,
