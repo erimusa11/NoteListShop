@@ -341,6 +341,7 @@ export default function TripDetailScreen() {
                   priceLabel="Shuma"
                   submitLabel="Shto të ardhurën"
                   requirePrice
+                  showPriority={false}
                   suggestions={incomeSuggestions}
                 />
               )}
