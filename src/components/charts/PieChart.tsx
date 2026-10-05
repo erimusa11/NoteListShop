@@ -45,12 +45,11 @@ export function PieChart({ slices, size = 180, showLabels = true }: PieChartProp
   const r = size / 2 - 2;
   const c = size / 2;
 
-  let angle = -Math.PI / 2;
-  const paths = visible.map((slice) => {
-    const sweep = (slice.value / total) * Math.PI * 2;
-    const start = angle;
-    const end = angle + sweep;
-    angle = end;
+  const sweeps = visible.map((s) => (s.value / total) * Math.PI * 2);
+  const paths = visible.map((slice, i) => {
+    const sweep = sweeps[i];
+    const start = -Math.PI / 2 + sweeps.slice(0, i).reduce((sum, v) => sum + v, 0);
+    const end = start + sweep;
     const a = polar(c, c, r, start);
     const b = polar(c, c, r, end);
     const mid = polar(c, c, r * 0.62, start + sweep / 2);

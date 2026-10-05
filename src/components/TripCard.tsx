@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -9,10 +9,10 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 
-import { dealIn } from '@/theme/motion';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { ShoppingTrip } from '@/types/models';
-import { computeSpentTotal, formatPrice } from '@/utils/totals';
+import { formatDateTimeAlbanian } from '@/utils/dates';
+import { computeSpentTotal, formatPrice, tripIncomeTotal } from '@/utils/totals';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -26,13 +26,18 @@ export function TripCard({ trip, onPress, index = 0 }: TripCardProps) {
   const reduced = useReducedMotion();
   const spentTotal = computeSpentTotal(trip.items);
   const boughtCount = trip.items.filter((item) => item.bought).length;
-  const hasBudget = trip.budget != null && trip.budget > 0;
-  const progress = hasBudget ? Math.min(1, spentTotal / (trip.budget as number)) : 0;
-  const overBudget = hasBudget && spentTotal > (trip.budget as number);
+  const income = tripIncomeTotal(trip);
+  const hasBudget = income > 0;
+  const progress = hasBudget ? Math.min(1, spentTotal / income) : 0;
+  const overBudget = hasBudget && spentTotal > income;
 
-  const entering = useMemo(() => dealIn(index), [index]);
+  const enter = useSharedValue(reduced ? 1 : 0);
   const pressed = useSharedValue(0);
   const fill = useSharedValue(0);
+
+  useEffect(() => {
+    if (!reduced) enter.value = withDelay(Math.min(index, 6) * 45, withSpring(1, { damping: 14, stiffness: 170 }));
+  }, [index, reduced, enter]);
 
   useEffect(() => {
     fill.value = reduced
@@ -41,13 +46,17 @@ export function TripCard({ trip, onPress, index = 0 }: TripCardProps) {
   }, [progress]);
 
   const pressStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 - 0.03 * pressed.value }, { rotate: `${0.25 * pressed.value}deg` }],
+    transform: [
+      { translateY: (1 - enter.value) * 14 },
+      { scale: 0.97 + 0.03 * enter.value - 0.03 * pressed.value },
+      { rotate: `${0.25 * pressed.value}deg` },
+    ],
   }));
 
   const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }) as any);
 
   return (
-    <Animated.View entering={entering} style={styles.wrap}>
+    <View style={styles.wrap}>
       <AnimatedPressable
         onPress={onPress}
         onPressIn={() => {
@@ -69,6 +78,7 @@ export function TripCard({ trip, onPress, index = 0 }: TripCardProps) {
             <Text style={styles.meta}>
               {boughtCount}/{trip.items.length} artikuj të blerë
             </Text>
+            <Text style={styles.created}>Krijuar më {formatDateTimeAlbanian(trip.createdAt)}</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </View>
@@ -81,19 +91,19 @@ export function TripCard({ trip, onPress, index = 0 }: TripCardProps) {
               />
             </View>
             <Text style={styles.progressLabel}>
-              {formatPrice(spentTotal)} / {formatPrice(trip.budget as number)}
+              {formatPrice(spentTotal)} / {formatPrice(income)}
             </Text>
           </View>
         ) : (
           <Text style={styles.spentOnly}>{formatPrice(spentTotal)} shpenzuar</Text>
         )}
       </AnimatedPressable>
-    </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginBottom: spacing.sm },
+  wrap: { marginBottom: spacing.sm, width: '100%', alignSelf: 'stretch' },
   card: {
     backgroundColor: colors.card,
     borderRadius: radii.md,
@@ -112,6 +122,7 @@ const styles = StyleSheet.create({
   titleBlock: { flex: 1 },
   title: { fontSize: 16, fontWeight: '700', color: colors.text },
   meta: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
+  created: { fontSize: 11, color: colors.textMuted, marginTop: 1, opacity: 0.8 },
   progressBlock: { gap: 4 },
   progressTrack: {
     height: 6,

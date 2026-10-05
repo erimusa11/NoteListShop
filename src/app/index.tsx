@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Image, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '@/components/BottomSheet';
@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { LatestListPie } from '@/components/LatestListPie';
 import { ReportsView } from '@/components/ReportsView';
 import { TripCard } from '@/components/TripCard';
+import { useAppLock } from '@/context/AppLockContext';
 import { useAuth } from '@/context/AuthContext';
 import { useBills } from '@/context/BillsContext';
 import { useSupplies } from '@/context/SuppliesContext';
@@ -19,10 +20,13 @@ import { useTrips } from '@/context/TripsContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { colors, spacing } from '@/theme/theme';
 import { buildListSpend, buildSectionSpend } from '@/utils/reports';
+import { tripIncomeTotal } from '@/utils/totals';
 
 export default function ListsOverviewScreen() {
   const { trips, createList } = useTrips();
   const { user, signOut } = useAuth();
+  const { supported, enabled: lockEnabled, setEnabled: setLockEnabled } = useAppLock();
+  const [lockError, setLockError] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const firstName = user?.displayName?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'Eri';
   const { bills } = useBills();
@@ -77,6 +81,22 @@ export default function ListsOverviewScreen() {
             <Text style={styles.profileEmail}>{user?.email ?? 'Modalitet zhvillimi (pa llogari)'}</Text>
           </View>
         </View>
+        {supported && (
+          <View style={styles.lockRow}>
+            <Ionicons name="finger-print" size={22} color={colors.primaryDark} />
+            <View style={styles.profileText}>
+              <Text style={styles.lockTitle}>Kyçja e aplikacionit</Text>
+              <Text style={styles.profileEmail}>Gjurmë gishti, PIN ose model kur e hap</Text>
+            </View>
+            <Switch
+              value={lockEnabled}
+              onValueChange={async (next) => setLockError(await setLockEnabled(next))}
+              trackColor={{ true: colors.primary, false: colors.border }}
+              accessibilityLabel="Kyçja e aplikacionit"
+            />
+          </View>
+        )}
+        {lockError && <Text style={styles.lockError}>{lockError}</Text>}
         <Pressable
           onPress={() => {
             setProfileOpen(false);
@@ -100,7 +120,11 @@ export default function ListsOverviewScreen() {
               recent.length > 0 ? (
                 <>
                   <MiniColumns data={recent} onPressColumn={openTrip} />
-                  <LatestListPie listName={`${sorted[0].name} · sipas kategorisë`} sections={latestSections} />
+                  <LatestListPie
+                    listName={`${sorted[0].name} · sipas kategorisë`}
+                    sections={latestSections}
+                    income={tripIncomeTotal(sorted[0])}
+                  />
                 </>
               ) : null
             }
@@ -114,7 +138,7 @@ export default function ListsOverviewScreen() {
                 subtitle="Krijo listën tënde të parë me butonin + më poshtë!"
               />
             }
-            contentContainerStyle={sorted.length === 0 ? styles.flex : styles.listContent}
+            contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
           />
         ) : (
@@ -141,7 +165,6 @@ export default function ListsOverviewScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row',
@@ -174,6 +197,15 @@ const styles = StyleSheet.create({
   avatarLarge: { width: 52, height: 52, borderRadius: 26 },
   avatarTextLarge: { fontSize: 22 },
   profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  lockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  lockTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
+  lockError: { fontSize: 13, color: colors.danger },
   profileText: { flex: 1 },
   profileName: { fontSize: 17, fontWeight: '700', color: colors.text },
   profileEmail: { fontSize: 13, color: colors.textMuted },
@@ -194,7 +226,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 12, color: colors.textMuted },
   content: { flex: 1, paddingHorizontal: spacing.md },
   list: { flex: 1 },
-  listContent: { paddingBottom: spacing.sm },
+  listContent: { flexGrow: 1, paddingBottom: spacing.sm },
   footer: {
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,

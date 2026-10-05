@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { CloudSyncGate } from '@/components/CloudSyncGate';
+import { AppLockProvider } from '@/context/AppLockContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { BillsProvider } from '@/context/BillsContext';
 import { SuppliesProvider } from '@/context/SuppliesContext';
@@ -40,7 +41,9 @@ export default function RootLayout() {
               <SuppliesProvider>
                 <StatusBar style="dark" />
                 <CloudSyncGate>
-                  <RootNavigator />
+                  <AppLockProvider>
+                    <RootNavigator />
+                  </AppLockProvider>
                 </CloudSyncGate>
               </SuppliesProvider>
             </WishlistProvider>

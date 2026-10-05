@@ -1,13 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LayoutAnimationConfig } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AddItemButton } from '@/components/AddItemButton';
 import { BillsSummaryBar } from '@/components/BillsSummaryBar';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { InlineEditableField } from '@/components/InlineEditableField';
+import { IncomeRow } from '@/components/IncomeRow';
 import { ItemRow } from '@/components/ItemRow';
 import { TagString, type TagOption } from '@/components/TagString';
 import { TotalsBar } from '@/components/TotalsBar';
@@ -19,9 +21,9 @@ import { colors, spacing } from '@/theme/theme';
 import { goBackOrHome } from '@/utils/navigation';
 import { buildSuggestions } from '@/utils/suggestions';
 import { CATEGORY_COLORS } from '@/utils/reports';
-import { computeSpentTotal, computeTotal } from '@/utils/totals';
+import { computeSpentTotal, computeTotal, sortBoughtLast } from '@/utils/totals';
 
-type Section = 'products' | 'supplies' | 'bills' | 'wishlist';
+type Section = 'income' | 'products' | 'supplies' | 'bills' | 'wishlist';
 
 const count = (list: { bought: boolean }[]) => ({
   total: list.length,
@@ -30,12 +32,25 @@ const count = (list: { bought: boolean }[]) => ({
 
 export default function TripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { trips, addItem, toggleItem, updateItem, removeItem, setBudget, renameTrip, deleteTrip } = useTrips();
-  const { bills, addBill, toggleBill, updateBill, removeBill } = useBills();
-  const { wishlist, addWish, toggleWish, updateWish, removeWish } = useWishlist();
-  const { supplies, addSupply, toggleSupply, updateSupply, removeSupply } = useSupplies();
+  const {
+    trips,
+    addItem,
+    toggleItem,
+    updateItem,
+    removeItem,
+    addIncome,
+    updateIncome,
+    removeIncome,
+    renameTrip,
+    deleteTrip,
+  } = useTrips();
+  const { bills, addBill, toggleBill, updateBill, removeBill, releaseTrip: releaseBills } = useBills();
+  const { wishlist, addWish, toggleWish, updateWish, removeWish, releaseTrip: releaseWishes } = useWishlist();
+  const { supplies, addSupply, toggleSupply, updateSupply, removeSupply, releaseTrip: releaseSupplies } =
+    useSupplies();
   const trip = trips.find((t) => t.id === id);
   const [section, setSection] = useState<Section>('products');
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [checkedHere, setCheckedHere] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -44,8 +59,27 @@ export default function TripDetailScreen() {
 
   const onToggleWish = (wishId: string) => {
     setCheckedHere((prev) => new Set(prev).add(wishId));
-    toggleWish(wishId);
+    toggleWish(wishId, trip?.id);
   };
+
+  const incomes = trip?.incomes ?? [];
+  const incomeTotal = incomes.reduce((sum, income) => sum + income.amount, 0);
+  const incomeSuggestions = useMemo(
+    () =>
+      buildSuggestions(
+        trips.flatMap((t) =>
+          (t.incomes ?? []).map((i) => ({
+            id: i.id,
+            name: i.name,
+            quantity: '',
+            price: i.amount,
+            bought: false,
+            createdAt: i.createdAt,
+          })),
+        ),
+      ),
+    [trips],
+  );
 
   const productsSpent = useMemo(() => computeSpentTotal(trip?.items ?? []), [trip]);
   const billsTotal = useMemo(() => computeTotal(bills), [bills]);
@@ -66,6 +100,7 @@ export default function TripDetailScreen() {
   const tripItems = trip?.items;
   const tagOptions = useMemo<TagOption<Section>[]>(
     () => [
+      { value: 'income', label: 'Të ardhurat', icon: 'cash-outline', activeIcon: 'cash', accent: CATEGORY_COLORS.income, remaining: 0, total: 0 },
       { value: 'products', label: 'Produktet', icon: 'basket-outline', activeIcon: 'basket', accent: CATEGORY_COLORS.products, ...count(tripItems ?? []) },
       { value: 'supplies', label: 'Detergjente & Extra', icon: 'sparkles-outline', activeIcon: 'sparkles', accent: CATEGORY_COLORS.supplies, ...count(supplies) },
       { value: 'bills', label: 'Faturat', icon: 'receipt-outline', activeIcon: 'receipt', accent: CATEGORY_COLORS.bills, ...count(bills) },
@@ -74,19 +109,30 @@ export default function TripDetailScreen() {
     [tripItems, supplies, bills, wishlist],
   );
 
-  const confirmDelete = () => {
+  const releasedCount = trip
+    ? [...supplies, ...bills, ...wishlist].filter((item) => item.boughtInTripId === trip.id).length
+    : 0;
+
+  const deleteDetails = trip
+    ? [
+        `${trip.items.length} ${trip.items.length === 1 ? 'artikull' : 'artikuj'} në këtë listë do të fshihen.`,
+        ...(releasedCount > 0
+          ? [
+              `${releasedCount} ${releasedCount === 1 ? 'artikull i shënuar' : 'artikuj të shënuar'} si të blerë në Detergjente, Faturat ose Dëshirat do të kthehen si të pablerë.`,
+            ]
+          : []),
+        'Ky veprim nuk kthehet mbrapsht.',
+      ]
+    : [];
+
+  const performDelete = () => {
     if (!trip) return;
-    Alert.alert('Fshi listën?', `A je i sigurt që do të fshish "${trip.name}"? Ky veprim nuk kthehet mbrapsht.`, [
-      { text: 'Anulo', style: 'cancel' },
-      {
-        text: 'Fshi',
-        style: 'destructive',
-        onPress: () => {
-          deleteTrip(trip.id);
-          router.replace('/');
-        },
-      },
-    ]);
+    setConfirmOpen(false);
+    releaseSupplies(trip.id);
+    releaseBills(trip.id);
+    releaseWishes(trip.id);
+    deleteTrip(trip.id);
+    router.replace('/');
   };
 
   return (
@@ -114,27 +160,68 @@ export default function TripDetailScreen() {
             <Text style={styles.title}>Lista</Text>
           )}
           {trip && (
-            <Pressable onPress={confirmDelete} hitSlop={8} style={styles.headerButton}>
+            <Pressable
+              onPress={() => setConfirmOpen(true)}
+              hitSlop={8}
+              style={styles.headerButton}
+              accessibilityRole="button"
+              accessibilityLabel="Fshi listën"
+            >
               <Ionicons name="trash-outline" size={20} color={colors.danger} />
             </Pressable>
           )}
         </View>
+
+        <ConfirmDialog
+          visible={confirmOpen && trip !== undefined}
+          title="Fshi listën?"
+          message={trip ? `A je i sigurt që do të fshish "${trip.name}"?` : ''}
+          details={deleteDetails}
+          confirmLabel="Fshi"
+          onConfirm={performDelete}
+          onCancel={() => setConfirmOpen(false)}
+        />
 
         {trip ? (
           <>
             <View style={styles.content}>
               <TagString value={section} onChange={setSection} options={tagOptions} />
 
+              {section === 'income' && (
+                <>
+                  <BillsSummaryBar
+                    totalAmount={incomeTotal}
+                    paidAmount={combinedSpent}
+                    totalLabel="Të ardhurat gjithsej"
+                  />
+                  <FlatList
+                    data={incomes}
+                    keyExtractor={(income) => income.id}
+                    style={styles.list}
+                    renderItem={({ item }) => (
+                      <IncomeRow
+                        income={item}
+                        onUpdate={(patch) => updateIncome(trip.id, item.id, patch)}
+                        onRemove={() => removeIncome(trip.id, item.id)}
+                      />
+                    )}
+                    ListEmptyComponent={<Text style={styles.empty}>Nuk ke shtuar ende të ardhura.</Text>}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
+                  />
+                </>
+              )}
+
               {section === 'products' && (
                 <>
                   <TotalsBar
-                    budget={trip.budget}
+                    incomeTotal={incomeTotal}
                     spentTotal={combinedSpent}
-                    onChangeBudget={(value) => setBudget(trip.id, value)}
+                    onPressIncome={() => setSection('income')}
                   />
                   <LayoutAnimationConfig skipEntering>
                     <FlatList
-                      data={trip.items}
+                      data={sortBoughtLast(trip.items)}
                       keyExtractor={(item) => item.id}
                       style={styles.list}
                       renderItem={({ item }) => (
@@ -162,13 +249,13 @@ export default function TripDetailScreen() {
                   />
                   <LayoutAnimationConfig skipEntering>
                     <FlatList
-                      data={supplies}
+                      data={sortBoughtLast(supplies)}
                       keyExtractor={(supply) => supply.id}
                       style={styles.list}
                       renderItem={({ item }) => (
                         <ItemRow
                           item={item}
-                          onToggle={() => toggleSupply(item.id)}
+                          onToggle={() => toggleSupply(item.id, trip.id)}
                           onUpdate={(patch) => updateSupply(item.id, patch)}
                           onRemove={() => removeSupply(item.id)}
                           showQuantity={false}
@@ -187,13 +274,13 @@ export default function TripDetailScreen() {
                   <BillsSummaryBar totalAmount={billsTotal} paidAmount={combinedSpent} />
                   <LayoutAnimationConfig skipEntering>
                     <FlatList
-                      data={bills}
+                      data={sortBoughtLast(bills)}
                       keyExtractor={(bill) => bill.id}
                       style={styles.list}
                       renderItem={({ item }) => (
                         <ItemRow
                           item={item}
-                          onToggle={() => toggleBill(item.id)}
+                          onToggle={() => toggleBill(item.id, trip.id)}
                           onUpdate={(patch) => updateBill(item.id, patch)}
                           onRemove={() => removeBill(item.id)}
                           showQuantity={false}
@@ -216,7 +303,7 @@ export default function TripDetailScreen() {
                   />
                   <LayoutAnimationConfig skipEntering>
                     <FlatList
-                      data={visibleWishlist}
+                      data={sortBoughtLast(visibleWishlist)}
                       keyExtractor={(wish) => wish.id}
                       style={styles.list}
                       renderItem={({ item }) => (
@@ -237,6 +324,18 @@ export default function TripDetailScreen() {
               )}
             </View>
             <View style={styles.footer}>
+              {section === 'income' && (
+                <AddItemButton
+                  onAdd={(name, _quantity, amount) => addIncome(trip.id, name, amount ?? 0)}
+                  showQuantity={false}
+                  title="Shto të ardhura"
+                  namePlaceholder="P.sh. Rroga, Bonus…"
+                  priceLabel="Shuma"
+                  submitLabel="Shto të ardhurën"
+                  requirePrice
+                  suggestions={incomeSuggestions}
+                />
+              )}
               {section === 'products' && (
                 <AddItemButton
                   onAdd={(name, quantity, price) => addItem(trip.id, name, quantity, price)}

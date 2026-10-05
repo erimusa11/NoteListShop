@@ -8,11 +8,11 @@ import { formatPrice } from '@/utils/totals';
 interface LatestListPieProps {
   listName: string;
   sections: SectionSpend[];
+  income: number;
 }
 
-export function LatestListPie({ listName, sections }: LatestListPieProps) {
+export function LatestListPie({ listName, sections, income }: LatestListPieProps) {
   const total = sections.reduce((sum, s) => sum + s.spent, 0);
-  const planned = sections.reduce((sum, s) => sum + s.planned, 0);
 
   return (
     <View style={[styles.card, shadow]}>
@@ -45,11 +45,19 @@ export function LatestListPie({ listName, sections }: LatestListPieProps) {
       </View>
       <View style={styles.planned}>
         <View style={styles.track}>
-          <View style={[styles.fill, { width: `${planned > 0 ? Math.min(1, total / planned) * 100 : 0}%` }]} />
+          <View
+            style={[
+              styles.fill,
+              {
+                width: `${income > 0 ? Math.min(1, total / income) * 100 : 0}%`,
+                backgroundColor: income > 0 && total > income ? colors.danger : colors.primary,
+              },
+            ]}
+          />
         </View>
         <View style={styles.plannedRow}>
-          <Text style={styles.plannedLabel}>E planifikuar gjithsej</Text>
-          <Text style={styles.plannedValue}>{formatPrice(planned)}</Text>
+          <Text style={styles.plannedLabel}>Të ardhurat</Text>
+          <Text style={styles.plannedValue}>{formatPrice(income)}</Text>
         </View>
       </View>
     </View>

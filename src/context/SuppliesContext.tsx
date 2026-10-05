@@ -5,7 +5,8 @@ import type { ShoppingItem } from '@/types/models';
 interface SuppliesContextValue {
   supplies: ShoppingItem[];
   addSupply: (name: string, price: number | null) => void;
-  toggleSupply: (id: string) => void;
+  toggleSupply: (id: string, tripId?: string) => void;
+  releaseTrip: (tripId: string) => void;
   updateSupply: (id: string, patch: Partial<ShoppingItem>) => void;
   removeSupply: (id: string) => void;
   hydrate: (items: ShoppingItem[]) => void;
@@ -23,8 +24,18 @@ export function SuppliesProvider({ children }: { children: ReactNode }) {
     ]);
   };
 
-  const toggleSupply = (id: string) => {
-    setSupplies((prev) => prev.map((s) => (s.id === id ? { ...s, bought: !s.bought } : s)));
+  const toggleSupply = (id: string, tripId?: string) => {
+    setSupplies((prev) =>
+      prev.map((s) =>
+        s.id === id ? { ...s, bought: !s.bought, boughtInTripId: s.bought ? null : (tripId ?? null) } : s,
+      ),
+    );
+  };
+
+  const releaseTrip = (tripId: string) => {
+    setSupplies((prev) =>
+      prev.map((s) => (s.boughtInTripId === tripId ? { ...s, bought: false, boughtInTripId: null } : s)),
+    );
   };
 
   const updateSupply = (id: string, patch: Partial<ShoppingItem>) => {
@@ -38,7 +49,7 @@ export function SuppliesProvider({ children }: { children: ReactNode }) {
   const hydrate = (items: ShoppingItem[]) => setSupplies(items);
 
   const value = useMemo<SuppliesContextValue>(
-    () => ({ supplies, addSupply, toggleSupply, updateSupply, removeSupply, hydrate }),
+    () => ({ supplies, addSupply, toggleSupply, releaseTrip, updateSupply, removeSupply, hydrate }),
     [supplies],
   );
 

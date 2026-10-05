@@ -12,6 +12,10 @@ interface AddItemButtonProps {
   showQuantity?: boolean;
   title?: string;
   suggestions?: Suggestion[];
+  namePlaceholder?: string;
+  priceLabel?: string;
+  submitLabel?: string;
+  requirePrice?: boolean;
 }
 
 export function AddItemButton({
@@ -19,6 +23,10 @@ export function AddItemButton({
   showQuantity = true,
   title = 'Shto artikull',
   suggestions = [],
+  namePlaceholder = 'P.sh. Qumësht, Bukë…',
+  priceLabel = 'Çmimi (opsionale)',
+  submitLabel = 'Shto në listë',
+  requirePrice = false,
 }: AddItemButtonProps) {
   const [visible, setVisible] = useState(false);
   const [name, setName] = useState('');
@@ -32,7 +40,8 @@ export function AddItemButton({
     setPrice('');
   };
 
-  const canSubmit = name.trim().length > 0;
+  const priceValue = parseFloat(price.replace(',', '.'));
+  const canSubmit = name.trim().length > 0 && (!requirePrice || (Number.isFinite(priceValue) && priceValue > 0));
   const shown = useMemo(() => pickSuggestions(suggestions, name), [suggestions, name]);
 
   const pick = (s: Suggestion) => {
@@ -58,7 +67,7 @@ export function AddItemButton({
         <TextInput
           value={name}
           onChangeText={setName}
-          placeholder="P.sh. Qumësht, Bukë…"
+          placeholder={namePlaceholder}
           placeholderTextColor={colors.textMuted}
           style={styles.input}
           autoFocus
@@ -99,7 +108,7 @@ export function AddItemButton({
               />
             </View>
             <View style={styles.rowItem}>
-              <Text style={styles.label}>Çmimi (opsionale)</Text>
+              <Text style={styles.label}>{priceLabel}</Text>
               <TextInput
                 value={price}
                 onChangeText={setPrice}
@@ -113,7 +122,7 @@ export function AddItemButton({
           </View>
         ) : (
           <>
-            <Text style={styles.label}>Çmimi (opsionale)</Text>
+            <Text style={styles.label}>{priceLabel}</Text>
             <TextInput
               value={price}
               onChangeText={setPrice}
@@ -131,7 +140,7 @@ export function AddItemButton({
           disabled={!canSubmit}
           style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
         >
-          <Text style={styles.submitText}>Shto në listë</Text>
+          <Text style={styles.submitText}>{submitLabel}</Text>
         </Pressable>
       </BottomSheet>
     </>

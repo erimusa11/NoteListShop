@@ -85,13 +85,12 @@ export function DonutChart({ segments, centerLabel, centerValue, size = 168, thi
   const visibleSegments = segments.filter((s) => s.value > 0);
   const total = visibleSegments.reduce((sum, s) => sum + s.value, 0);
 
-  let cursor = 0;
-  const arcs = visibleSegments.map((segment) => {
-    const length = (segment.value / total) * circumference;
-    const arc = { segment, start: cursor, length };
-    cursor += length;
-    return arc;
-  });
+  const lengths = visibleSegments.map((s) => (s.value / total) * circumference);
+  const arcs = visibleSegments.map((segment, i) => ({
+    segment,
+    start: lengths.slice(0, i).reduce((sum, v) => sum + v, 0),
+    length: lengths[i],
+  }));
 
   return (
     <View style={styles.wrap}>

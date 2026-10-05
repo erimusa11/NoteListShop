@@ -5,6 +5,14 @@ export interface ShoppingItem {
   price: number | null;
   bought: boolean;
   createdAt: number;
+  boughtInTripId?: string | null;
+}
+
+export interface IncomeEntry {
+  id: string;
+  name: string;
+  amount: number;
+  createdAt: number;
 }
 
 export interface ShoppingTrip {
@@ -13,4 +21,5 @@ export interface ShoppingTrip {
   createdAt: number;
   budget: number | null;
   items: ShoppingItem[];
+  incomes?: IncomeEntry[];
 }

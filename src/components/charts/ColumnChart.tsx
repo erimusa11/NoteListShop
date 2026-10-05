@@ -104,7 +104,7 @@ export function ColumnChart({ data, height = 150, onPressColumn }: ColumnChartPr
       {hasMarker && (
         <View style={styles.legend}>
           <View style={styles.legendTick} />
-          <Text style={styles.legendText}>Buxheti i listës</Text>
+          <Text style={styles.legendText}>Të ardhurat e listës</Text>
         </View>
       )}
     </View>

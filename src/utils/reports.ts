@@ -1,5 +1,5 @@
 import type { ShoppingItem, ShoppingTrip } from '@/types/models';
-import { computeSpentTotal, computeTotal } from '@/utils/totals';
+import { computeSpentTotal, computeTotal, tripIncomeTotal } from '@/utils/totals';
 
 export interface ListSpend {
   id: string;
@@ -26,6 +26,7 @@ export interface TopItem {
 }
 
 export const CATEGORY_COLORS: Record<string, string> = {
+  income: '#7C5CBF',
   products: '#E06A00',
   supplies: '#1F9E89',
   bills: '#3B6FD4',
@@ -44,7 +45,7 @@ export function buildListSpend(trips: ShoppingTrip[]): ListSpend[] {
     name: trip.name,
     spent: computeSpentTotal(trip.items),
     planned: computeTotal(trip.items),
-    budget: trip.budget != null && trip.budget > 0 ? trip.budget : null,
+    budget: tripIncomeTotal(trip) > 0 ? tripIncomeTotal(trip) : null,
     boughtCount: trip.items.filter((item) => item.bought).length,
     itemCount: trip.items.length,
   }));

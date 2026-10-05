@@ -10,7 +10,8 @@ const initialWishlist: ShoppingItem[] = [
 interface WishlistContextValue {
   wishlist: ShoppingItem[];
   addWish: (name: string, price: number | null) => void;
-  toggleWish: (id: string) => void;
+  toggleWish: (id: string, tripId?: string) => void;
+  releaseTrip: (tripId: string) => void;
   updateWish: (id: string, patch: Partial<ShoppingItem>) => void;
   removeWish: (id: string) => void;
   hydrate: (items: ShoppingItem[]) => void;
@@ -28,8 +29,18 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
     ]);
   };
 
-  const toggleWish = (id: string) => {
-    setWishlist((prev) => prev.map((wish) => (wish.id === id ? { ...wish, bought: !wish.bought } : wish)));
+  const toggleWish = (id: string, tripId?: string) => {
+    setWishlist((prev) =>
+      prev.map((wish) =>
+        wish.id === id ? { ...wish, bought: !wish.bought, boughtInTripId: wish.bought ? null : (tripId ?? null) } : wish,
+      ),
+    );
+  };
+
+  const releaseTrip = (tripId: string) => {
+    setWishlist((prev) =>
+      prev.map((wish) => (wish.boughtInTripId === tripId ? { ...wish, bought: false, boughtInTripId: null } : wish)),
+    );
   };
 
   const updateWish = (id: string, patch: Partial<ShoppingItem>) => {
@@ -43,7 +54,7 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
   const hydrate = (items: ShoppingItem[]) => setWishlist(items);
 
   const value = useMemo<WishlistContextValue>(
-    () => ({ wishlist, addWish, toggleWish, updateWish, removeWish, hydrate }),
+    () => ({ wishlist, addWish, toggleWish, releaseTrip, updateWish, removeWish, hydrate }),
     [wishlist],
   );
 

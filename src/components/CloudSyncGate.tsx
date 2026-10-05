@@ -28,7 +28,9 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
   const previousUid = useRef<string | null>(null);
 
   const hydrators = useRef({ hydrateTrips, hydrateBills, hydrateSupplies, hydrateWishlist });
-  hydrators.current = { hydrateTrips, hydrateBills, hydrateSupplies, hydrateWishlist };
+  useEffect(() => {
+    hydrators.current = { hydrateTrips, hydrateBills, hydrateSupplies, hydrateWishlist };
+  });
 
   useEffect(() => {
     if (!uid || !db) {

@@ -1,34 +1,27 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { InlineEditableField } from '@/components/InlineEditableField';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
-import { formatNumber, formatPrice } from '@/utils/totals';
+import { formatPrice } from '@/utils/totals';
 
 interface TotalsBarProps {
-  budget: number | null;
+  incomeTotal: number;
   spentTotal: number;
-  onChangeBudget: (value: number | null) => void;
+  onPressIncome?: () => void;
 }
 
-export function TotalsBar({ budget, spentTotal, onChangeBudget }: TotalsBarProps) {
+export function TotalsBar({ incomeTotal, spentTotal, onPressIncome }: TotalsBarProps) {
   return (
     <View style={[styles.container, shadow]}>
-      <View style={styles.half}>
-        <Text style={styles.label}>Sa ke menduar të shpenzosh</Text>
-        <InlineEditableField
-          value={budget != null ? String(budget) : ''}
-          displayValue={budget != null ? formatNumber(budget) : undefined}
-          placeholder="Shto"
-          onChange={(text) => {
-            const parsed = parseFloat(text.replace(',', '.'));
-            onChangeBudget(Number.isFinite(parsed) ? parsed : null);
-          }}
-          keyboardType="numeric"
-          suffix={budget != null ? ' Lekë' : undefined}
-          chip
-          textStyle={[styles.value, styles.estimated]}
-        />
-      </View>
+      <Pressable
+        onPress={onPressIncome}
+        disabled={!onPressIncome}
+        accessibilityRole={onPressIncome ? 'button' : undefined}
+        accessibilityLabel={`Të ardhurat, ${formatPrice(incomeTotal)}`}
+        style={styles.half}
+      >
+        <Text style={styles.label}>Të ardhurat</Text>
+        <Text style={[styles.value, styles.income]}>{formatPrice(incomeTotal)}</Text>
+      </Pressable>
       <View style={styles.divider} />
       <View style={styles.half}>
         <Text style={styles.label}>Shpenzuar</Text>
@@ -50,6 +43,6 @@ const styles = StyleSheet.create({
   divider: { width: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   label: { fontSize: 12, color: colors.textMuted, marginBottom: 2, textAlign: 'center' },
   value: { fontSize: 22, fontWeight: '700' },
-  estimated: { color: colors.primaryDark },
+  income: { color: colors.primaryDark },
   spent: { color: colors.success },
 });

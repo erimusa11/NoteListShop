@@ -11,7 +11,8 @@ const initialBills: ShoppingItem[] = [
 interface BillsContextValue {
   bills: ShoppingItem[];
   addBill: (name: string, price: number | null) => void;
-  toggleBill: (id: string) => void;
+  toggleBill: (id: string, tripId?: string) => void;
+  releaseTrip: (tripId: string) => void;
   updateBill: (id: string, patch: Partial<ShoppingItem>) => void;
   removeBill: (id: string) => void;
   hydrate: (items: ShoppingItem[]) => void;
@@ -29,8 +30,18 @@ export function BillsProvider({ children }: { children: ReactNode }) {
     ]);
   };
 
-  const toggleBill = (id: string) => {
-    setBills((prev) => prev.map((bill) => (bill.id === id ? { ...bill, bought: !bill.bought } : bill)));
+  const toggleBill = (id: string, tripId?: string) => {
+    setBills((prev) =>
+      prev.map((bill) =>
+        bill.id === id ? { ...bill, bought: !bill.bought, boughtInTripId: bill.bought ? null : (tripId ?? null) } : bill,
+      ),
+    );
+  };
+
+  const releaseTrip = (tripId: string) => {
+    setBills((prev) =>
+      prev.map((bill) => (bill.boughtInTripId === tripId ? { ...bill, bought: false, boughtInTripId: null } : bill)),
+    );
   };
 
   const updateBill = (id: string, patch: Partial<ShoppingItem>) => {
@@ -44,7 +55,7 @@ export function BillsProvider({ children }: { children: ReactNode }) {
   const hydrate = (items: ShoppingItem[]) => setBills(items);
 
   const value = useMemo<BillsContextValue>(
-    () => ({ bills, addBill, toggleBill, updateBill, removeBill, hydrate }),
+    () => ({ bills, addBill, toggleBill, releaseTrip, updateBill, removeBill, hydrate }),
     [bills],
   );
 

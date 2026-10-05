@@ -78,7 +78,7 @@ export function ReportsView({ onOpenTrip }: ReportsViewProps) {
           <Text style={[styles.tileValue, { color: colors.success }]}>{formatPrice(totalSpent)}</Text>
         </View>
         <View style={[styles.tile, shadow]}>
-          <Text style={styles.tileLabel}>Mbetet për t'u blerë</Text>
+          <Text style={styles.tileLabel}>Mbetet për t&apos;u blerë</Text>
           <Text style={[styles.tileValue, { color: colors.primaryDark }]}>{formatPrice(remaining)}</Text>
         </View>
       </View>
@@ -101,7 +101,7 @@ export function ReportsView({ onOpenTrip }: ReportsViewProps) {
 
       <Card title="Shpenzimet sipas listës" subtitle="Trokit një kolonë për të hapur listën">
         <ColumnChart data={columns} onPressColumn={onOpenTrip} />
-        {anyOver && <Text style={styles.warnNote}>Kolona e kuqe: lista ka kaluar buxhetin.</Text>}
+        {anyOver && <Text style={styles.warnNote}>Kolona e kuqe: shpenzimet kanë kaluar të ardhurat e listës.</Text>}
       </Card>
 
       <Card title="Ku shkojnë paratë" subtitle="Të shpenzuara sipas kategorisë">

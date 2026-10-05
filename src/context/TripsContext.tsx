@@ -1,12 +1,19 @@
 import { createContext, ReactNode, useContext, useMemo, useState } from 'react';
 
 import { mockItems } from '@/mocks/mockItems';
-import type { ShoppingItem, ShoppingTrip } from '@/types/models';
+import type { IncomeEntry, ShoppingItem, ShoppingTrip } from '@/types/models';
 import { formatDateAlbanian } from '@/utils/dates';
 
 function buildTrip(name: string, items: ShoppingItem[]): ShoppingTrip {
   const now = Date.now();
-  return { id: String(now), name: name.trim() || formatDateAlbanian(now), createdAt: now, budget: null, items };
+  return {
+    id: String(now),
+    name: name.trim() || formatDateAlbanian(now),
+    createdAt: now,
+    budget: null,
+    items,
+    incomes: [],
+  };
 }
 
 interface TripsContextValue {
@@ -14,7 +21,9 @@ interface TripsContextValue {
   createList: (name: string) => string;
   renameTrip: (tripId: string, name: string) => void;
   deleteTrip: (tripId: string) => void;
-  setBudget: (tripId: string, budget: number | null) => void;
+  addIncome: (tripId: string, name: string, amount: number) => void;
+  updateIncome: (tripId: string, incomeId: string, patch: Partial<IncomeEntry>) => void;
+  removeIncome: (tripId: string, incomeId: string) => void;
   addItem: (tripId: string, name: string, quantity: string, price: number | null) => void;
   toggleItem: (tripId: string, itemId: string) => void;
   updateItem: (tripId: string, itemId: string, patch: Partial<ShoppingItem>) => void;
@@ -25,7 +34,10 @@ interface TripsContextValue {
 const TripsContext = createContext<TripsContextValue | null>(null);
 
 export function TripsProvider({ children }: { children: ReactNode }) {
-  const [initialTrip] = useState(() => ({ ...buildTrip('', mockItems), budget: 2000 }));
+  const [initialTrip] = useState(() => {
+    const trip = buildTrip('', mockItems);
+    return { ...trip, incomes: [{ id: 'i1', name: 'Rroga', amount: 2000, createdAt: trip.createdAt }] };
+  });
   const [trips, setTrips] = useState<ShoppingTrip[]>([initialTrip]);
 
   const updateTripItems = (tripId: string, updater: (items: ShoppingItem[]) => ShoppingItem[]) => {
@@ -48,8 +60,22 @@ export function TripsProvider({ children }: { children: ReactNode }) {
     setTrips((prev) => prev.filter((trip) => trip.id !== tripId));
   };
 
-  const setBudget = (tripId: string, budget: number | null) => {
-    setTrips((prev) => prev.map((trip) => (trip.id === tripId ? { ...trip, budget } : trip)));
+  const updateTripIncomes = (tripId: string, updater: (incomes: IncomeEntry[]) => IncomeEntry[]) => {
+    setTrips((prev) =>
+      prev.map((trip) => (trip.id === tripId ? { ...trip, incomes: updater(trip.incomes ?? []) } : trip)),
+    );
+  };
+
+  const addIncome = (tripId: string, name: string, amount: number) => {
+    updateTripIncomes(tripId, (incomes) => [...incomes, { id: String(Date.now()), name, amount, createdAt: Date.now() }]);
+  };
+
+  const updateIncome = (tripId: string, incomeId: string, patch: Partial<IncomeEntry>) => {
+    updateTripIncomes(tripId, (incomes) => incomes.map((i) => (i.id === incomeId ? { ...i, ...patch } : i)));
+  };
+
+  const removeIncome = (tripId: string, incomeId: string) => {
+    updateTripIncomes(tripId, (incomes) => incomes.filter((i) => i.id !== incomeId));
   };
 
   const addItem = (tripId: string, name: string, quantity: string, price: number | null) => {
@@ -81,7 +107,9 @@ export function TripsProvider({ children }: { children: ReactNode }) {
       createList,
       renameTrip,
       deleteTrip,
-      setBudget,
+      addIncome,
+      updateIncome,
+      removeIncome,
       addItem,
       toggleItem,
       updateItem,

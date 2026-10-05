@@ -249,13 +249,14 @@ export function TagString<T extends string>({
     options.findIndex((o) => o.value === value),
   );
   const wide = rowW >= 440;
-  const fs = rowW > 0 && rowW < 300 ? 10 : wide ? 12 : 11;
-  const iconSize = wide ? 22 : 18;
+  const many = options.length > 4;
+  const fs = rowW > 0 && rowW < 300 ? 9 : wide ? 12 : many ? 10 : 11;
+  const iconSize = wide ? 22 : many ? 16 : 18;
 
   return (
     <View
       accessibilityRole="tablist"
-      style={styles.root}
+      style={[styles.root, many && { columnGap: 4 }]}
       onLayout={(e) => setRowW(e.nativeEvent.layout.width)}
     >
       <View style={styles.twine} pointerEvents="none">
