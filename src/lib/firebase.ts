@@ -35,7 +35,7 @@ function createDb(): Firestore | null {
   if (!isFirebaseConfigured) return null;
   const app = getApps().length ? getApp() : initializeApp(config);
   try {
-    return initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+    return initializeFirestore(app, { experimentalForceLongPolling: true });
   } catch {
     return getFirestore(app);
   }
