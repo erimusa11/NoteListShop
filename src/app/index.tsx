@@ -1,16 +1,46 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { FlatList, Image, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BottomSheet } from '@/components/BottomSheet';
+import { BottomTabBar } from '@/components/BottomTabBar';
+import { MiniColumns } from '@/components/charts/MiniColumns';
 import { CreateListButton } from '@/components/CreateListButton';
 import { EmptyState } from '@/components/EmptyState';
+import { LatestListPie } from '@/components/LatestListPie';
+import { ReportsView } from '@/components/ReportsView';
 import { TripCard } from '@/components/TripCard';
+import { useAuth } from '@/context/AuthContext';
+import { useBills } from '@/context/BillsContext';
+import { useSupplies } from '@/context/SuppliesContext';
 import { useTrips } from '@/context/TripsContext';
+import { useWishlist } from '@/context/WishlistContext';
 import { colors, spacing } from '@/theme/theme';
+import { buildListSpend, buildSectionSpend } from '@/utils/reports';
 
 export default function ListsOverviewScreen() {
   const { trips, createList } = useTrips();
+  const { user, signOut } = useAuth();
+  const [profileOpen, setProfileOpen] = useState(false);
+  const firstName = user?.displayName?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'Eri';
+  const { bills } = useBills();
+  const { supplies } = useSupplies();
+  const { wishlist } = useWishlist();
   const sorted = [...trips].sort((a, b) => b.createdAt - a.createdAt);
+  const [tab, setTab] = useState<'lists' | 'reports'>('lists');
+  const latestSections = buildSectionSpend(sorted.slice(0, 1), supplies, bills, wishlist);
+  const recent = buildListSpend(trips)
+    .slice(-12)
+    .map((list) => ({
+      key: list.id,
+      label: list.name,
+      value: list.spent,
+      over: list.budget != null && list.spent > list.budget,
+    }));
+
+  const openTrip = (id: string) => router.push({ pathname: '/trip/[id]', params: { id } });
 
   const handleCreate = (name: string) => {
     const id = createList(name);
@@ -18,41 +48,94 @@ export default function ListsOverviewScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom', 'left', 'right']}>
       <View style={styles.header}>
         <View style={styles.logoBadge}>
           <Image source={require('@/assets/images/logo-mark.png')} style={styles.logo} resizeMode="contain" />
         </View>
         <View style={styles.titleBlock}>
           <Text style={styles.title}>Note Shop List</Text>
-          <Text style={styles.subtitle}>by Eri</Text>
+          <Text style={styles.subtitle}>Mirë se erdhe, {firstName}</Text>
         </View>
+        <Pressable
+          onPress={() => setProfileOpen(true)}
+          style={styles.avatar}
+          accessibilityRole="button"
+          accessibilityLabel="Profili"
+        >
+          <Text style={styles.avatarText}>{firstName.charAt(0).toUpperCase()}</Text>
+        </Pressable>
       </View>
+
+      <BottomSheet visible={profileOpen} onClose={() => setProfileOpen(false)} title="Profili">
+        <View style={styles.profileRow}>
+          <View style={[styles.avatar, styles.avatarLarge]}>
+            <Text style={[styles.avatarText, styles.avatarTextLarge]}>{firstName.charAt(0).toUpperCase()}</Text>
+          </View>
+          <View style={styles.profileText}>
+            <Text style={styles.profileName}>{user?.displayName ?? firstName}</Text>
+            <Text style={styles.profileEmail}>{user?.email ?? 'Modalitet zhvillimi (pa llogari)'}</Text>
+          </View>
+        </View>
+        <Pressable
+          onPress={() => {
+            setProfileOpen(false);
+            signOut();
+          }}
+          accessibilityRole="button"
+          style={styles.signOutButton}
+        >
+          <Ionicons name="log-out-outline" size={20} color={colors.danger} />
+          <Text style={styles.signOutText}>Dil nga llogaria</Text>
+        </Pressable>
+      </BottomSheet>
 
       <View style={styles.content}>
-        <Text style={styles.sectionLabel}>Listat e tua</Text>
-        <FlatList
-          data={sorted}
-          keyExtractor={(trip) => trip.id}
-          style={styles.list}
-          renderItem={({ item: trip }) => (
-            <TripCard trip={trip} onPress={() => router.push({ pathname: '/trip/[id]', params: { id: trip.id } })} />
-          )}
-          ListEmptyComponent={
-            <EmptyState
-              icon="list-outline"
-              title="Nuk ke ende asnjë listë"
-              subtitle="Krijo listën tënde të parë me butonin + më poshtë!"
-            />
-          }
-          contentContainerStyle={sorted.length === 0 ? styles.flex : styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
+        {tab === 'lists' ? (
+          <FlatList
+            data={sorted}
+            keyExtractor={(trip) => trip.id}
+            style={styles.list}
+            ListHeaderComponent={
+              recent.length > 0 ? (
+                <>
+                  <MiniColumns data={recent} onPressColumn={openTrip} />
+                  <LatestListPie listName={`${sorted[0].name} · sipas kategorisë`} sections={latestSections} />
+                </>
+              ) : null
+            }
+            renderItem={({ item: trip, index }) => (
+              <TripCard index={index} trip={trip} onPress={() => openTrip(trip.id)} />
+            )}
+            ListEmptyComponent={
+              <EmptyState
+                icon="list-outline"
+                title="Nuk ke ende asnjë listë"
+                subtitle="Krijo listën tënde të parë me butonin + më poshtë!"
+              />
+            }
+            contentContainerStyle={sorted.length === 0 ? styles.flex : styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        ) : (
+          <ReportsView onOpenTrip={openTrip} />
+        )}
       </View>
 
-      <View style={styles.footer}>
-        <CreateListButton onCreate={handleCreate} />
-      </View>
+      {tab === 'lists' && (
+        <View style={styles.footer}>
+          <CreateListButton onCreate={handleCreate} />
+        </View>
+      )}
+
+      <BottomTabBar
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: 'lists', label: 'Listat', icon: 'list-outline', activeIcon: 'list' },
+          { value: 'reports', label: 'Raportet', icon: 'stats-chart-outline', activeIcon: 'stats-chart' },
+        ]}
+      />
     </SafeAreaView>
   );
 }
@@ -77,12 +160,44 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logo: { width: 30, height: 30 },
+  avatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.primaryLight,
+    borderWidth: 2,
+    borderColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { fontSize: 16, fontWeight: '700', color: colors.primaryDark },
+  avatarLarge: { width: 52, height: 52, borderRadius: 26 },
+  avatarTextLarge: { fontSize: 22 },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  profileText: { flex: 1 },
+  profileName: { fontSize: 17, fontWeight: '700', color: colors.text },
+  profileEmail: { fontSize: 13, color: colors.textMuted },
+  signOutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.sm + 4,
+    marginTop: spacing.sm,
+  },
+  signOutText: { fontSize: 15, fontWeight: '700', color: colors.danger },
   titleBlock: { flex: 1 },
   title: { fontSize: 20, fontWeight: '700', color: colors.text },
   subtitle: { fontSize: 12, color: colors.textMuted },
   content: { flex: 1, paddingHorizontal: spacing.md },
-  sectionLabel: { fontSize: 13, fontWeight: '600', color: colors.textMuted, marginBottom: spacing.sm },
   list: { flex: 1 },
   listContent: { paddingBottom: spacing.sm },
-  footer: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm, alignItems: 'flex-end' },
+  footer: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+    alignItems: 'flex-end',
+  },
 });

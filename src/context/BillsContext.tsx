@@ -14,6 +14,7 @@ interface BillsContextValue {
   toggleBill: (id: string) => void;
   updateBill: (id: string, patch: Partial<ShoppingItem>) => void;
   removeBill: (id: string) => void;
+  hydrate: (items: ShoppingItem[]) => void;
 }
 
 const BillsContext = createContext<BillsContextValue | null>(null);
@@ -40,8 +41,10 @@ export function BillsProvider({ children }: { children: ReactNode }) {
     setBills((prev) => prev.filter((bill) => bill.id !== id));
   };
 
+  const hydrate = (items: ShoppingItem[]) => setBills(items);
+
   const value = useMemo<BillsContextValue>(
-    () => ({ bills, addBill, toggleBill, updateBill, removeBill }),
+    () => ({ bills, addBill, toggleBill, updateBill, removeBill, hydrate }),
     [bills],
   );
 

@@ -1,0 +1,24 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function validShape() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['trips', 'bills', 'supplies', 'wishlist', 'updatedAt'])
+        && d.trips is list && d.bills is list && d.supplies is list && d.wishlist is list
+        && d.trips.size() <= 500
+        && d.bills.size() <= 1000
+        && d.supplies.size() <= 1000
+        && d.wishlist.size() <= 1000
+        && d.updatedAt == request.time;
+    }
+
+    match /users/{userId} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && validShape();
+    }
+  }
+}

@@ -15,6 +15,7 @@ interface InlineEditableFieldProps {
   textStyle?: StyleProp<TextStyle>;
   align?: 'left' | 'right';
   chip?: boolean;
+  onEditingChange?: (editing: boolean) => void;
 }
 
 export function InlineEditableField({
@@ -28,12 +29,14 @@ export function InlineEditableField({
   textStyle,
   align = 'left',
   chip = false,
-}: InlineEditableFieldProps) {
+  onEditingChange,
+}:InlineEditableFieldProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
 
   const commit = () => {
     setEditing(false);
+    onEditingChange?.(false);
     if (draft !== value) onChange(draft);
   };
 
@@ -57,6 +60,7 @@ export function InlineEditableField({
       onPress={() => {
         setDraft(value);
         setEditing(true);
+        onEditingChange?.(true);
       }}
       style={[styles.pressable, chip && styles.chip]}
     >

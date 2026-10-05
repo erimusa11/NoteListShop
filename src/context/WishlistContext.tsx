@@ -13,6 +13,7 @@ interface WishlistContextValue {
   toggleWish: (id: string) => void;
   updateWish: (id: string, patch: Partial<ShoppingItem>) => void;
   removeWish: (id: string) => void;
+  hydrate: (items: ShoppingItem[]) => void;
 }
 
 const WishlistContext = createContext<WishlistContextValue | null>(null);
@@ -39,8 +40,10 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
     setWishlist((prev) => prev.filter((wish) => wish.id !== id));
   };
 
+  const hydrate = (items: ShoppingItem[]) => setWishlist(items);
+
   const value = useMemo<WishlistContextValue>(
-    () => ({ wishlist, addWish, toggleWish, updateWish, removeWish }),
+    () => ({ wishlist, addWish, toggleWish, updateWish, removeWish, hydrate }),
     [wishlist],
   );
 

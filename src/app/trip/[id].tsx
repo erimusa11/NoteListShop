@@ -1,39 +1,78 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { LayoutAnimationConfig } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AddItemButton } from '@/components/AddItemButton';
 import { BillsSummaryBar } from '@/components/BillsSummaryBar';
 import { InlineEditableField } from '@/components/InlineEditableField';
 import { ItemRow } from '@/components/ItemRow';
-import { SegmentedControl } from '@/components/SegmentedControl';
+import { TagString, type TagOption } from '@/components/TagString';
 import { TotalsBar } from '@/components/TotalsBar';
 import { useBills } from '@/context/BillsContext';
+import { useSupplies } from '@/context/SuppliesContext';
 import { useTrips } from '@/context/TripsContext';
 import { useWishlist } from '@/context/WishlistContext';
 import { colors, spacing } from '@/theme/theme';
 import { goBackOrHome } from '@/utils/navigation';
+import { buildSuggestions } from '@/utils/suggestions';
+import { CATEGORY_COLORS } from '@/utils/reports';
 import { computeSpentTotal, computeTotal } from '@/utils/totals';
 
-type Section = 'products' | 'bills' | 'wishlist';
+type Section = 'products' | 'supplies' | 'bills' | 'wishlist';
+
+const count = (list: { bought: boolean }[]) => ({
+  total: list.length,
+  remaining: list.filter((i) => !i.bought).length,
+});
 
 export default function TripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { trips, addItem, toggleItem, updateItem, removeItem, setBudget, renameTrip, deleteTrip } = useTrips();
   const { bills, addBill, toggleBill, updateBill, removeBill } = useBills();
   const { wishlist, addWish, toggleWish, updateWish, removeWish } = useWishlist();
+  const { supplies, addSupply, toggleSupply, updateSupply, removeSupply } = useSupplies();
   const trip = trips.find((t) => t.id === id);
   const [section, setSection] = useState<Section>('products');
+  const [checkedHere, setCheckedHere] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setCheckedHere(new Set());
+  }, [id]);
+
+  const onToggleWish = (wishId: string) => {
+    setCheckedHere((prev) => new Set(prev).add(wishId));
+    toggleWish(wishId);
+  };
 
   const productsSpent = useMemo(() => computeSpentTotal(trip?.items ?? []), [trip]);
   const billsTotal = useMemo(() => computeTotal(bills), [bills]);
   const billsPaid = useMemo(() => computeSpentTotal(bills), [bills]);
+  const suppliesTotal = useMemo(() => computeTotal(supplies), [supplies]);
+  const suppliesSpent = useMemo(() => computeSpentTotal(supplies), [supplies]);
   const wishlistTotal = useMemo(() => computeTotal(wishlist), [wishlist]);
+  const productSuggestions = useMemo(() => buildSuggestions(trips.flatMap((t) => t.items)), [trips]);
+  const supplySuggestions = useMemo(() => buildSuggestions(supplies), [supplies]);
+  const billSuggestions = useMemo(() => buildSuggestions(bills), [bills]);
+  const wishSuggestions = useMemo(() => buildSuggestions(wishlist), [wishlist]);
   const wishlistSpent = useMemo(() => computeSpentTotal(wishlist), [wishlist]);
-  const visibleWishlist = useMemo(() => wishlist.filter((wish) => !wish.bought), [wishlist]);
-  const combinedSpent = productsSpent + billsPaid + wishlistSpent;
+  const visibleWishlist = useMemo(
+    () => wishlist.filter((wish) => !wish.bought || checkedHere.has(wish.id)),
+    [wishlist, checkedHere],
+  );
+  const combinedSpent = productsSpent + suppliesSpent + billsPaid + wishlistSpent;
+  const tripItems = trip?.items;
+  const tagOptions = useMemo<TagOption<Section>[]>(
+    () => [
+      { value: 'products', label: 'Produktet', icon: 'basket-outline', activeIcon: 'basket', accent: CATEGORY_COLORS.products, ...count(tripItems ?? []) },
+      { value: 'supplies', label: 'Detergjente & Extra', icon: 'sparkles-outline', activeIcon: 'sparkles', accent: CATEGORY_COLORS.supplies, ...count(supplies) },
+      { value: 'bills', label: 'Faturat', icon: 'receipt-outline', activeIcon: 'receipt', accent: CATEGORY_COLORS.bills, ...count(bills) },
+      { value: 'wishlist', label: 'Dëshirat', icon: 'heart-outline', activeIcon: 'heart', accent: CATEGORY_COLORS.wishlist, ...count(wishlist) },
+    ],
+    [tripItems, supplies, bills, wishlist],
+  );
 
   const confirmDelete = () => {
     if (!trip) return;
@@ -84,15 +123,7 @@ export default function TripDetailScreen() {
         {trip ? (
           <>
             <View style={styles.content}>
-              <SegmentedControl
-                value={section}
-                onChange={setSection}
-                options={[
-                  { value: 'products', label: 'Produktet' },
-                  { value: 'bills', label: 'Faturat' },
-                  { value: 'wishlist', label: 'Dëshirat' },
-                ]}
-              />
+              <TagString value={section} onChange={setSection} options={tagOptions} />
 
               {section === 'products' && (
                 <>
@@ -101,45 +132,78 @@ export default function TripDetailScreen() {
                     spentTotal={combinedSpent}
                     onChangeBudget={(value) => setBudget(trip.id, value)}
                   />
-                  <FlatList
-                    data={trip.items}
-                    keyExtractor={(item) => item.id}
-                    style={styles.list}
-                    renderItem={({ item }) => (
-                      <ItemRow
-                        item={item}
-                        onToggle={() => toggleItem(trip.id, item.id)}
-                        onUpdate={(patch) => updateItem(trip.id, item.id, patch)}
-                        onRemove={() => removeItem(trip.id, item.id)}
-                      />
-                    )}
-                    ListEmptyComponent={<Text style={styles.empty}>Kjo listë nuk ka artikuj.</Text>}
-                    contentContainerStyle={styles.listContent}
-                    showsVerticalScrollIndicator={false}
+                  <LayoutAnimationConfig skipEntering>
+                    <FlatList
+                      data={trip.items}
+                      keyExtractor={(item) => item.id}
+                      style={styles.list}
+                      renderItem={({ item }) => (
+                        <ItemRow
+                          item={item}
+                          onToggle={() => toggleItem(trip.id, item.id)}
+                          onUpdate={(patch) => updateItem(trip.id, item.id, patch)}
+                          onRemove={() => removeItem(trip.id, item.id)}
+                        />
+                      )}
+                      ListEmptyComponent={<Text style={styles.empty}>Kjo listë nuk ka artikuj.</Text>}
+                      contentContainerStyle={styles.listContent}
+                      showsVerticalScrollIndicator={false}
+                    />
+                  </LayoutAnimationConfig>
+                </>
+              )}
+
+              {section === 'supplies' && (
+                <>
+                  <BillsSummaryBar
+                    totalAmount={suppliesTotal}
+                    paidAmount={combinedSpent}
+                    totalLabel="Gjithsej detergjente & extra"
                   />
+                  <LayoutAnimationConfig skipEntering>
+                    <FlatList
+                      data={supplies}
+                      keyExtractor={(supply) => supply.id}
+                      style={styles.list}
+                      renderItem={({ item }) => (
+                        <ItemRow
+                          item={item}
+                          onToggle={() => toggleSupply(item.id)}
+                          onUpdate={(patch) => updateSupply(item.id, patch)}
+                          onRemove={() => removeSupply(item.id)}
+                          showQuantity={false}
+                        />
+                      )}
+                      ListEmptyComponent={<Text style={styles.empty}>Nuk ka ende asnjë artikull.</Text>}
+                      contentContainerStyle={styles.listContent}
+                      showsVerticalScrollIndicator={false}
+                    />
+                  </LayoutAnimationConfig>
                 </>
               )}
 
               {section === 'bills' && (
                 <>
                   <BillsSummaryBar totalAmount={billsTotal} paidAmount={combinedSpent} />
-                  <FlatList
-                    data={bills}
-                    keyExtractor={(bill) => bill.id}
-                    style={styles.list}
-                    renderItem={({ item }) => (
-                      <ItemRow
-                        item={item}
-                        onToggle={() => toggleBill(item.id)}
-                        onUpdate={(patch) => updateBill(item.id, patch)}
-                        onRemove={() => removeBill(item.id)}
-                        showQuantity={false}
-                      />
-                    )}
-                    ListEmptyComponent={<Text style={styles.empty}>Nuk ka ende asnjë faturë.</Text>}
-                    contentContainerStyle={styles.listContent}
-                    showsVerticalScrollIndicator={false}
-                  />
+                  <LayoutAnimationConfig skipEntering>
+                    <FlatList
+                      data={bills}
+                      keyExtractor={(bill) => bill.id}
+                      style={styles.list}
+                      renderItem={({ item }) => (
+                        <ItemRow
+                          item={item}
+                          onToggle={() => toggleBill(item.id)}
+                          onUpdate={(patch) => updateBill(item.id, patch)}
+                          onRemove={() => removeBill(item.id)}
+                          showQuantity={false}
+                        />
+                      )}
+                      ListEmptyComponent={<Text style={styles.empty}>Nuk ka ende asnjë faturë.</Text>}
+                      contentContainerStyle={styles.listContent}
+                      showsVerticalScrollIndicator={false}
+                    />
+                  </LayoutAnimationConfig>
                 </>
               )}
 
@@ -150,35 +214,49 @@ export default function TripDetailScreen() {
                     paidAmount={combinedSpent}
                     totalLabel="Gjithsej dëshirat"
                   />
-                  <FlatList
-                    data={visibleWishlist}
-                    keyExtractor={(wish) => wish.id}
-                    style={styles.list}
-                    renderItem={({ item }) => (
-                      <ItemRow
-                        item={item}
-                        onToggle={() => toggleWish(item.id)}
-                        onUpdate={(patch) => updateWish(item.id, patch)}
-                        onRemove={() => removeWish(item.id)}
-                        showQuantity={false}
-                      />
-                    )}
-                    ListEmptyComponent={<Text style={styles.empty}>Lista e dëshirave është bosh.</Text>}
-                    contentContainerStyle={styles.listContent}
-                    showsVerticalScrollIndicator={false}
-                  />
+                  <LayoutAnimationConfig skipEntering>
+                    <FlatList
+                      data={visibleWishlist}
+                      keyExtractor={(wish) => wish.id}
+                      style={styles.list}
+                      renderItem={({ item }) => (
+                        <ItemRow
+                          item={item}
+                          onToggle={() => onToggleWish(item.id)}
+                          onUpdate={(patch) => updateWish(item.id, patch)}
+                          onRemove={() => removeWish(item.id)}
+                          showQuantity={false}
+                        />
+                      )}
+                      ListEmptyComponent={<Text style={styles.empty}>Lista e dëshirave është bosh.</Text>}
+                      contentContainerStyle={styles.listContent}
+                      showsVerticalScrollIndicator={false}
+                    />
+                  </LayoutAnimationConfig>
                 </>
               )}
             </View>
             <View style={styles.footer}>
               {section === 'products' && (
-                <AddItemButton onAdd={(name, quantity, price) => addItem(trip.id, name, quantity, price)} />
+                <AddItemButton
+                  onAdd={(name, quantity, price) => addItem(trip.id, name, quantity, price)}
+                  suggestions={productSuggestions}
+                />
+              )}
+              {section === 'supplies' && (
+                <AddItemButton
+                  onAdd={(name, _quantity, price) => addSupply(name, price)}
+                  showQuantity={false}
+                  title="Shto artikull"
+                  suggestions={supplySuggestions}
+                />
               )}
               {section === 'bills' && (
                 <AddItemButton
                   onAdd={(name, _quantity, price) => addBill(name, price)}
                   showQuantity={false}
                   title="Shto faturë"
+                  suggestions={billSuggestions}
                 />
               )}
               {section === 'wishlist' && (
@@ -186,6 +264,7 @@ export default function TripDetailScreen() {
                   onAdd={(name, _quantity, price) => addWish(name, price)}
                   showQuantity={false}
                   title="Shto dëshirë"
+                  suggestions={wishSuggestions}
                 />
               )}
             </View>

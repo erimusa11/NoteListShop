@@ -19,6 +19,7 @@ interface TripsContextValue {
   toggleItem: (tripId: string, itemId: string) => void;
   updateItem: (tripId: string, itemId: string, patch: Partial<ShoppingItem>) => void;
   removeItem: (tripId: string, itemId: string) => void;
+  hydrate: (trips: ShoppingTrip[]) => void;
 }
 
 const TripsContext = createContext<TripsContextValue | null>(null);
@@ -72,8 +73,21 @@ export function TripsProvider({ children }: { children: ReactNode }) {
     updateTripItems(tripId, (items) => items.filter((item) => item.id !== itemId));
   };
 
+  const hydrate = (next: ShoppingTrip[]) => setTrips(next);
+
   const value = useMemo<TripsContextValue>(
-    () => ({ trips, createList, renameTrip, deleteTrip, setBudget, addItem, toggleItem, updateItem, removeItem }),
+    () => ({
+      trips,
+      createList,
+      renameTrip,
+      deleteTrip,
+      setBudget,
+      addItem,
+      toggleItem,
+      updateItem,
+      removeItem,
+      hydrate,
+    }),
     [trips],
   );
 

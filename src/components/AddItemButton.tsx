@@ -1,17 +1,25 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { BottomSheet } from '@/components/BottomSheet';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
+import { pickSuggestions, type Suggestion } from '@/utils/suggestions';
+import { formatNumber } from '@/utils/totals';
 
 interface AddItemButtonProps {
   onAdd: (name: string, quantity: string, price: number | null) => void;
   showQuantity?: boolean;
   title?: string;
+  suggestions?: Suggestion[];
 }
 
-export function AddItemButton({ onAdd, showQuantity = true, title = 'Shto artikull' }: AddItemButtonProps) {
+export function AddItemButton({
+  onAdd,
+  showQuantity = true,
+  title = 'Shto artikull',
+  suggestions = [],
+}: AddItemButtonProps) {
   const [visible, setVisible] = useState(false);
   const [name, setName] = useState('');
   const [quantity, setQuantity] = useState('');
@@ -25,6 +33,12 @@ export function AddItemButton({ onAdd, showQuantity = true, title = 'Shto artiku
   };
 
   const canSubmit = name.trim().length > 0;
+  const shown = useMemo(() => pickSuggestions(suggestions, name), [suggestions, name]);
+
+  const pick = (s: Suggestion) => {
+    onAdd(s.name, showQuantity ? s.quantity : '', s.price);
+    close();
+  };
 
   const submit = () => {
     if (!canSubmit) return;
@@ -50,6 +64,27 @@ export function AddItemButton({ onAdd, showQuantity = true, title = 'Shto artiku
           autoFocus
           returnKeyType="next"
         />
+
+        {shown.length > 0 && (
+          <View style={styles.suggestions}>
+            <Text style={styles.suggestionsLabel}>{name.trim() ? 'Sugjerime' : 'Më të përdorurat'}</Text>
+            <View style={styles.chips}>
+              {shown.map((s) => (
+                <Pressable
+                  key={s.key}
+                  onPress={() => pick(s)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Shto ${s.name}`}
+                  style={styles.chip}
+                >
+                  <Ionicons name="add-circle" size={16} color={colors.primary} />
+                  <Text style={styles.chipText}>{s.name}</Text>
+                  {s.price != null && <Text style={styles.chipPrice}>{formatNumber(s.price)}</Text>}
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
 
         {showQuantity ? (
           <View style={styles.row}>
@@ -121,6 +156,21 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
   },
+  suggestions: { gap: 6 },
+  suggestionsLabel: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primaryLight,
+    borderRadius: radii.pill,
+    paddingVertical: 6,
+    paddingLeft: 8,
+    paddingRight: 12,
+  },
+  chipText: { fontSize: 14, fontWeight: '600', color: colors.primaryDark },
+  chipPrice: { fontSize: 12, color: colors.textMuted },
   row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   rowItem: { flex: 1 },
   submitButton: {
