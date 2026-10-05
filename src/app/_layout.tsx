@@ -12,8 +12,8 @@ import { WishlistProvider } from '@/context/WishlistContext';
 import { colors } from '@/theme/theme';
 
 function RootNavigator() {
-  const { user, hasPassword, devMode } = useAuth();
-  const signedIn = devMode || (user !== null && hasPassword);
+  const { user, hasPassword, demoMode } = useAuth();
+  const signedIn = demoMode || (user !== null && hasPassword);
 
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
@@ -21,10 +21,10 @@ function RootNavigator() {
         <Stack.Screen name="index" />
         <Stack.Screen name="trip/[id]" />
       </Stack.Protected>
-      <Stack.Protected guard={user === null && !devMode}>
+      <Stack.Protected guard={user === null && !demoMode}>
         <Stack.Screen name="login" />
       </Stack.Protected>
-      <Stack.Protected guard={user !== null && !hasPassword && !devMode}>
+      <Stack.Protected guard={user !== null && !hasPassword && !demoMode}>
         <Stack.Screen name="set-password" />
       </Stack.Protected>
     </Stack>

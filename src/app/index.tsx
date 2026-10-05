@@ -33,11 +33,13 @@ function normalizeText(value: string): string {
 
 export default function ListsOverviewScreen() {
   const { trips, createList } = useTrips();
-  const { user, signOut } = useAuth();
+  const { user, demoMode, signOut } = useAuth();
   const { supported, enabled: lockEnabled, setEnabled: setLockEnabled } = useAppLock();
   const [lockError, setLockError] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
-  const firstName = user?.displayName?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'Eri';
+  const firstName = demoMode
+    ? 'Vizitor'
+    : (user?.displayName?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'Eri');
   const { bills } = useBills();
   const { supplies } = useSupplies();
   const { wishlist } = useWishlist();
@@ -95,7 +97,9 @@ export default function ListsOverviewScreen() {
           <>
             <View style={styles.titleBlock}>
               <Text style={styles.title}>Note Shop List</Text>
-              <Text style={styles.subtitle}>Mirë se erdhe, {firstName}</Text>
+              <Text style={styles.subtitle}>
+                {demoMode ? 'Modalitet demo · ndryshimet nuk ruhen' : `Mirë se erdhe, ${firstName}`}
+              </Text>
             </View>
             {tab === 'lists' && trips.length > 1 && (
               <Pressable
@@ -126,10 +130,10 @@ export default function ListsOverviewScreen() {
           </View>
           <View style={styles.profileText}>
             <Text style={styles.profileName}>{user?.displayName ?? firstName}</Text>
-            <Text style={styles.profileEmail}>{user?.email ?? 'Modalitet zhvillimi (pa llogari)'}</Text>
+            <Text style={styles.profileEmail}>{user?.email ?? 'Modalitet demo (pa llogari)'}</Text>
           </View>
         </View>
-        {supported && (
+        {supported && !demoMode && (
           <View style={styles.lockRow}>
             <Ionicons name="finger-print" size={22} color={colors.primaryDark} />
             <View style={styles.profileText}>
@@ -154,7 +158,7 @@ export default function ListsOverviewScreen() {
           style={styles.signOutButton}
         >
           <Ionicons name="log-out-outline" size={20} color={colors.danger} />
-          <Text style={styles.signOutText}>Dil nga llogaria</Text>
+          <Text style={styles.signOutText}>{demoMode ? 'Dil nga demo' : 'Dil nga llogaria'}</Text>
         </Pressable>
       </BottomSheet>
 

@@ -55,7 +55,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 export function CloudSyncGate({ children }: { children: ReactNode }) {
-  const { user, hasPassword, loading, signOut } = useAuth();
+  const { user, hasPassword, loading, demoMode, signOut } = useAuth();
   const { trips, hydrate: hydrateTrips } = useTrips();
   const { bills, hydrate: hydrateBills } = useBills();
   const { supplies, hydrate: hydrateSupplies } = useSupplies();
@@ -77,6 +77,21 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     hydrators.current = { hydrateTrips, hydrateBills, hydrateSupplies, hydrateWishlist };
   });
+
+  // Demo data lives only in memory (uid stays null, so nothing syncs); drop it when leaving demo mode.
+  const wasDemo = useRef(false);
+  useEffect(() => {
+    if (demoMode) {
+      wasDemo.current = true;
+      return;
+    }
+    if (!wasDemo.current) return;
+    wasDemo.current = false;
+    hydrators.current.hydrateTrips([]);
+    hydrators.current.hydrateBills([]);
+    hydrators.current.hydrateSupplies([]);
+    hydrators.current.hydrateWishlist([]);
+  }, [demoMode]);
 
   useEffect(() => {
     if (!uid || !db) {

@@ -19,13 +19,14 @@ interface AuthContextValue {
   loading: boolean;
   user: User | null;
   hasPassword: boolean;
-  devMode: boolean;
+  /** Browsing without an account: nothing is read from or saved to Firebase. */
+  demoMode: boolean;
   signInWithGoogle: () => Promise<void>;
   signInWithPassword: (email: string, password: string) => Promise<void>;
   setAccountPassword: (password: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
-  enterDevMode: () => void;
+  enterDemoMode: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -60,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(isFirebaseConfigured);
   const [version, setVersion] = useState(0);
-  const [devMode, setDevMode] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
 
   useEffect(() => {
     if (!auth) return;
@@ -97,12 +98,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    setDevMode(false);
+    setDemoMode(false);
     if (auth) await firebaseSignOut(auth);
   }, []);
 
-  const enterDevMode = useCallback(() => {
-    if (__DEV__ && !isFirebaseConfigured) setDevMode(true);
+  const enterDemoMode = useCallback(() => {
+    setDemoMode(true);
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -111,16 +112,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       user,
       hasPassword: Boolean(auth?.currentUser?.providerData.some((p) => p.providerId === 'password')),
-      devMode,
+      demoMode,
       signInWithGoogle,
       signInWithPassword,
       setAccountPassword,
       resetPassword,
       signOut,
-      enterDevMode,
+      enterDemoMode,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loading, user, version, devMode],
+    [loading, user, version, demoMode],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
