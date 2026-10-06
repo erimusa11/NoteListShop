@@ -106,7 +106,7 @@ export function buildCategoryHistory(trips: ShoppingTrip[], limit: number = HIST
   return [...histories.filter((h) => h.total > 0), ...histories.filter((h) => h.total === 0)];
 }
 
-// What each choice of a category (Naftë, Gaz, Benzinë; Drioni, Aloisi…) was spent on, list by list, over the last
+// What each choice of a category (Naftë, Gaz, Benzinë; Drion, Alois…) was spent on, list by list, over the last
 // `limit` lists. Items are matched by name, ignoring case and accents; one that is not a choice is counted under the
 // category's "other" group ("Të tjera", or its own such as "Tjetër"), so the choices always add up to the category's total.
 export function buildOptionHistory(

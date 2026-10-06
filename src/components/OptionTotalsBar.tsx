@@ -13,7 +13,7 @@ interface OptionTotalsBarProps {
   onSelect: (name: string | null) => void;
 }
 
-// What each choice of a category (Naftë, Gaz, Benzinë; Drioni, Aloisi…) adds up to, under the category total.
+// What each choice of a category (Naftë, Gaz, Benzinë; Drion, Alois…) adds up to, under the category total.
 // Each one is also a filter for the list below it. More than three wrap onto a second row.
 export function OptionTotalsBar({ options, selected, onSelect }: OptionTotalsBarProps) {
   return (

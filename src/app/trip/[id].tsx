@@ -62,7 +62,7 @@ interface CategoryPaneProps {
   incomeTotal: number;
   overBy: number;
   onPressIncome: () => void;
-  /** The group of a category with choices (e.g. "Drioni") the list is narrowed to, or null for everything. */
+  /** The group of a category with choices (e.g. "Drion") the list is narrowed to, or null for everything. */
   optionFilter: string | null;
   onOptionFilter: (section: Section, group: string | null) => void;
 }
@@ -145,7 +145,7 @@ export default function TripDetailScreen() {
   }, []);
   const openIncome = useCallback(() => selectSection('income'), [selectSection]);
 
-  // Per tab: the group (Drioni, Naftë…) its list is narrowed to. Kept here so adding an item can undo it.
+  // Per tab: the group (Drion, Naftë…) its list is narrowed to. Kept here so adding an item can undo it.
   const [optionFilters, setOptionFilters] = useState<Record<Section, string | null>>({});
   const setOptionFilter = useCallback(
     (target: Section, group: string | null) => setOptionFilters((prev) => ({ ...prev, [target]: group })),

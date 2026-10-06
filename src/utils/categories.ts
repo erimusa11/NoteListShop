@@ -173,7 +173,7 @@ export const CATEGORIES: Category[] = [
     totalLabel: 'Gjithsej shëndeti & vizita',
     addTitle: 'Shto shpenzim',
     namePlaceholder: 'P.sh. Mjek, Analiza, Dentist…',
-    nameOptions: ['Drioni', 'Aloisi', 'Alma', 'Eri'],
+    nameOptions: ['Drion', 'Alois', 'Alma', 'Eri'],
     optionsLabel: 'Për kë',
     otherOption: 'Tjetër',
     optionsReportTitle: 'Shendeti sipas personit',
