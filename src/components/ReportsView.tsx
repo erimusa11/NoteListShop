@@ -7,8 +7,15 @@ import { PieChart } from '@/components/charts/PieChart';
 import { EmptyState } from '@/components/EmptyState';
 import { useTrips } from '@/context/TripsContext';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
+import { CATEGORIES } from '@/utils/categories';
 import { formatDayMonthShort } from '@/utils/dates';
-import { buildCategoryHistory, buildListSpend, type CategoryHistory } from '@/utils/reports';
+import {
+  buildCategoryHistory,
+  buildListSpend,
+  buildOptionHistory,
+  type CategoryHistory,
+  type OptionHistory,
+} from '@/utils/reports';
 import { formatPrice } from '@/utils/totals';
 
 interface ReportsViewProps {
@@ -58,6 +65,64 @@ const CategoryCard = memo(function CategoryCard({
   );
 });
 
+// A category with a choice (Karburant: Naftë, Gaz, Benzinë) split by that choice: what each one cost in every list.
+const OptionCard = memo(function OptionCard({
+  history,
+  onOpenTrip,
+}: {
+  history: OptionHistory;
+  onOpenTrip: (id: string) => void;
+}) {
+  const { category, options, total } = history;
+  const hasSpend = total > 0;
+  const listCount = options[0]?.columns.length ?? 0;
+
+  return (
+    <View style={[styles.card, shadow]}>
+      <View style={styles.cardHeader}>
+        <View style={[styles.iconCircle, { backgroundColor: category.color + '22' }]}>
+          <Ionicons name={category.activeIcon} size={18} color={category.color} />
+        </View>
+        <View style={styles.cardTitles}>
+          <Text style={styles.cardTitle} numberOfLines={1}>
+            {category.optionsReportTitle ?? category.label}
+          </Text>
+          <Text style={styles.cardSubtitle}>{hasSpend ? listsLabel(listCount) : 'Asnjë shpenzim ende'}</Text>
+        </View>
+        <Text style={[styles.cardTotal, !hasSpend && { color: colors.textMuted }]}>{formatPrice(total)}</Text>
+      </View>
+      {hasSpend &&
+        options.map((option) => (
+          <View key={option.name} style={styles.optionBlock}>
+            <View style={styles.totalRow}>
+              <View style={[styles.dot, { backgroundColor: option.color }]} />
+              <Text style={[styles.totalName, option.total === 0 && styles.muted]} numberOfLines={1}>
+                {option.name}
+              </Text>
+              <Text style={[styles.totalPercent, option.total === 0 && styles.muted]}>
+                {Math.round((option.total / total) * 100)}%
+              </Text>
+              <Text style={[styles.totalValue, option.total === 0 && styles.muted]}>{formatPrice(option.total)}</Text>
+            </View>
+            {option.total > 0 && (
+              <ColumnChart
+                data={option.columns.map((column) => ({
+                  key: column.id,
+                  label: formatDayMonthShort(column.createdAt),
+                  description: `${column.name}, ${formatPrice(column.spent)} për ${option.name}`,
+                  value: column.spent,
+                }))}
+                color={option.color}
+                height={72}
+                onPressColumn={onOpenTrip}
+              />
+            )}
+          </View>
+        ))}
+    </View>
+  );
+});
+
 // What each category cost over the same lists the charts show, all of them together, and how that splits up.
 function TotalsCard({ histories }: { histories: CategoryHistory[] }) {
   const grandTotal = histories.reduce((sum, h) => sum + h.total, 0);
@@ -94,12 +159,34 @@ function TotalsCard({ histories }: { histories: CategoryHistory[] }) {
   );
 }
 
-type ReportRow = CategoryHistory | 'totals';
+type ReportRow =
+  | { kind: 'category'; key: string; history: CategoryHistory }
+  | { kind: 'options'; key: string; history: OptionHistory }
+  | { kind: 'totals'; key: string };
 
 export function ReportsView({ onOpenTrip }: ReportsViewProps) {
   const { trips } = useTrips();
   const histories = useMemo(() => buildCategoryHistory(trips), [trips]);
-  const rows = useMemo<ReportRow[]>(() => [...histories, 'totals'], [histories]);
+  // A category with a choice gets its split-by-choice card straight after its own card.
+  const rows = useMemo<ReportRow[]>(() => {
+    const optionHistories = new Map(
+      CATEGORIES.flatMap((category) => {
+        const history = buildOptionHistory(trips, category);
+        return history ? [[category.section, history] as const] : [];
+      }),
+    );
+    return [
+      ...histories.flatMap((history): ReportRow[] => {
+        const { section } = history.category;
+        const options = optionHistories.get(section);
+        return [
+          { kind: 'category', key: section, history },
+          ...(options ? [{ kind: 'options' as const, key: `${section}-options`, history: options }] : []),
+        ];
+      }),
+      { kind: 'totals', key: 'totals' },
+    ];
+  }, [histories, trips]);
 
   if (trips.length === 0) {
     return (
@@ -120,19 +207,22 @@ export function ReportsView({ onOpenTrip }: ReportsViewProps) {
     <FlatList
       {...LIST_TUNING}
       data={rows}
-      keyExtractor={(row) => (row === 'totals' ? 'totals' : row.category.section)}
+      keyExtractor={(row) => row.key}
       style={styles.scroll}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
-      renderItem={({ item }) =>
-        item === 'totals' ? (
-          <TotalsCard histories={histories} />
-        ) : (
+      renderItem={({ item }) => {
+        if (item.kind === 'totals') return <TotalsCard histories={histories} />;
+        return (
           <View style={styles.cardGap}>
-            <CategoryCard history={item} onOpenTrip={onOpenTrip} />
+            {item.kind === 'options' ? (
+              <OptionCard history={item.history} onOpenTrip={onOpenTrip} />
+            ) : (
+              <CategoryCard history={item.history} onOpenTrip={onOpenTrip} />
+            )}
           </View>
-        )
-      }
+        );
+      }}
       ListHeaderComponent={
         <View style={styles.header}>
           <View style={styles.tiles}>
@@ -171,6 +261,7 @@ const styles = StyleSheet.create({
   cardTotal: { fontSize: 14, fontWeight: '700', color: colors.text },
   totalsTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
   totalsList: { gap: spacing.sm + 2 },
+  optionBlock: { gap: spacing.sm },
   totalRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   dot: { width: 10, height: 10, borderRadius: 5 },
   totalName: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.text },

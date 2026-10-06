@@ -1,5 +1,6 @@
 import type { ShoppingTrip } from '@/types/models';
 import { CATEGORIES, INCOME_COLOR, type Category } from '@/utils/categories';
+import { optionChoices, optionColor, optionMatcher } from '@/utils/options';
 import { computeSpentTotal, computeTotal, tripAllItems, tripIncomeTotal } from '@/utils/totals';
 
 export interface ListSpend {
@@ -30,6 +31,21 @@ export interface CategoryHistory {
   category: Category;
   /** One column per list, oldest first. */
   columns: HistoryColumn[];
+  total: number;
+}
+
+/** One choice of a category that has `nameOptions` (such as Naftë), with what it cost in each list. */
+export interface OptionSpend {
+  name: string;
+  color: string;
+  /** One column per list, oldest first. */
+  columns: HistoryColumn[];
+  total: number;
+}
+
+export interface OptionHistory {
+  category: Category;
+  options: OptionSpend[];
   total: number;
 }
 
@@ -70,10 +86,14 @@ export function buildSectionSpend(trips: ShoppingTrip[]): SectionSpend[] {
 
 export const HISTORY_LISTS = 12;
 
+// The last `limit` lists, oldest first: the columns of every chart.
+const recentTrips = (trips: ShoppingTrip[], limit: number) =>
+  [...trips].sort((a, b) => a.createdAt - b.createdAt).slice(-limit);
+
 // For every category, what was spent in each of the last `limit` lists (same lists in every category).
 // Categories with spending come first, in the usual order; the empty ones follow.
 export function buildCategoryHistory(trips: ShoppingTrip[], limit: number = HISTORY_LISTS): CategoryHistory[] {
-  const recent = [...trips].sort((a, b) => a.createdAt - b.createdAt).slice(-limit);
+  const recent = recentTrips(trips, limit);
   const histories = CATEGORIES.map((category) => {
     const columns = recent.map((trip) => ({
       id: trip.id,
@@ -84,4 +104,40 @@ export function buildCategoryHistory(trips: ShoppingTrip[], limit: number = HIST
     return { category, columns, total: columns.reduce((sum, column) => sum + column.spent, 0) };
   });
   return [...histories.filter((h) => h.total > 0), ...histories.filter((h) => h.total === 0)];
+}
+
+// What each choice of a category (Naftë, Gaz, Benzinë; Drioni, Aloisi…) was spent on, list by list, over the last
+// `limit` lists. Items are matched by name, ignoring case and accents; one that is not a choice is counted under the
+// category's "other" group ("Të tjera", or its own such as "Tjetër"), so the choices always add up to the category's total.
+export function buildOptionHistory(
+  trips: ShoppingTrip[],
+  category: Category,
+  limit: number = HISTORY_LISTS,
+): OptionHistory | null {
+  const choices = optionChoices(category);
+  if (!choices) return null;
+
+  const { names, otherLabel, otherAlwaysShown } = choices;
+  const recent = recentTrips(trips, limit);
+  const labels = [...names, otherLabel];
+  const choiceOf = optionMatcher(names);
+
+  const all = labels.map((name, index): OptionSpend => {
+    const columns = recent.map((trip) => ({
+      id: trip.id,
+      name: trip.name,
+      createdAt: trip.createdAt,
+      spent: computeSpentTotal((trip[category.key] ?? []).filter((item) => choiceOf(item.name) === index)),
+    }));
+    return {
+      name,
+      color: optionColor(index),
+      columns,
+      total: columns.reduce((sum, column) => sum + column.spent, 0),
+    };
+  });
+
+  // The "other" group is listed when the category names it, or otherwise only once it has spending.
+  const options = all.filter((option, index) => index < names.length || otherAlwaysShown || option.total > 0);
+  return { category, options, total: options.reduce((sum, option) => sum + option.total, 0) };
 }

@@ -20,12 +20,17 @@ interface AppLockValue {
 const AppLockContext = createContext<AppLockValue | null>(null);
 
 async function authenticate(message: string): Promise<boolean> {
-  const result = await LocalAuthentication.authenticateAsync({
-    promptMessage: message,
-    cancelLabel: 'Anulo',
-    fallbackLabel: 'Përdor PIN-in',
-  });
-  return result.success;
+  try {
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage: message,
+      cancelLabel: 'Anulo',
+      fallbackLabel: 'Përdor PIN-in',
+    });
+    return result.success;
+  } catch {
+    // The prompt can fail to open (for example while the app is going to the background); treat it as not unlocked.
+    return false;
+  }
 }
 
 export function AppLockProvider({ children }: { children: ReactNode }) {

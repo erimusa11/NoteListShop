@@ -1,5 +1,5 @@
 import type { ShoppingItem, ShoppingTrip } from '@/types/models';
-import { CATEGORIES } from '@/utils/categories';
+import { CATEGORIES, type Category } from '@/utils/categories';
 import { normalizePriority } from '@/utils/priority';
 import { parseQuantity } from '@/utils/quantity';
 
@@ -19,7 +19,9 @@ export function sortBoughtLast<T extends { bought: boolean; priority?: number }>
 
 // What the row costs: the price of one times the quantity.
 export function itemTotal(item: ShoppingItem): number {
-  return (item.price ?? 0) * parseQuantity(item.quantity);
+  const total = (item.price ?? 0) * parseQuantity(item.quantity);
+  // A huge price times a quantity can overflow; Infinity would reach the charts as NaN.
+  return Number.isFinite(total) ? total : 0;
 }
 
 export function computeSpentTotal(items: ShoppingItem[]): number {
@@ -43,4 +45,23 @@ export function formatPrice(value: number): string {
 // The items of every category of one list.
 export function tripAllItems(trip: ShoppingTrip): ShoppingItem[] {
   return CATEGORIES.flatMap(({ key }) => trip[key] ?? []);
+}
+
+// The categories of one list in the order its tabs are shown: by the number on the tab, which is how many items are
+// still to buy, the biggest first. A tie goes to the category with more items in all, then to the bigger total, then to
+// the usual order. Categories with nothing left to buy (all bought, then empty ones) come last.
+export function categoriesByOpenItems(trip: ShoppingTrip | undefined): Category[] {
+  if (!trip) return CATEGORIES;
+  return CATEGORIES.map((category, index) => {
+    const items = trip[category.key] ?? [];
+    return {
+      category,
+      index,
+      open: items.filter((item) => !item.bought).length,
+      count: items.length,
+      total: computeTotal(items),
+    };
+  })
+    .sort((a, b) => b.open - a.open || b.count - a.count || b.total - a.total || a.index - b.index)
+    .map(({ category }) => category);
 }

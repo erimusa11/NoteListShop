@@ -24,7 +24,7 @@ const PAGE_SIZE = 5;
 
 // Lower-case and strip accents so "shtator" finds "Shtator" and "mire" finds "Mirë".
 function normalizeText(value: string): string {
-  return value
+  return String(value ?? '')
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
     .toLowerCase()

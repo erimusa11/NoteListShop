@@ -9,8 +9,9 @@ export interface Suggestion {
   lastUsed: number;
 }
 
+// `String()` because a name from damaged or older saved data may be missing; an empty text beats a crash.
 export function normalizeText(value: string): string {
-  return value
+  return String(value ?? '')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()

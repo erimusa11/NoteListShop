@@ -43,9 +43,12 @@ export function toggleStar(trips: ShoppingTrip[], tripId: string, key: ItemListK
   return trips.map((trip) => {
     const items = trip[key] ?? [];
     if (trip.id === tripId) return { ...trip, [key]: items.map((i) => (i.id === itemId ? starred : i)) };
-    const twin = items.find((i) => !i.sharedId && normalizeText(i.name) === name);
+    const copy = copyToTrip(starred, trip.id);
+    // The copy made by an earlier star is still there after unstarring (even if renamed since): link it again
+    // instead of adding a second item with the same id.
+    const twin = items.find((i) => !i.sharedId && (i.id === copy.id || normalizeText(i.name) === name));
     if (twin) return { ...trip, [key]: items.map((i) => (i === twin ? { ...i, sharedId: starred.sharedId } : i)) };
-    return { ...trip, [key]: [...items, copyToTrip(starred, trip.id)] };
+    return { ...trip, [key]: [...items, copy] };
   });
 }
 

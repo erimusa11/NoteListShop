@@ -4,11 +4,18 @@ import { Keyframe, ReduceMotion } from 'react-native-reanimated';
 // 0.25 plays them at a quarter of it, so nothing waits on an animation. Raise it to bring them back.
 export const DURATION_SCALE = 0.25;
 
+// `ms` and `spring` are worklets because animation callbacks (the swipe's armed rattle, the check stamp's thud)
+// call them on the UI thread, where a plain function throws and takes the app down.
+
 /** A duration or delay in milliseconds, shortened by the dial. */
-export const ms = (value: number) => Math.round(value * DURATION_SCALE);
+export function ms(value: number) {
+  'worklet';
+  return Math.round(value * DURATION_SCALE);
+}
 
 /** A spring with the same shape (overshoot, bounce) that plays `DURATION_SCALE` times as long. */
 export function spring(config: { damping: number; stiffness: number; mass?: number }) {
+  'worklet';
   return {
     ...config,
     damping: config.damping / DURATION_SCALE,

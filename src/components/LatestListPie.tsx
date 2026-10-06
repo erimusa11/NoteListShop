@@ -16,7 +16,7 @@ const TWO_COLUMNS_FROM = 4;
 
 export function LatestListPie({ listName, sections, income }: LatestListPieProps) {
   const total = sections.reduce((sum, s) => sum + s.spent, 0);
-  // Only the categories with spending, so ten categories do not make this card a long list of zeros.
+  // Only the categories with spending, so all the categories do not make this card a long list of zeros.
   const spent = sections.filter((s) => s.spent > 0);
   const twoColumns = spent.length >= TWO_COLUMNS_FROM;
 

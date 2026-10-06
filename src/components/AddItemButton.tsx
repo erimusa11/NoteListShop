@@ -16,6 +16,12 @@ interface AddItemButtonProps {
   title?: string;
   suggestions?: Suggestion[];
   namePlaceholder?: string;
+  /** Choose the name from these (a select) instead of typing it, e.g. the kind of fuel. */
+  nameOptions?: string[];
+  /** Heading above the choices (default "Lloji"). */
+  optionsLabel?: string;
+  /** One more choice after `nameOptions` with this label; picking it shows a field to type any name. */
+  otherOption?: string;
   priceLabel?: string;
   submitLabel?: string;
   requirePrice?: boolean;
@@ -27,6 +33,9 @@ export function AddItemButton({
   title = 'Shto artikull',
   suggestions = [],
   namePlaceholder = 'P.sh. Qumësht, Bukë…',
+  nameOptions,
+  optionsLabel = 'Lloji',
+  otherOption,
   priceLabel = 'Çmimi (opsionale)',
   submitLabel = 'Shto në listë',
   requirePrice = false,
@@ -37,10 +46,13 @@ export function AddItemButton({
   const [quantity, setQuantity] = useState(DEFAULT_QUANTITY);
   const [price, setPrice] = useState('');
   const [priority, setPriority] = useState(1);
+  // The "other" choice is picked: `name` is then whatever is typed instead of one of `nameOptions`.
+  const [other, setOther] = useState(false);
 
   const close = () => {
     setVisible(false);
     setName('');
+    setOther(false);
     setQuantity(DEFAULT_QUANTITY);
     setPrice('');
     setPriority(1);
@@ -74,18 +86,60 @@ export function AddItemButton({
       </Pressable>
 
       <BottomSheet visible={visible} onClose={close} title={title}>
-        <Text style={styles.label}>Emri</Text>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder={namePlaceholder}
-          placeholderTextColor={colors.textMuted}
-          style={styles.input}
-          autoFocus
-          returnKeyType="next"
-        />
+        {nameOptions ? (
+          <>
+            <Text style={styles.label}>{optionsLabel}</Text>
+            <View style={styles.options} accessibilityRole="radiogroup">
+              {[...nameOptions, ...(otherOption ? [otherOption] : [])].map((option) => {
+                const isOther = option === otherOption;
+                const selected = isOther ? other : !other && name === option;
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => {
+                      setOther(isOther);
+                      setName(isOther ? '' : option);
+                    }}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected }}
+                    style={[styles.option, selected && styles.optionSelected]}
+                  >
+                    <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{option}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {other && (
+              <>
+                <Text style={[styles.label, styles.otherLabel]}>Emri</Text>
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  placeholder={namePlaceholder}
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.input}
+                  autoFocus
+                  returnKeyType="next"
+                />
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <Text style={styles.label}>Emri</Text>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder={namePlaceholder}
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+              autoFocus
+              returnKeyType="next"
+            />
+          </>
+        )}
 
-        {shown.length > 0 && (
+        {!nameOptions && shown.length > 0 && (
           <View style={styles.suggestions}>
             <Text style={styles.suggestionsLabel}>{name.trim() ? 'Sugjerime' : 'Më të përdorurat'}</Text>
             <View style={styles.chips}>
@@ -188,6 +242,22 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
   },
+  // Wraps onto a second row when there are more choices than fit side by side (e.g. four names and "Tjetër").
+  options: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  otherLabel: { marginTop: spacing.sm },
+  option: {
+    flexGrow: 1,
+    flexBasis: '28%',
+    alignItems: 'center',
+    paddingVertical: spacing.sm + 2,
+    borderRadius: radii.pill,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  optionSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  optionText: { fontSize: 15, fontWeight: '600', color: colors.textMuted },
+  optionTextSelected: { color: colors.primaryDark, fontWeight: '700' },
   suggestions: { gap: 6 },
   suggestionsLabel: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },

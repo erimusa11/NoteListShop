@@ -323,7 +323,7 @@ export function ItemRow({ item, onToggle, onUpdate, onRemove, onToggleStar, show
             {showQuantity && (
               <View style={styles.quantityRow}>
                 <InlineEditableField
-                  value={item.quantity.trim() || DEFAULT_QUANTITY}
+                  value={String(item.quantity ?? '').trim() || DEFAULT_QUANTITY}
                   placeholder="Sasia"
                   prefix="Sasia: "
                   keyboardType="numeric"

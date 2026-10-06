@@ -26,10 +26,12 @@ export type ItemListKey =
   | 'wishlist'
   | 'clothes'
   | 'fuel'
+  | 'refuel'
   | 'online'
   | 'outings'
   | 'kitchen'
-  | 'playstation';
+  | 'playstation'
+  | 'health';
 
 // Besides `items` (Produktet), a list may not have every category yet (lists saved before it was added).
 // The categories and their names are in utils/categories.ts.

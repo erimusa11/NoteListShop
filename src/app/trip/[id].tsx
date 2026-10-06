@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AddItemButton } from '@/components/AddItemButton';
 import { BillsSummaryBar } from '@/components/BillsSummaryBar';
+import { OptionTotalsBar } from '@/components/OptionTotalsBar';
 import { OverBudgetCard } from '@/components/OverBudgetCard';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { InlineEditableField } from '@/components/InlineEditableField';
@@ -19,16 +20,17 @@ import { colors, spacing } from '@/theme/theme';
 import type { ItemListKey, ShoppingItem } from '@/types/models';
 import { CATEGORIES, type Category, INCOME_COLOR } from '@/utils/categories';
 import { goBackOrHome } from '@/utils/navigation';
+import { buildOptionTotals, itemOption, itemsForOption } from '@/utils/options';
 import { buildListSuggestions, buildSuggestions } from '@/utils/suggestions';
-import { computeSpentTotal, computeTotal, tripAllItems } from '@/utils/totals';
+import { categoriesByOpenItems, computeSpentTotal, computeTotal, tripAllItems } from '@/utils/totals';
 
 // 'income' or the `section` of a category.
 type Section = string;
 
 const NO_ITEMS: ShoppingItem[] = [];
 
-const FIRST_SECTION: Section = CATEGORIES[0].section;
-const PREPARE_ORDER: Section[] = [...CATEGORIES.slice(1).map((category) => category.section), 'income'];
+// Produktet is the tab that carries the income / spent bar, wherever it stands in the strip.
+const PRODUCTS_SECTION: Section = CATEGORIES[0].section;
 const PREPARE_AFTER_MS = 600;
 const PREPARE_STEP_MS = 400;
 // A tab prepared in the background draws this many rows until it is opened (0: just its frame). Every row kept alive
@@ -60,9 +62,12 @@ interface CategoryPaneProps {
   incomeTotal: number;
   overBy: number;
   onPressIncome: () => void;
+  /** The group of a category with choices (e.g. "Drioni") the list is narrowed to, or null for everything. */
+  optionFilter: string | null;
+  onOptionFilter: (section: Section, group: string | null) => void;
 }
 
-// One tab. It is redrawn only when its own data changes, so opening another tab does not touch the other ten.
+// One tab. It is redrawn only when its own data changes, so opening another tab does not touch the others.
 const CategoryPane = memo(function CategoryPane({
   category,
   active,
@@ -74,20 +79,35 @@ const CategoryPane = memo(function CategoryPane({
   incomeTotal,
   overBy,
   onPressIncome,
+  optionFilter,
+  onOptionFilter,
 }: CategoryPaneProps) {
+  const optionTotals = useMemo(() => buildOptionTotals(items, category), [items, category]);
+  const shownItems = useMemo(
+    () => (optionFilter ? itemsForOption(items, category, optionFilter) : items),
+    [items, category, optionFilter],
+  );
+
   return (
     <Pane active={active}>
-      {category.section === FIRST_SECTION ? (
+      {category.section === PRODUCTS_SECTION ? (
         <TotalsBar incomeTotal={incomeTotal} spentTotal={spent} onPressIncome={onPressIncome} />
       ) : (
         <BillsSummaryBar totalAmount={total} paidAmount={spent} totalLabel={category.totalLabel} />
+      )}
+      {optionTotals.length > 0 && (
+        <OptionTotalsBar
+          options={optionTotals}
+          selected={optionFilter}
+          onSelect={(group) => onOptionFilter(category.section, group)}
+        />
       )}
       {overBy > 0 && <OverBudgetCard amount={overBy} />}
       <ItemList
         tripId={tripId}
         list={category.key}
-        items={items}
-        emptyText={category.emptyText}
+        items={shownItems}
+        emptyText={optionFilter ? `Nuk ka asnjë shpenzim për ${optionFilter}.` : category.emptyText}
         showQuantity={category.showQuantity}
         limit={preview ? PREVIEW_ROWS : undefined}
       />
@@ -104,11 +124,17 @@ export default function TripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { trips, addItem, addIncome, updateIncome, removeIncome, renameTrip, deleteTrip } = useTrips();
   const trip = trips.find((t) => t.id === id);
-  const [section, setSection] = useState<Section>(FIRST_SECTION);
+  // The category tabs are sorted by the number on them (most items left to buy first, empty ones last) when the list is
+  // opened and then kept as they are, so no tab jumps around while you add or check off items; the next time the list
+  // is opened they are sorted again.
+  const [categoryOrder] = useState(() => categoriesByOpenItems(trip));
+  // The list opens on the first of them, so the strip starts at the left, right after Të ardhurat.
+  const firstSection = categoryOrder[0].section;
+  const [section, setSection] = useState<Section>(firstSection);
   // A tab is built the first time it is opened and then kept, so going back to it is instant.
-  const [mounted, setMounted] = useState<Section[]>([FIRST_SECTION]);
+  const [mounted, setMounted] = useState<Section[]>([firstSection]);
   // The tabs that were really opened; they keep all their rows.
-  const [opened, setOpened] = useState<Section[]>([FIRST_SECTION]);
+  const [opened, setOpened] = useState<Section[]>([firstSection]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [gridOpen, setGridOpen] = useState(false);
 
@@ -119,16 +145,25 @@ export default function TripDetailScreen() {
   }, []);
   const openIncome = useCallback(() => selectSection('income'), [selectSection]);
 
+  // Per tab: the group (Drioni, Naftë…) its list is narrowed to. Kept here so adding an item can undo it.
+  const [optionFilters, setOptionFilters] = useState<Record<Section, string | null>>({});
+  const setOptionFilter = useCallback(
+    (target: Section, group: string | null) => setOptionFilters((prev) => ({ ...prev, [target]: group })),
+    [],
+  );
+
   // Build the other tabs one by one shortly after the list opens, so they are already there when tapped.
   useEffect(() => {
-    const timers = PREPARE_ORDER.map((next, i) =>
+    // In the order of the strip, so the tabs closest to the open one are ready first.
+    const prepareOrder: Section[] = [...categoryOrder.slice(1).map((category) => category.section), 'income'];
+    const timers = prepareOrder.map((next, i) =>
       setTimeout(
         () => setMounted((prev) => (prev.includes(next) ? prev : [...prev, next])),
         PREPARE_AFTER_MS + i * PREPARE_STEP_MS,
       ),
     );
     return () => timers.forEach(clearTimeout);
-  }, []);
+  }, [categoryOrder]);
 
   const incomes = trip?.incomes ?? [];
   const incomeTotal = incomes.reduce((sum, income) => sum + income.amount, 0);
@@ -170,7 +205,7 @@ export default function TripDetailScreen() {
   const tagOptions = useMemo<TagOption<Section>[]>(
     () => [
       { value: 'income', label: 'Të ardhurat', icon: 'cash-outline', activeIcon: 'cash', accent: INCOME_COLOR, remaining: 0, total: 0 },
-      ...CATEGORIES.map((category) => ({
+      ...categoryOrder.map((category) => ({
         value: category.section,
         label: category.label,
         tabLabel: category.tabLabel,
@@ -180,7 +215,7 @@ export default function TripDetailScreen() {
         ...count(trip?.[category.key] ?? NO_ITEMS),
       })),
     ],
-    [trip],
+    [categoryOrder, trip],
   );
 
   const deleteDetails = trip
@@ -312,6 +347,8 @@ export default function TripDetailScreen() {
                       incomeTotal={incomeTotal}
                       overBy={overBy}
                       onPressIncome={openIncome}
+                      optionFilter={optionFilters[category.section] ?? null}
+                      onOptionFilter={setOptionFilter}
                     />
                   ),
               )}
@@ -333,12 +370,18 @@ export default function TripDetailScreen() {
               {activeCategory && (
                 <AddItemButton
                   key={activeCategory.section}
-                  onAdd={(name, quantity, price, priority) =>
-                    addItem(trip.id, activeCategory.key, name, activeCategory.showQuantity ? quantity : '', price, priority)
-                  }
+                  onAdd={(name, quantity, price, priority) => {
+                    addItem(trip.id, activeCategory.key, name, activeCategory.showQuantity ? quantity : '', price, priority);
+                    // An item added outside the group the list is narrowed to would be hidden, so show everything again.
+                    const group = optionFilters[activeCategory.section];
+                    if (group && itemOption(activeCategory, name) !== group) setOptionFilter(activeCategory.section, null);
+                  }}
                   showQuantity={activeCategory.showQuantity}
                   title={activeCategory.addTitle}
                   namePlaceholder={activeCategory.namePlaceholder}
+                  nameOptions={activeCategory.nameOptions}
+                  optionsLabel={activeCategory.optionsLabel}
+                  otherOption={activeCategory.otherOption}
                   suggestions={suggestions}
                 />
               )}
