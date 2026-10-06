@@ -138,7 +138,7 @@ function TotalsCard({ histories }: { histories: CategoryHistory[] }) {
         {histories.map(({ category, total }) => (
           <View key={category.section} style={styles.totalRow}>
             <View style={[styles.dot, { backgroundColor: category.color }]} />
-            <Text style={[styles.totalName, total === 0 && styles.muted]} numberOfLines={1}>
+            <Text style={[styles.totalName, total === 0 && styles.muted]} numberOfLines={2}>
               {category.label}
             </Text>
             <Text style={[styles.totalPercent, total === 0 && styles.muted]}>

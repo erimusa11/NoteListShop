@@ -33,7 +33,8 @@ export type ItemListKey =
   | 'outings'
   | 'kitchen'
   | 'playstation'
-  | 'health';
+  | 'health'
+  | 'bathroom';
 
 // Besides `items` (Produktet), a list may not have every category yet (lists saved before it was added).
 // The categories and their names are in utils/categories.ts.

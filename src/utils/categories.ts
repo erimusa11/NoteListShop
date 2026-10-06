@@ -210,6 +210,21 @@ export const CATEGORIES: Category[] = [
     namePlaceholder: 'P.sh. Tenxhere, Pjata…',
     emptyText: 'Nuk ka ende asnjë artikull.',
   },
+  {
+    key: 'bathroom',
+    section: 'bathroom',
+    label: 'Banjo & Produkte Pastrimi',
+    // Shorter than the name so it fits on two lines in the narrow tab.
+    tabLabel: 'Banjo &\nPastrimi',
+    icon: 'water-outline',
+    activeIcon: 'water',
+    color: '#A23FB3',
+    showQuantity: false,
+    totalLabel: 'Gjithsej banjo & produkte pastrimi',
+    addTitle: 'Shto artikull',
+    namePlaceholder: 'P.sh. Shampo, Sapun, Pastrues…',
+    emptyText: 'Nuk ka ende asnjë artikull.',
+  },
 ];
 
 export const INCOME_COLOR = '#7C5CBF';
