@@ -30,6 +30,8 @@ export interface Category {
    * in the totals, the filter and the report; without it, a name that is not a choice is grouped under "Të tjera".
    */
   otherOption?: string;
+  /** With `nameOptions`: also ask for a short optional text (what it was for), shown under the name in the list. */
+  showNote?: boolean;
   /** Title of the report that splits this category's spending by `nameOptions`. */
   optionsReportTitle?: string;
   emptyText: string;
@@ -117,6 +119,7 @@ export const CATEGORIES: Category[] = [
     nameOptions: ['Kia Morning', 'Hyundai Tucson'],
     optionsLabel: 'Për cilën makinë',
     otherOption: 'Tjetër',
+    showNote: true,
     optionsReportTitle: 'Shpenzimet sipas makinës',
     emptyText: 'Nuk ka ende asnjë shpenzim.',
   },

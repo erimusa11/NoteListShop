@@ -370,8 +370,16 @@ export default function TripDetailScreen() {
               {activeCategory && (
                 <AddItemButton
                   key={activeCategory.section}
-                  onAdd={(name, quantity, price, priority) => {
-                    addItem(trip.id, activeCategory.key, name, activeCategory.showQuantity ? quantity : '', price, priority);
+                  onAdd={(name, quantity, price, priority, note) => {
+                    addItem(
+                      trip.id,
+                      activeCategory.key,
+                      name,
+                      activeCategory.showQuantity ? quantity : '',
+                      price,
+                      priority,
+                      note,
+                    );
                     // An item added outside the group the list is narrowed to would be hidden, so show everything again.
                     const group = optionFilters[activeCategory.section];
                     if (group && itemOption(activeCategory, name) !== group) setOptionFilter(activeCategory.section, null);
@@ -382,6 +390,7 @@ export default function TripDetailScreen() {
                   nameOptions={activeCategory.nameOptions}
                   optionsLabel={activeCategory.optionsLabel}
                   otherOption={activeCategory.otherOption}
+                  showNote={activeCategory.showNote}
                   suggestions={suggestions}
                 />
               )}

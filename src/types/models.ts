@@ -9,6 +9,8 @@ export interface ShoppingItem {
   priority?: number;
   /** Set when the item is starred. Its copies in other lists carry the same id and follow its name. */
   sharedId?: string;
+  /** What it was for (e.g. "Servis"), in a category that asks for it; shown under the name. */
+  note?: string;
 }
 
 export interface IncomeEntry {

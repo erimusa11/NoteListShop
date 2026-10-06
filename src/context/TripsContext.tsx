@@ -32,7 +32,15 @@ function mapItems(
 }
 
 interface TripActions {
-  addItem: (tripId: string, list: ItemListKey, name: string, quantity: string, price: number | null, priority?: number) => void;
+  addItem: (
+    tripId: string,
+    list: ItemListKey,
+    name: string,
+    quantity: string,
+    price: number | null,
+    priority?: number,
+    note?: string,
+  ) => void;
   toggleItem: (tripId: string, list: ItemListKey, itemId: string) => void;
   updateItem: (tripId: string, list: ItemListKey, itemId: string, patch: Partial<ShoppingItem>) => void;
   removeItem: (tripId: string, list: ItemListKey, itemId: string) => void;
@@ -69,11 +77,20 @@ export function TripsProvider({ children }: { children: ReactNode }) {
 
   const itemActions = useMemo<TripActions>(
     () => ({
-      addItem: (tripId, list, name, quantity, price, priority = 1) =>
+      addItem: (tripId, list, name, quantity, price, priority = 1, note) =>
         setTrips((prev) =>
           mapItems(prev, tripId, list, (items) => [
             ...items,
-            { id: String(Date.now()), name, quantity, price, bought: false, createdAt: Date.now(), priority },
+            {
+              id: String(Date.now()),
+              name,
+              quantity,
+              price,
+              bought: false,
+              createdAt: Date.now(),
+              priority,
+              ...(note ? { note } : {}),
+            },
           ]),
         ),
       toggleItem: (tripId, list, itemId) =>

@@ -10,7 +10,7 @@ import { pickSuggestions, type Suggestion } from '@/utils/suggestions';
 import { formatNumber } from '@/utils/totals';
 
 interface AddItemButtonProps {
-  onAdd: (name: string, quantity: string, price: number | null, priority: number) => void;
+  onAdd: (name: string, quantity: string, price: number | null, priority: number, note?: string) => void;
   showPriority?: boolean;
   showQuantity?: boolean;
   title?: string;
@@ -22,6 +22,8 @@ interface AddItemButtonProps {
   optionsLabel?: string;
   /** One more choice after `nameOptions` with this label; picking it shows a field to type any name. */
   otherOption?: string;
+  /** Under the choices, ask for a short optional text (what it was for). Not asked for the "other" choice, whose typed name is that text. */
+  showNote?: boolean;
   priceLabel?: string;
   submitLabel?: string;
   requirePrice?: boolean;
@@ -36,6 +38,7 @@ export function AddItemButton({
   nameOptions,
   optionsLabel = 'Lloji',
   otherOption,
+  showNote = false,
   priceLabel = 'Çmimi (opsionale)',
   submitLabel = 'Shto në listë',
   requirePrice = false,
@@ -48,11 +51,13 @@ export function AddItemButton({
   const [priority, setPriority] = useState(1);
   // The "other" choice is picked: `name` is then whatever is typed instead of one of `nameOptions`.
   const [other, setOther] = useState(false);
+  const [note, setNote] = useState('');
 
   const close = () => {
     setVisible(false);
     setName('');
     setOther(false);
+    setNote('');
     setQuantity(DEFAULT_QUANTITY);
     setPrice('');
     setPriority(1);
@@ -75,6 +80,7 @@ export function AddItemButton({
       showQuantity ? normalizeQuantity(quantity) : '',
       Number.isFinite(parsedPrice) ? parsedPrice : null,
       priority,
+      showNote && !other ? note.trim() || undefined : undefined,
     );
     close();
   };
@@ -119,6 +125,19 @@ export function AddItemButton({
                   placeholderTextColor={colors.textMuted}
                   style={styles.input}
                   autoFocus
+                  returnKeyType="next"
+                />
+              </>
+            )}
+            {showNote && !other && (
+              <>
+                <Text style={[styles.label, styles.otherLabel]}>Përshkrimi (opsionale)</Text>
+                <TextInput
+                  value={note}
+                  onChangeText={setNote}
+                  placeholder={namePlaceholder}
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.input}
                   returnKeyType="next"
                 />
               </>

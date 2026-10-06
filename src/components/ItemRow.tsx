@@ -320,6 +320,14 @@ export function ItemRow({ item, onToggle, onUpdate, onRemove, onToggleStar, show
               />
               <Animated.View style={[styles.strike, strikeStyle]} pointerEvents="none" />
             </View>
+            {item.note ? (
+              <InlineEditableField
+                value={item.note}
+                placeholder="Përshkrimi"
+                onChange={(note) => onUpdate({ note: note.trim() })}
+                textStyle={styles.note}
+              />
+            ) : null}
             {showQuantity && (
               <View style={styles.quantityRow}>
                 <InlineEditableField
@@ -479,6 +487,7 @@ const styles = StyleSheet.create({
   name: { fontSize: 16, fontWeight: '600', color: colors.text },
   nameBought: { color: colors.textMuted },
   quantity: { fontSize: 13, color: colors.textMuted },
+  note: { fontSize: 13, color: colors.textMuted },
   quantityRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
   lineTotal: { fontSize: 13, fontWeight: '700', color: colors.primaryDark },
   priorityTag: {
