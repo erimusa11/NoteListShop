@@ -113,6 +113,11 @@ export const CATEGORIES: Category[] = [
     totalLabel: 'Gjithsej makina & shërbime',
     addTitle: 'Shto shpenzim',
     namePlaceholder: 'P.sh. Servis, Sigurim, Taksa…',
+    // Entries saved before the choice existed have free-text names (Servis, Sigurim…); they fall under "Tjetër".
+    nameOptions: ['Kia Morning', 'Hyundai Tucson'],
+    optionsLabel: 'Për cilën makinë',
+    otherOption: 'Tjetër',
+    optionsReportTitle: 'Shpenzimet sipas makinës',
     emptyText: 'Nuk ka ende asnjë shpenzim.',
   },
   {

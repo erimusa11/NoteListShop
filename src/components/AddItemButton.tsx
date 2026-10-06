@@ -242,13 +242,15 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
   },
-  // Wraps onto a second row when there are more choices than fit side by side (e.g. four names and "Tjetër").
+  // Each choice is as wide as its name, and the row wraps (the rest of each row is shared out) when they do not all fit,
+  // so a long name such as "Hyundai Tucson" stays on one line.
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   otherLabel: { marginTop: spacing.sm },
   option: {
     flexGrow: 1,
-    flexBasis: '28%',
+    flexBasis: 'auto',
     alignItems: 'center',
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     borderRadius: radii.pill,
     borderWidth: 1.5,
@@ -256,7 +258,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   optionSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  optionText: { fontSize: 15, fontWeight: '600', color: colors.textMuted },
+  optionText: { fontSize: 15, fontWeight: '600', color: colors.textMuted, textAlign: 'center' },
   optionTextSelected: { color: colors.primaryDark, fontWeight: '700' },
   suggestions: { gap: 6 },
   suggestionsLabel: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
