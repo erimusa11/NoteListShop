@@ -1,5 +1,6 @@
-import type { ShoppingItem, ShoppingTrip } from '@/types/models';
-import { computeSpentTotal, computeTotal, tripIncomeTotal } from '@/utils/totals';
+import type { ShoppingTrip } from '@/types/models';
+import { CATEGORIES, INCOME_COLOR, type Category } from '@/utils/categories';
+import { computeSpentTotal, computeTotal, tripAllItems, tripIncomeTotal } from '@/utils/totals';
 
 export interface ListSpend {
   id: string;
@@ -18,61 +19,69 @@ export interface SectionSpend {
   planned: number;
 }
 
-export interface TopItem {
+export interface HistoryColumn {
   id: string;
   name: string;
-  listName: string;
-  price: number;
+  createdAt: number;
+  spent: number;
+}
+
+export interface CategoryHistory {
+  category: Category;
+  /** One column per list, oldest first. */
+  columns: HistoryColumn[];
+  total: number;
 }
 
 export const CATEGORY_COLORS: Record<string, string> = {
-  income: '#7C5CBF',
-  products: '#E06A00',
-  supplies: '#1F9E89',
-  bills: '#3B6FD4',
-  wishlist: '#C93D7A',
+  income: INCOME_COLOR,
+  ...Object.fromEntries(CATEGORIES.map(({ section, color }) => [section, color])),
 };
 
+// Short enough for a narrow chart column: 850, 1.2k, 13k, 1.2M.
 export function formatCompact(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (value >= 10_000) return `${Math.round(value / 1000)}k`;
   if (value >= 1000) return `${(value / 1000).toFixed(1).replace(/\.0$/, '')}k`;
   return String(Math.round(value));
 }
 
 export function buildListSpend(trips: ShoppingTrip[]): ListSpend[] {
-  return trips.map((trip) => ({
-    id: trip.id,
-    name: trip.name,
-    spent: computeSpentTotal(trip.items),
-    planned: computeTotal(trip.items),
-    budget: tripIncomeTotal(trip) > 0 ? tripIncomeTotal(trip) : null,
-    boughtCount: trip.items.filter((item) => item.bought).length,
-    itemCount: trip.items.length,
-  }));
+  return trips.map((trip) => {
+    const items = tripAllItems(trip);
+    return {
+      id: trip.id,
+      name: trip.name,
+      spent: computeSpentTotal(items),
+      planned: computeTotal(items),
+      budget: tripIncomeTotal(trip) > 0 ? tripIncomeTotal(trip) : null,
+      boughtCount: items.filter((item) => item.bought).length,
+      itemCount: items.length,
+    };
+  });
 }
 
-export function buildSectionSpend(
-  trips: ShoppingTrip[],
-  supplies: ShoppingItem[],
-  bills: ShoppingItem[],
-  wishlist: ShoppingItem[],
-): SectionSpend[] {
-  const products = trips.flatMap((trip) => trip.items);
-  return [
-    { key: 'products', label: 'Produktet', spent: computeSpentTotal(products), planned: computeTotal(products) },
-    { key: 'supplies', label: 'Detergjente & Extra', spent: computeSpentTotal(supplies), planned: computeTotal(supplies) },
-    { key: 'bills', label: 'Faturat', spent: computeSpentTotal(bills), planned: computeTotal(bills) },
-    { key: 'wishlist', label: 'Dëshirat', spent: computeSpentTotal(wishlist), planned: computeTotal(wishlist) },
-  ].sort((a, b) => b.spent - a.spent);
+export function buildSectionSpend(trips: ShoppingTrip[]): SectionSpend[] {
+  return CATEGORIES.map(({ section, label, key: list }) => {
+    const items = trips.flatMap((trip) => trip[list] ?? []);
+    return { key: section, label, spent: computeSpentTotal(items), planned: computeTotal(items) };
+  }).sort((a, b) => b.spent - a.spent);
 }
 
-export function buildTopItems(trips: ShoppingTrip[], limit: number): TopItem[] {
-  return trips
-    .flatMap((trip) =>
-      trip.items
-        .filter((item) => item.bought && item.price != null && item.price > 0)
-        .map((item) => ({ id: `${trip.id}:${item.id}`, name: item.name, listName: trip.name, price: item.price as number })),
-    )
-    .sort((a, b) => b.price - a.price)
-    .slice(0, limit);
+export const HISTORY_LISTS = 12;
+
+// For every category, what was spent in each of the last `limit` lists (same lists in every category).
+// Categories with spending come first, in the usual order; the empty ones follow.
+export function buildCategoryHistory(trips: ShoppingTrip[], limit: number = HISTORY_LISTS): CategoryHistory[] {
+  const recent = [...trips].sort((a, b) => a.createdAt - b.createdAt).slice(-limit);
+  const histories = CATEGORIES.map((category) => {
+    const columns = recent.map((trip) => ({
+      id: trip.id,
+      name: trip.name,
+      createdAt: trip.createdAt,
+      spent: computeSpentTotal(trip[category.key] ?? []),
+    }));
+    return { category, columns, total: columns.reduce((sum, column) => sum + column.spent, 0) };
+  });
+  return [...histories.filter((h) => h.total > 0), ...histories.filter((h) => h.total === 0)];
 }

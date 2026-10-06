@@ -5,15 +5,16 @@ The interface is in Albanian and prices are in Lekë.
 
 ## Features
 
-- **Lists** — create and name multiple lists (e.g. one per month), search them by name, see when each was created
+- **Lists** — create and name multiple lists (e.g. one per month), search them by name, see when each was created. The lists screen shows 5 at a time, with a button to load 5 more
 - **Të ardhurat (Income)** — add income entries (name + amount) per list; the total is what the list is measured against
-- **Produktet** — items with quantity and price, checked off as you buy them
-- **Detergjente & Extra**, **Faturat** (bills) and **Dëshirat** (wishlist) — shared across all lists; checking one off counts it as spent in the list where you bought it
+- **Produktet** — items with a quantity (a number, 1 by default) and the price of one, checked off as you buy them; the row total is quantity × price and that is what counts in every total and report
+- **More categories** — **Detergjente & Extra**, **Faturat** (bills), **Dëshirat** (wishlist), **Veshje & Rroba**, **Karburant & Makina**, **Blerje online**, **Shetitje**, **Guzhina & Enë Guzhine** and **Playstation & Abonime**. They all work like products (without a quantity): every list has its own copy, so checking one off counts as spent in that list only. The tabs scroll sideways, and the grid button at the top opens all of them at once. New categories are added in `src/utils/categories.ts`
+- **Star an item** (★) to make it recurring — it appears in every other list and in every new list, unchecked and at priority 1. Its name is the same everywhere, but the price, quantity, priority and checked state belong to each list. Tap the star again to stop sharing it (each list keeps its own copy). Items without a star only exist in the list they were added to.
 - **Priority levels 1–5** (Normale → Urgjente) on every item type except income; unchecked items are sorted by urgency, checked items go to the bottom
 - **Spending vs. income** — totals bar on every tab, plus a red card showing how much you exceeded your income
 - **Add suggestions** — the most-used items appear as one-tap chips while adding
-- **Reports** — column, donut and pie charts (spend per list, per category, latest list) and a mini chart of the last 12 lists
-- **Swipe to delete** items, with a confirmation popup before deleting a whole list
+- **Reports** — one column chart per category showing what was spent in each of the last 12 lists (tap a column to open that list), then a card with the total of each category and all of them together over those 12 lists, ending with a pie chart of the split. The charts are drawn as you scroll, so the tab opens fast. The lists screen has a mini chart of the last 12 lists and a pie of the latest list by category
+- **Swipe to delete** items — a long pull to the left, then a confirmation popup; it removes the item from that list only. Deleting a whole list also asks first
 - **Accounts** — sign in with Google (web), then set a password; afterwards sign in with either. All data is saved per account in Firestore
 - **App lock** (phone) — fingerprint, PIN or pattern when opening the app
 - **Works offline** — a copy is kept on the phone, and changes are sent to the account when the connection returns

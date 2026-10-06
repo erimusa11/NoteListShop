@@ -5,12 +5,10 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/context/AuthContext';
-import { useBills } from '@/context/BillsContext';
-import { useSupplies } from '@/context/SuppliesContext';
 import { useTrips } from '@/context/TripsContext';
-import { useWishlist } from '@/context/WishlistContext';
 import { db } from '@/lib/firebase';
 import { colors, radii, spacing } from '@/theme/theme';
+import { upgradeLegacyTrips, type StoredData } from '@/utils/tripLists';
 
 const SAVE_DELAY_MS = 700;
 const OFFLINE_LOAD_TIMEOUT_MS = 6000;
@@ -57,9 +55,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 export function CloudSyncGate({ children }: { children: ReactNode }) {
   const { user, hasPassword, loading, demoMode, signOut } = useAuth();
   const { trips, hydrate: hydrateTrips } = useTrips();
-  const { bills, hydrate: hydrateBills } = useBills();
-  const { supplies, hydrate: hydrateSupplies } = useSupplies();
-  const { wishlist, hydrate: hydrateWishlist } = useWishlist();
 
   const uid = user && hasPassword && db ? user.uid : null;
   const [loadedUid, setLoadedUid] = useState<string | null>(null);
@@ -73,9 +68,9 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
   const latestJson = useRef('');
   const previousUid = useRef<string | null>(null);
 
-  const hydrators = useRef({ hydrateTrips, hydrateBills, hydrateSupplies, hydrateWishlist });
+  const hydrators = useRef({ hydrateTrips });
   useEffect(() => {
-    hydrators.current = { hydrateTrips, hydrateBills, hydrateSupplies, hydrateWishlist };
+    hydrators.current = { hydrateTrips };
   });
 
   // Demo data lives only in memory (uid stays null, so nothing syncs); drop it when leaving demo mode.
@@ -88,9 +83,6 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
     if (!wasDemo.current) return;
     wasDemo.current = false;
     hydrators.current.hydrateTrips([]);
-    hydrators.current.hydrateBills([]);
-    hydrators.current.hydrateSupplies([]);
-    hydrators.current.hydrateWishlist([]);
   }, [demoMode]);
 
   useEffect(() => {
@@ -102,9 +94,6 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
           if (copy && !copy.dirty) AsyncStorage.removeItem(cacheKey(leaving)).catch(() => {});
         });
         hydrators.current.hydrateTrips([]);
-        hydrators.current.hydrateBills([]);
-        hydrators.current.hydrateSupplies([]);
-        hydrators.current.hydrateWishlist([]);
         lastSaved.current = '';
       }
       previousUid.current = null;
@@ -157,10 +146,7 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
 
       latestJson.current = JSON.stringify(data);
       if (!copy?.dirty) writeCopy(uid, { data, dirty: false });
-      hydrators.current.hydrateTrips(data.trips as never[]);
-      hydrators.current.hydrateBills(data.bills as never[]);
-      hydrators.current.hydrateSupplies(data.supplies as never[]);
-      hydrators.current.hydrateWishlist(data.wishlist as never[]);
+      hydrators.current.hydrateTrips(upgradeLegacyTrips(data as StoredData));
       setLoadedUid(uid);
     })();
 
@@ -171,7 +157,8 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!uid || !db || loadedUid !== uid) return;
-    const payload = { trips, bills, supplies, wishlist };
+    // bills, supplies and wishlist now live inside each trip; the empty lists stay because the Firestore rules still require them.
+    const payload = { trips, bills: [], supplies: [], wishlist: [] };
     const json = JSON.stringify(payload);
     latestJson.current = json;
     if (json === lastSaved.current) return;
@@ -194,7 +181,7 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
     }, SAVE_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [uid, loadedUid, trips, bills, supplies, wishlist]);
+  }, [uid, loadedUid, trips]);
 
   useEffect(() => {
     if (!unsynced) return;

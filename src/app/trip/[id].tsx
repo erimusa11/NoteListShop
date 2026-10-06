@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { memo, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { LayoutAnimationConfig } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AddItemButton } from '@/components/AddItemButton';
@@ -11,20 +10,90 @@ import { OverBudgetCard } from '@/components/OverBudgetCard';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { InlineEditableField } from '@/components/InlineEditableField';
 import { IncomeRow } from '@/components/IncomeRow';
-import { ItemRow } from '@/components/ItemRow';
+import { ItemList } from '@/components/ItemList';
+import { TagGridSheet } from '@/components/TagGridSheet';
 import { TagString, type TagOption } from '@/components/TagString';
 import { TotalsBar } from '@/components/TotalsBar';
-import { useBills } from '@/context/BillsContext';
-import { useSupplies } from '@/context/SuppliesContext';
 import { useTrips } from '@/context/TripsContext';
-import { useWishlist } from '@/context/WishlistContext';
 import { colors, spacing } from '@/theme/theme';
+import type { ItemListKey, ShoppingItem } from '@/types/models';
+import { CATEGORIES, type Category, INCOME_COLOR } from '@/utils/categories';
 import { goBackOrHome } from '@/utils/navigation';
-import { buildSuggestions } from '@/utils/suggestions';
-import { CATEGORY_COLORS } from '@/utils/reports';
-import { computeSpentTotal, computeTotal, sortBoughtLast } from '@/utils/totals';
+import { buildListSuggestions, buildSuggestions } from '@/utils/suggestions';
+import { computeSpentTotal, computeTotal, tripAllItems } from '@/utils/totals';
 
-type Section = 'income' | 'products' | 'supplies' | 'bills' | 'wishlist';
+// 'income' or the `section` of a category.
+type Section = string;
+
+const NO_ITEMS: ShoppingItem[] = [];
+
+const FIRST_SECTION: Section = CATEGORIES[0].section;
+const PREPARE_ORDER: Section[] = [...CATEGORIES.slice(1).map((category) => category.section), 'income'];
+const PREPARE_AFTER_MS = 600;
+const PREPARE_STEP_MS = 400;
+// A tab prepared in the background draws this many rows until it is opened (0: just its frame). Every row kept alive
+// has to be torn down when the list is closed, so drawing them all made leaving the screen slow.
+const PREVIEW_ROWS = 0;
+
+// A tab that is not open stays at full size, parked off screen, so its list is already drawn when it is opened.
+function Pane({ active, children }: { active: boolean; children: ReactNode }) {
+  return (
+    <View
+      style={active ? styles.pane : styles.parked}
+      aria-hidden={!active}
+      importantForAccessibility={active ? 'auto' : 'no-hide-descendants'}
+    >
+      {children}
+    </View>
+  );
+}
+
+interface CategoryPaneProps {
+  category: Category;
+  active: boolean;
+  tripId: string;
+  items: ShoppingItem[];
+  /** Prepared in the background and not opened yet: only the first rows are drawn. */
+  preview: boolean;
+  total: number;
+  spent: number;
+  incomeTotal: number;
+  overBy: number;
+  onPressIncome: () => void;
+}
+
+// One tab. It is redrawn only when its own data changes, so opening another tab does not touch the other ten.
+const CategoryPane = memo(function CategoryPane({
+  category,
+  active,
+  tripId,
+  items,
+  preview,
+  total,
+  spent,
+  incomeTotal,
+  overBy,
+  onPressIncome,
+}: CategoryPaneProps) {
+  return (
+    <Pane active={active}>
+      {category.section === FIRST_SECTION ? (
+        <TotalsBar incomeTotal={incomeTotal} spentTotal={spent} onPressIncome={onPressIncome} />
+      ) : (
+        <BillsSummaryBar totalAmount={total} paidAmount={spent} totalLabel={category.totalLabel} />
+      )}
+      {overBy > 0 && <OverBudgetCard amount={overBy} />}
+      <ItemList
+        tripId={tripId}
+        list={category.key}
+        items={items}
+        emptyText={category.emptyText}
+        showQuantity={category.showQuantity}
+        limit={preview ? PREVIEW_ROWS : undefined}
+      />
+    </Pane>
+  );
+});
 
 const count = (list: { bought: boolean }[]) => ({
   total: list.length,
@@ -33,35 +102,33 @@ const count = (list: { bought: boolean }[]) => ({
 
 export default function TripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const {
-    trips,
-    addItem,
-    toggleItem,
-    updateItem,
-    removeItem,
-    addIncome,
-    updateIncome,
-    removeIncome,
-    renameTrip,
-    deleteTrip,
-  } = useTrips();
-  const { bills, addBill, toggleBill, updateBill, removeBill, releaseTrip: releaseBills } = useBills();
-  const { wishlist, addWish, toggleWish, updateWish, removeWish, releaseTrip: releaseWishes } = useWishlist();
-  const { supplies, addSupply, toggleSupply, updateSupply, removeSupply, releaseTrip: releaseSupplies } =
-    useSupplies();
+  const { trips, addItem, addIncome, updateIncome, removeIncome, renameTrip, deleteTrip } = useTrips();
   const trip = trips.find((t) => t.id === id);
-  const [section, setSection] = useState<Section>('products');
+  const [section, setSection] = useState<Section>(FIRST_SECTION);
+  // A tab is built the first time it is opened and then kept, so going back to it is instant.
+  const [mounted, setMounted] = useState<Section[]>([FIRST_SECTION]);
+  // The tabs that were really opened; they keep all their rows.
+  const [opened, setOpened] = useState<Section[]>([FIRST_SECTION]);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [checkedHere, setCheckedHere] = useState<Set<string>>(new Set());
+  const [gridOpen, setGridOpen] = useState(false);
 
+  const selectSection = useCallback((next: Section) => {
+    setSection(next);
+    setMounted((prev) => (prev.includes(next) ? prev : [...prev, next]));
+    setOpened((prev) => (prev.includes(next) ? prev : [...prev, next]));
+  }, []);
+  const openIncome = useCallback(() => selectSection('income'), [selectSection]);
+
+  // Build the other tabs one by one shortly after the list opens, so they are already there when tapped.
   useEffect(() => {
-    setCheckedHere(new Set());
-  }, [id]);
-
-  const onToggleWish = (wishId: string) => {
-    setCheckedHere((prev) => new Set(prev).add(wishId));
-    toggleWish(wishId, trip?.id);
-  };
+    const timers = PREPARE_ORDER.map((next, i) =>
+      setTimeout(
+        () => setMounted((prev) => (prev.includes(next) ? prev : [...prev, next])),
+        PREPARE_AFTER_MS + i * PREPARE_STEP_MS,
+      ),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, []);
 
   const incomes = trip?.incomes ?? [];
   const incomeTotal = incomes.reduce((sum, income) => sum + income.amount, 0);
@@ -82,48 +149,43 @@ export default function TripDetailScreen() {
     [trips],
   );
 
-  const productsSpent = useMemo(() => computeSpentTotal(trip?.items ?? []), [trip]);
-  const billsTotal = useMemo(() => computeTotal(bills), [bills]);
-  const billsPaid = useMemo(() => computeSpentTotal(bills), [bills]);
-  const suppliesTotal = useMemo(() => computeTotal(supplies), [supplies]);
-  const suppliesSpent = useMemo(() => computeSpentTotal(supplies), [supplies]);
-  const wishlistTotal = useMemo(() => computeTotal(wishlist), [wishlist]);
-  const productSuggestions = useMemo(() => buildSuggestions(trips.flatMap((t) => t.items)), [trips]);
-  const supplySuggestions = useMemo(() => buildSuggestions(supplies), [supplies]);
-  const billSuggestions = useMemo(() => buildSuggestions(bills), [bills]);
-  const wishSuggestions = useMemo(() => buildSuggestions(wishlist), [wishlist]);
-  const wishlistSpent = useMemo(() => computeSpentTotal(wishlist), [wishlist]);
-  const visibleWishlist = useMemo(
-    () => wishlist.filter((wish) => !wish.bought || checkedHere.has(wish.id)),
-    [wishlist, checkedHere],
+  const totals = useMemo(
+    () =>
+      Object.fromEntries(CATEGORIES.map(({ key }) => [key, computeTotal(trip?.[key] ?? NO_ITEMS)])) as Record<
+        ItemListKey,
+        number
+      >,
+    [trip],
   );
-  const combinedSpent = productsSpent + suppliesSpent + billsPaid + wishlistSpent;
+  const combinedSpent = useMemo(() => (trip ? computeSpentTotal(tripAllItems(trip)) : 0), [trip]);
   // Only meaningful once some income was added; otherwise every purchase would count as "over".
   const overBy = incomeTotal > 0 ? combinedSpent - incomeTotal : 0;
-  const tripItems = trip?.items;
-  const tagOptions = useMemo<TagOption<Section>[]>(
-    () => [
-      { value: 'income', label: 'Të ardhurat', icon: 'cash-outline', activeIcon: 'cash', accent: CATEGORY_COLORS.income, remaining: 0, total: 0 },
-      { value: 'products', label: 'Produktet', icon: 'basket-outline', activeIcon: 'basket', accent: CATEGORY_COLORS.products, ...count(tripItems ?? []) },
-      { value: 'supplies', label: 'Detergjente & Extra', icon: 'sparkles-outline', activeIcon: 'sparkles', accent: CATEGORY_COLORS.supplies, ...count(supplies) },
-      { value: 'bills', label: 'Faturat', icon: 'receipt-outline', activeIcon: 'receipt', accent: CATEGORY_COLORS.bills, ...count(bills) },
-      { value: 'wishlist', label: 'Dëshirat', icon: 'heart-outline', activeIcon: 'heart', accent: CATEGORY_COLORS.wishlist, ...count(wishlist) },
-    ],
-    [tripItems, supplies, bills, wishlist],
+
+  const activeCategory = CATEGORIES.find((category) => category.section === section);
+  const suggestions = useMemo(
+    () => (activeCategory ? buildListSuggestions(trips, trip, activeCategory.key) : []),
+    [trips, trip, activeCategory],
   );
 
-  const releasedCount = trip
-    ? [...supplies, ...bills, ...wishlist].filter((item) => item.boughtInTripId === trip.id).length
-    : 0;
+  const tagOptions = useMemo<TagOption<Section>[]>(
+    () => [
+      { value: 'income', label: 'Të ardhurat', icon: 'cash-outline', activeIcon: 'cash', accent: INCOME_COLOR, remaining: 0, total: 0 },
+      ...CATEGORIES.map((category) => ({
+        value: category.section,
+        label: category.label,
+        tabLabel: category.tabLabel,
+        icon: category.icon,
+        activeIcon: category.activeIcon,
+        accent: category.color,
+        ...count(trip?.[category.key] ?? NO_ITEMS),
+      })),
+    ],
+    [trip],
+  );
 
   const deleteDetails = trip
     ? [
-        `${trip.items.length} ${trip.items.length === 1 ? 'artikull' : 'artikuj'} në këtë listë do të fshihen.`,
-        ...(releasedCount > 0
-          ? [
-              `${releasedCount} ${releasedCount === 1 ? 'artikull i shënuar' : 'artikuj të shënuar'} si të blerë në Detergjente, Faturat ose Dëshirat do të kthehen si të pablerë.`,
-            ]
-          : []),
+        `${tripAllItems(trip).length} ${tripAllItems(trip).length === 1 ? 'artikull' : 'artikuj'} në këtë listë do të fshihen.`,
         'Ky veprim nuk kthehet mbrapsht.',
       ]
     : [];
@@ -131,9 +193,6 @@ export default function TripDetailScreen() {
   const performDelete = () => {
     if (!trip) return;
     setConfirmOpen(false);
-    releaseSupplies(trip.id);
-    releaseBills(trip.id);
-    releaseWishes(trip.id);
     deleteTrip(trip.id);
     router.replace('/');
   };
@@ -163,15 +222,26 @@ export default function TripDetailScreen() {
             <Text style={styles.title}>Lista</Text>
           )}
           {trip && (
-            <Pressable
-              onPress={() => setConfirmOpen(true)}
-              hitSlop={8}
-              style={styles.headerButton}
-              accessibilityRole="button"
-              accessibilityLabel="Fshi listën"
-            >
-              <Ionicons name="trash-outline" size={20} color={colors.danger} />
-            </Pressable>
+            <>
+              <Pressable
+                onPress={() => setGridOpen(true)}
+                hitSlop={8}
+                style={styles.headerButton}
+                accessibilityRole="button"
+                accessibilityLabel="Të gjitha kategoritë"
+              >
+                <Ionicons name="grid-outline" size={20} color={colors.primaryDark} />
+              </Pressable>
+              <Pressable
+                onPress={() => setConfirmOpen(true)}
+                hitSlop={8}
+                style={styles.headerButton}
+                accessibilityRole="button"
+                accessibilityLabel="Fshi listën"
+              >
+                <Ionicons name="trash-outline" size={20} color={colors.danger} />
+              </Pressable>
+            </>
           )}
         </View>
 
@@ -185,13 +255,24 @@ export default function TripDetailScreen() {
           onCancel={() => setConfirmOpen(false)}
         />
 
+        <TagGridSheet
+          visible={gridOpen}
+          onClose={() => setGridOpen(false)}
+          options={tagOptions}
+          value={section}
+          onSelect={(next) => {
+            setGridOpen(false);
+            selectSection(next);
+          }}
+        />
+
         {trip ? (
           <>
             <View style={styles.content}>
-              <TagString value={section} onChange={setSection} options={tagOptions} />
+              <TagString value={section} onChange={selectSection} options={tagOptions} />
 
-              {section === 'income' && (
-                <>
+              {mounted.includes('income') && (
+                <Pane active={section === 'income'}>
                   <BillsSummaryBar
                     totalAmount={incomeTotal}
                     paidAmount={combinedSpent}
@@ -213,122 +294,26 @@ export default function TripDetailScreen() {
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
                   />
-                </>
+                </Pane>
               )}
 
-              {section === 'products' && (
-                <>
-                  <TotalsBar
-                    incomeTotal={incomeTotal}
-                    spentTotal={combinedSpent}
-                    onPressIncome={() => setSection('income')}
-                  />
-                  {overBy > 0 && <OverBudgetCard amount={overBy} />}
-                  <LayoutAnimationConfig skipEntering>
-                    <FlatList
-                      data={sortBoughtLast(trip.items)}
-                      keyExtractor={(item) => item.id}
-                      style={styles.list}
-                      renderItem={({ item }) => (
-                        <ItemRow
-                          item={item}
-                          onToggle={() => toggleItem(trip.id, item.id)}
-                          onUpdate={(patch) => updateItem(trip.id, item.id, patch)}
-                          onRemove={() => removeItem(trip.id, item.id)}
-                        />
-                      )}
-                      ListEmptyComponent={<Text style={styles.empty}>Kjo listë nuk ka artikuj.</Text>}
-                      contentContainerStyle={styles.listContent}
-                      showsVerticalScrollIndicator={false}
+              {CATEGORIES.map(
+                (category) =>
+                  mounted.includes(category.section) && (
+                    <CategoryPane
+                      key={category.section}
+                      category={category}
+                      active={section === category.section}
+                      tripId={trip.id}
+                      items={trip[category.key] ?? NO_ITEMS}
+                      preview={!opened.includes(category.section)}
+                      total={totals[category.key]}
+                      spent={combinedSpent}
+                      incomeTotal={incomeTotal}
+                      overBy={overBy}
+                      onPressIncome={openIncome}
                     />
-                  </LayoutAnimationConfig>
-                </>
-              )}
-
-              {section === 'supplies' && (
-                <>
-                  <BillsSummaryBar
-                    totalAmount={suppliesTotal}
-                    paidAmount={combinedSpent}
-                    totalLabel="Gjithsej detergjente & extra"
-                  />
-                  {overBy > 0 && <OverBudgetCard amount={overBy} />}
-                  <LayoutAnimationConfig skipEntering>
-                    <FlatList
-                      data={sortBoughtLast(supplies)}
-                      keyExtractor={(supply) => supply.id}
-                      style={styles.list}
-                      renderItem={({ item }) => (
-                        <ItemRow
-                          item={item}
-                          onToggle={() => toggleSupply(item.id, trip.id)}
-                          onUpdate={(patch) => updateSupply(item.id, patch)}
-                          onRemove={() => removeSupply(item.id)}
-                          showQuantity={false}
-                        />
-                      )}
-                      ListEmptyComponent={<Text style={styles.empty}>Nuk ka ende asnjë artikull.</Text>}
-                      contentContainerStyle={styles.listContent}
-                      showsVerticalScrollIndicator={false}
-                    />
-                  </LayoutAnimationConfig>
-                </>
-              )}
-
-              {section === 'bills' && (
-                <>
-                  <BillsSummaryBar totalAmount={billsTotal} paidAmount={combinedSpent} />
-                  {overBy > 0 && <OverBudgetCard amount={overBy} />}
-                  <LayoutAnimationConfig skipEntering>
-                    <FlatList
-                      data={sortBoughtLast(bills)}
-                      keyExtractor={(bill) => bill.id}
-                      style={styles.list}
-                      renderItem={({ item }) => (
-                        <ItemRow
-                          item={item}
-                          onToggle={() => toggleBill(item.id, trip.id)}
-                          onUpdate={(patch) => updateBill(item.id, patch)}
-                          onRemove={() => removeBill(item.id)}
-                          showQuantity={false}
-                        />
-                      )}
-                      ListEmptyComponent={<Text style={styles.empty}>Nuk ka ende asnjë faturë.</Text>}
-                      contentContainerStyle={styles.listContent}
-                      showsVerticalScrollIndicator={false}
-                    />
-                  </LayoutAnimationConfig>
-                </>
-              )}
-
-              {section === 'wishlist' && (
-                <>
-                  <BillsSummaryBar
-                    totalAmount={wishlistTotal}
-                    paidAmount={combinedSpent}
-                    totalLabel="Gjithsej dëshirat"
-                  />
-                  {overBy > 0 && <OverBudgetCard amount={overBy} />}
-                  <LayoutAnimationConfig skipEntering>
-                    <FlatList
-                      data={sortBoughtLast(visibleWishlist)}
-                      keyExtractor={(wish) => wish.id}
-                      style={styles.list}
-                      renderItem={({ item }) => (
-                        <ItemRow
-                          item={item}
-                          onToggle={() => onToggleWish(item.id)}
-                          onUpdate={(patch) => updateWish(item.id, patch)}
-                          onRemove={() => removeWish(item.id)}
-                          showQuantity={false}
-                        />
-                      )}
-                      ListEmptyComponent={<Text style={styles.empty}>Lista e dëshirave është bosh.</Text>}
-                      contentContainerStyle={styles.listContent}
-                      showsVerticalScrollIndicator={false}
-                    />
-                  </LayoutAnimationConfig>
-                </>
+                  ),
               )}
             </View>
             <View style={styles.footer}>
@@ -345,34 +330,16 @@ export default function TripDetailScreen() {
                   suggestions={incomeSuggestions}
                 />
               )}
-              {section === 'products' && (
+              {activeCategory && (
                 <AddItemButton
-                  onAdd={(name, quantity, price, priority) => addItem(trip.id, name, quantity, price, priority)}
-                  suggestions={productSuggestions}
-                />
-              )}
-              {section === 'supplies' && (
-                <AddItemButton
-                  onAdd={(name, _quantity, price, priority) => addSupply(name, price, priority)}
-                  showQuantity={false}
-                  title="Shto artikull"
-                  suggestions={supplySuggestions}
-                />
-              )}
-              {section === 'bills' && (
-                <AddItemButton
-                  onAdd={(name, _quantity, price, priority) => addBill(name, price, priority)}
-                  showQuantity={false}
-                  title="Shto faturë"
-                  suggestions={billSuggestions}
-                />
-              )}
-              {section === 'wishlist' && (
-                <AddItemButton
-                  onAdd={(name, _quantity, price, priority) => addWish(name, price, priority)}
-                  showQuantity={false}
-                  title="Shto dëshirë"
-                  suggestions={wishSuggestions}
+                  key={activeCategory.section}
+                  onAdd={(name, quantity, price, priority) =>
+                    addItem(trip.id, activeCategory.key, name, activeCategory.showQuantity ? quantity : '', price, priority)
+                  }
+                  showQuantity={activeCategory.showQuantity}
+                  title={activeCategory.addTitle}
+                  namePlaceholder={activeCategory.namePlaceholder}
+                  suggestions={suggestions}
                 />
               )}
             </View>
@@ -393,6 +360,16 @@ const styles = StyleSheet.create({
   titleWrap: { flex: 1 },
   title: { fontSize: 17, fontWeight: '700', color: colors.text },
   content: { flex: 1, paddingHorizontal: spacing.md },
+  pane: { flex: 1 },
+  parked: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: spacing.md,
+    right: spacing.md,
+    // Far off to the side rather than invisible: nothing can overlap (or catch taps meant for) the open tab.
+    transform: [{ translateX: -20000 }],
+  },
   list: { flex: 1 },
   listContent: { paddingBottom: spacing.sm },
   footer: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm, alignItems: 'flex-end' },

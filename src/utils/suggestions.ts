@@ -1,4 +1,4 @@
-import type { ShoppingItem } from '@/types/models';
+import type { ItemListKey, ShoppingItem, ShoppingTrip } from '@/types/models';
 
 export interface Suggestion {
   key: string;
@@ -43,6 +43,12 @@ export function buildSuggestions(items: ShoppingItem[]): Suggestion[] {
     }
   }
   return [...byName.values()];
+}
+
+// Suggestions for one kind of item in the current list, built from every list, leaving out what it already has.
+export function buildListSuggestions(trips: ShoppingTrip[], current: ShoppingTrip | undefined, key: ItemListKey): Suggestion[] {
+  const present = new Set((current?.[key] ?? []).map((item) => normalizeText(item.name)));
+  return buildSuggestions(trips.flatMap((trip) => trip[key] ?? [])).filter((s) => !present.has(s.key));
 }
 
 export function pickSuggestions(all: Suggestion[], query: string, limit = 6): Suggestion[] {

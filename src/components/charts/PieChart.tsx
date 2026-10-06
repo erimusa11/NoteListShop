@@ -9,6 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Path, Text as SvgText } from 'react-native-svg';
 
+import { ms } from '@/theme/motion';
 import { colors, spacing } from '@/theme/theme';
 
 export interface PieSlice {
@@ -32,7 +33,7 @@ export function PieChart({ slices, size = 180, showLabels = true }: PieChartProp
   const enter = useSharedValue(reduced ? 1 : 0);
 
   useEffect(() => {
-    if (!reduced) enter.value = withTiming(1, { duration: 650, easing: Easing.out(Easing.back(1.4)) });
+    if (!reduced) enter.value = withTiming(1, { duration: ms(380), easing: Easing.out(Easing.back(1.4)) });
   }, [reduced, enter]);
 
   const style = useAnimatedStyle(() => ({

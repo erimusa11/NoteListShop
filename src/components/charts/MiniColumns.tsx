@@ -9,6 +9,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { ms } from '@/theme/motion';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import { formatPrice } from '@/utils/totals';
 
@@ -44,7 +45,7 @@ function Bar({
   useEffect(() => {
     if (!reduced) {
       grow.value = 0;
-      grow.value = withDelay(index * 45, withTiming(1, { duration: 550, easing: Easing.out(Easing.cubic) }));
+      grow.value = withDelay(ms(index * 25), withTiming(1, { duration: ms(330), easing: Easing.out(Easing.cubic) }));
     }
   }, [target, index, reduced, grow]);
 

@@ -14,13 +14,13 @@ import { ReportsView } from '@/components/ReportsView';
 import { TripCard } from '@/components/TripCard';
 import { useAppLock } from '@/context/AppLockContext';
 import { useAuth } from '@/context/AuthContext';
-import { useBills } from '@/context/BillsContext';
-import { useSupplies } from '@/context/SuppliesContext';
 import { useTrips } from '@/context/TripsContext';
-import { useWishlist } from '@/context/WishlistContext';
 import { colors, spacing } from '@/theme/theme';
 import { buildListSpend, buildSectionSpend } from '@/utils/reports';
 import { tripIncomeTotal } from '@/utils/totals';
+
+// The lists screen shows this many lists at first and this many more each time "load more" is pressed.
+const PAGE_SIZE = 5;
 
 // Lower-case and strip accents so "shtator" finds "Shtator" and "mire" finds "Mirë".
 function normalizeText(value: string): string {
@@ -40,20 +40,24 @@ export default function ListsOverviewScreen() {
   const firstName = demoMode
     ? 'Vizitor'
     : (user?.displayName?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'Eri');
-  const { bills } = useBills();
-  const { supplies } = useSupplies();
-  const { wishlist } = useWishlist();
   const sorted = [...trips].sort((a, b) => b.createdAt - a.createdAt);
   const [tab, setTab] = useState<'lists' | 'reports'>('lists');
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
+  const [shownCount, setShownCount] = useState(PAGE_SIZE);
   const needle = normalizeText(query);
   const visibleTrips = needle ? sorted.filter((trip) => normalizeText(trip.name).includes(needle)) : sorted;
+  const shownTrips = visibleTrips.slice(0, shownCount);
+  const hiddenCount = visibleTrips.length - shownTrips.length;
+  const changeQuery = (text: string) => {
+    setQuery(text);
+    setShownCount(PAGE_SIZE);
+  };
   const closeSearch = () => {
     setSearching(false);
-    setQuery('');
+    changeQuery('');
   };
-  const latestSections = buildSectionSpend(sorted.slice(0, 1), supplies, bills, wishlist);
+  const latestSections = buildSectionSpend(sorted.slice(0, 1));
   const recent = buildListSpend(trips)
     .slice(-12)
     .map((list) => ({
@@ -81,7 +85,7 @@ export default function ListsOverviewScreen() {
             <Ionicons name="search" size={18} color={colors.textMuted} />
             <TextInput
               value={query}
-              onChangeText={setQuery}
+              onChangeText={changeQuery}
               placeholder="Kërko listën…"
               placeholderTextColor={colors.textMuted}
               style={styles.searchInput}
@@ -165,7 +169,7 @@ export default function ListsOverviewScreen() {
       <View style={styles.content}>
         {tab === 'lists' ? (
           <FlatList
-            data={visibleTrips}
+            data={shownTrips}
             keyExtractor={(trip) => trip.id}
             style={styles.list}
             ListHeaderComponent={
@@ -181,8 +185,24 @@ export default function ListsOverviewScreen() {
               ) : null
             }
             renderItem={({ item: trip, index }) => (
-              <TripCard index={index} trip={trip} onPress={() => openTrip(trip.id)} />
+              <TripCard index={index % PAGE_SIZE} trip={trip} onPress={() => openTrip(trip.id)} />
             )}
+            ListFooterComponent={
+              hiddenCount > 0 ? (
+                <Pressable
+                  onPress={() => setShownCount((count) => count + PAGE_SIZE)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Shfaq edhe ${Math.min(PAGE_SIZE, hiddenCount)} lista`}
+                  style={({ pressed }) => [styles.loadMore, pressed && styles.loadMorePressed]}
+                >
+                  <Ionicons name="chevron-down" size={18} color={colors.primaryDark} />
+                  <Text style={styles.loadMoreText}>Shfaq edhe {Math.min(PAGE_SIZE, hiddenCount)} lista</Text>
+                  <Text style={styles.loadMoreMeta}>
+                    {shownTrips.length} nga {visibleTrips.length}
+                  </Text>
+                </Pressable>
+              ) : null
+            }
             ListEmptyComponent={
               needle ? (
                 <EmptyState icon="search-outline" title="Asnjë listë nuk u gjet" subtitle={`Nuk ka listë me "${query.trim()}"`} />
@@ -303,6 +323,21 @@ const styles = StyleSheet.create({
   content: { flex: 1, paddingHorizontal: spacing.md },
   list: { flex: 1 },
   listContent: { flexGrow: 1, paddingBottom: spacing.sm },
+  loadMore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.primaryLight,
+    backgroundColor: colors.card,
+    paddingVertical: spacing.sm + 4,
+    marginTop: spacing.xs,
+  },
+  loadMorePressed: { backgroundColor: colors.primaryLight },
+  loadMoreText: { fontSize: 14, fontWeight: '700', color: colors.primaryDark },
+  loadMoreMeta: { fontSize: 12, color: colors.textMuted },
   footer: {
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,

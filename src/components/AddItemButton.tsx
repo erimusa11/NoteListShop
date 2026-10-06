@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { PrioritySelector } from '@/components/PrioritySelector';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
+import { DEFAULT_QUANTITY, normalizeQuantity, parseQuantity, sanitizeQuantityInput } from '@/utils/quantity';
 import { pickSuggestions, type Suggestion } from '@/utils/suggestions';
 import { formatNumber } from '@/utils/totals';
 
@@ -33,14 +34,14 @@ export function AddItemButton({
 }: AddItemButtonProps) {
   const [visible, setVisible] = useState(false);
   const [name, setName] = useState('');
-  const [quantity, setQuantity] = useState('');
+  const [quantity, setQuantity] = useState(DEFAULT_QUANTITY);
   const [price, setPrice] = useState('');
   const [priority, setPriority] = useState(1);
 
   const close = () => {
     setVisible(false);
     setName('');
-    setQuantity('');
+    setQuantity(DEFAULT_QUANTITY);
     setPrice('');
     setPriority(1);
   };
@@ -50,14 +51,19 @@ export function AddItemButton({
   const shown = useMemo(() => pickSuggestions(suggestions, name), [suggestions, name]);
 
   const pick = (s: Suggestion) => {
-    onAdd(s.name, showQuantity ? s.quantity : '', s.price, priority);
+    onAdd(s.name, showQuantity ? normalizeQuantity(s.quantity) : '', s.price, priority);
     close();
   };
 
   const submit = () => {
     if (!canSubmit) return;
     const parsedPrice = parseFloat(price.replace(',', '.'));
-    onAdd(name.trim(), quantity.trim(), Number.isFinite(parsedPrice) ? parsedPrice : null, priority);
+    onAdd(
+      name.trim(),
+      showQuantity ? normalizeQuantity(quantity) : '',
+      Number.isFinite(parsedPrice) ? parsedPrice : null,
+      priority,
+    );
     close();
   };
 
@@ -106,9 +112,10 @@ export function AddItemButton({
               <Text style={styles.label}>Sasia</Text>
               <TextInput
                 value={quantity}
-                onChangeText={setQuantity}
-                placeholder="P.sh. 2"
+                onChangeText={(text) => setQuantity(sanitizeQuantityInput(text))}
+                placeholder={DEFAULT_QUANTITY}
                 placeholderTextColor={colors.textMuted}
+                keyboardType="numeric"
                 style={styles.input}
               />
             </View>
@@ -138,6 +145,10 @@ export function AddItemButton({
               onSubmitEditing={submit}
             />
           </>
+        )}
+
+        {showQuantity && Number.isFinite(priceValue) && parseQuantity(quantity) !== 1 && (
+          <Text style={styles.total}>Gjithsej: {formatNumber(priceValue * parseQuantity(quantity))} Lekë</Text>
         )}
 
         {showPriority && (
@@ -194,6 +205,7 @@ const styles = StyleSheet.create({
   chipPrice: { fontSize: 12, color: colors.textMuted },
   row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   rowItem: { flex: 1 },
+  total: { fontSize: 14, fontWeight: '700', color: colors.primaryDark, marginTop: spacing.sm },
   priority: { marginTop: spacing.sm },
   submitButton: {
     backgroundColor: colors.primary,
