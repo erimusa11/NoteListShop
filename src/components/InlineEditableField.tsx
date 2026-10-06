@@ -10,6 +10,8 @@ interface InlineEditableFieldProps {
   placeholder: string;
   onChange: (value: string) => void;
   keyboardType?: 'default' | 'numeric';
+  /** Cleans up the text as it is typed, e.g. to keep only digits. */
+  sanitize?: (text: string) => string;
   prefix?: string;
   suffix?: string;
   textStyle?: StyleProp<TextStyle>;
@@ -24,6 +26,7 @@ export function InlineEditableField({
   placeholder,
   onChange,
   keyboardType = 'default',
+  sanitize,
   prefix,
   suffix,
   textStyle,
@@ -44,7 +47,7 @@ export function InlineEditableField({
     return (
       <TextInput
         value={draft}
-        onChangeText={setDraft}
+        onChangeText={(text) => setDraft(sanitize ? sanitize(text) : text)}
         onBlur={commit}
         onSubmitEditing={commit}
         autoFocus

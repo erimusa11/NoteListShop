@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   interpolate,
@@ -13,7 +13,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { dealIn } from '@/theme/motion';
+import { dealIn, ms, spring } from '@/theme/motion';
 import { colors, shadow, spacing } from '@/theme/theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -21,6 +21,8 @@ type IconName = React.ComponentProps<typeof Ionicons>['name'];
 export interface TagOption<T extends string> {
   value: T;
   label: string;
+  /** Label for the tab itself with its own line break, when the automatic split at " & " does not fit. */
+  tabLabel?: string;
   icon: IconName;
   activeIcon: IconName;
   accent: string;
@@ -29,6 +31,12 @@ export interface TagOption<T extends string> {
 }
 
 const GAP = 6;
+// More tabs than this and the strip scrolls sideways, showing whole tabs plus half of the next, so it is clear there is more.
+const SCROLL_FROM = 5;
+const TARGET_SLOT_W = 80;
+const SCROLL_PAD = 6;
+// Room below the tags so the selected tag's shadow is not cut off by the scroll area.
+const SHADOW_ROOM = 14;
 const ROW_H = 88;
 const TAG_H = 64;
 const REST_Y = 12;
@@ -54,10 +62,22 @@ interface TagProps<T extends string> {
   fs: number;
   iconSize: number;
   reduced: boolean;
+  /** Fixed width when the strip scrolls; otherwise the tags share the row equally. */
+  slotWidth?: number;
 }
 
-function Tag<T extends string>({ option, index, selIdx, active, onPress, fs, iconSize, reduced }: TagProps<T>) {
-  const { label, icon, activeIcon, accent, remaining, total } = option;
+function Tag<T extends string>({
+  option,
+  index,
+  selIdx,
+  active,
+  onPress,
+  fs,
+  iconSize,
+  reduced,
+  slotWidth,
+}: TagProps<T>) {
+  const { label, tabLabel, icon, activeIcon, accent, remaining, total } = option;
   const ratio = total ? (total - remaining) / total : 0;
 
   const sel = useSharedValue(active ? 1 : 0);
@@ -72,7 +92,7 @@ function Tag<T extends string>({ option, index, selIdx, active, onPress, fs, ico
   const entering = useMemo(() => dealIn(index), [index]);
 
   useEffect(() => {
-    sel.value = reduced ? (active ? 1 : 0) : withSpring(active ? 1 : 0, { damping: 11, stiffness: 220, mass: 0.8 });
+    sel.value = reduced ? (active ? 1 : 0) : withSpring(active ? 1 : 0, spring({ damping: 15, stiffness: 400, mass: 0.7 }));
     if (reduced) {
       prevIdx.current = selIdx;
       return;
@@ -83,8 +103,8 @@ function Tag<T extends string>({ option, index, selIdx, active, onPress, fs, ico
       const amp = 6 / (1 + 1.2 * dist);
       cancelAnimation(swing);
       swing.value = withDelay(
-        dist * 35,
-        withSequence(withTiming(d * amp, { duration: 70 }), withSpring(0, { damping: 5, stiffness: 110, mass: 0.6 })),
+        ms(dist * 20),
+        withSequence(withTiming(d * amp, { duration: ms(45) }), withSpring(0, spring({ damping: 8, stiffness: 220, mass: 0.6 }))),
       );
       prevIdx.current = selIdx;
     }
@@ -96,11 +116,11 @@ function Tag<T extends string>({ option, index, selIdx, active, onPress, fs, ico
       return;
     }
     if (reduced) return;
-    pop.value = withSequence(withTiming(1, { duration: 80 }), withSpring(0, { damping: 6, stiffness: 320 }));
+    pop.value = withSequence(withTiming(1, { duration: ms(55) }), withSpring(0, spring({ damping: 8, stiffness: 440 })));
   }, [remaining]);
 
   useEffect(() => {
-    rail.value = reduced ? ratio : withTiming(ratio, { duration: 260 });
+    rail.value = reduced ? ratio : withTiming(ratio, { duration: ms(160) });
   }, [ratio, reduced]);
 
   const groupStyle = useAnimatedStyle(() => ({
@@ -137,20 +157,26 @@ function Tag<T extends string>({ option, index, selIdx, active, onPress, fs, ico
       accessibilityLabel={a11yLabel}
       onPress={onPress}
       onPressIn={() => {
-        if (!reduced) press.value = withSpring(1, { damping: 14, stiffness: 420 });
+        if (!reduced) press.value = withSpring(1, spring({ damping: 14, stiffness: 420 }));
       }}
       onPressOut={() => {
-        if (!reduced) press.value = withSpring(0, { damping: 7, stiffness: 300 });
+        if (!reduced) press.value = withSpring(0, spring({ damping: 7, stiffness: 300 }));
       }}
       onHoverIn={() => {
-        if (!reduced) hover.value = withSpring(1, { damping: 14, stiffness: 300 });
+        if (!reduced) hover.value = withSpring(1, spring({ damping: 14, stiffness: 300 }));
       }}
       onHoverOut={() => {
-        if (!reduced) hover.value = withSpring(0, { damping: 14, stiffness: 300 });
+        if (!reduced) hover.value = withSpring(0, spring({ damping: 14, stiffness: 300 }));
       }}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
-      style={({ pressed }) => [styles.slot, { zIndex: active ? 2 : 1 }, reduced && pressed && styles.reducedPressed]}
+      style={({ pressed }) => [
+        styles.slot,
+        // flexBasis too: a basis of 0 (from flex: 1) would otherwise win over the width on the web.
+        slotWidth ? { flexGrow: 0, flexShrink: 0, flexBasis: slotWidth, width: slotWidth } : null,
+        { zIndex: active ? 2 : 1 },
+        reduced && pressed && styles.reducedPressed,
+      ]}
     >
       <Animated.View
         entering={entering}
@@ -204,7 +230,7 @@ function Tag<T extends string>({ option, index, selIdx, active, onPress, fs, ico
                   maxFontSizeMultiplier={1.15}
                   style={[styles.label, { fontSize: fs, color: active ? colors.text : LABEL_IDLE }]}
                 >
-                  {label.replace(' & ', '\n& ')}
+                  {tabLabel ?? label.replace(' & ', '\n& ')}
                 </Text>
               </View>
             </View>
@@ -243,15 +269,44 @@ export function TagString<T extends string>({
   onChange: (v: T) => void;
 }) {
   const reduced = useReducedMotion();
+  const scrollRef = useRef<ScrollView>(null);
   const [rowW, setRowW] = useState(0);
   const selIdx = Math.max(
     0,
     options.findIndex((o) => o.value === value),
   );
-  const wide = rowW >= 440;
   const many = options.length > 4;
-  const fs = rowW > 0 && rowW < 300 ? 9 : wide ? 12 : many ? 10 : 11;
-  const iconSize = wide ? 22 : many ? 16 : 18;
+  const scrolls = options.length > SCROLL_FROM;
+  const gap = many ? 4 : GAP;
+  const wide = rowW >= 440;
+  const fs = rowW > 0 && rowW < 300 ? 9 : scrolls ? 10 : wide ? 12 : many ? 10 : 11;
+  const iconSize = scrolls ? 18 : wide ? 22 : many ? 16 : 18;
+  const wholeTabs = Math.max(3, Math.floor(rowW / TARGET_SLOT_W));
+  const slotW = !scrolls ? 0 : rowW > 0 ? (rowW - SCROLL_PAD - wholeTabs * gap) / (wholeTabs + 0.5) : TARGET_SLOT_W;
+  const contentW = SCROLL_PAD * 2 + options.length * slotW + (options.length - 1) * gap;
+
+  // Keep the open tab in the middle of the strip, also when it was picked from somewhere else.
+  useEffect(() => {
+    if (!scrolls || rowW === 0) return;
+    const center = SCROLL_PAD + selIdx * (slotW + gap) + slotW / 2;
+    const x = Math.min(Math.max(0, center - rowW / 2), Math.max(0, contentW - rowW));
+    scrollRef.current?.scrollTo({ x, animated: !reduced });
+  }, [selIdx, scrolls, rowW, slotW, gap, contentW, reduced]);
+
+  const tags = options.map((option, i) => (
+    <Tag
+      key={option.value}
+      option={option}
+      index={i}
+      selIdx={selIdx}
+      active={i === selIdx}
+      onPress={() => onChange(option.value)}
+      fs={fs}
+      iconSize={iconSize}
+      reduced={reduced}
+      slotWidth={scrolls ? slotW : undefined}
+    />
+  ));
 
   return (
     <View
@@ -259,23 +314,29 @@ export function TagString<T extends string>({
       style={[styles.root, many && { columnGap: 4 }]}
       onLayout={(e) => setRowW(e.nativeEvent.layout.width)}
     >
-      <View style={styles.twine} pointerEvents="none">
-        <View style={[styles.knot, { left: -3 }]} />
-        <View style={[styles.knot, { right: -3 }]} />
-      </View>
-      {options.map((option, i) => (
-        <Tag
-          key={option.value}
-          option={option}
-          index={i}
-          selIdx={selIdx}
-          active={i === selIdx}
-          onPress={() => onChange(option.value)}
-          fs={fs}
-          iconSize={iconSize}
-          reduced={reduced}
-        />
-      ))}
+      {scrolls ? (
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.scroll}
+          contentContainerStyle={[styles.scrollContent, { columnGap: gap, paddingHorizontal: SCROLL_PAD }]}
+        >
+          <View style={styles.twine} pointerEvents="none">
+            <View style={[styles.knot, { left: -3 }]} />
+            <View style={[styles.knot, { right: -3 }]} />
+          </View>
+          {tags}
+        </ScrollView>
+      ) : (
+        <>
+          <View style={styles.twine} pointerEvents="none">
+            <View style={[styles.knot, { left: -3 }]} />
+            <View style={[styles.knot, { right: -3 }]} />
+          </View>
+          {tags}
+        </>
+      )}
     </View>
   );
 }
@@ -293,6 +354,8 @@ const styles = StyleSheet.create({
   twine: { position: 'absolute', top: 4, left: 0, right: 0, height: 2, borderRadius: 1, backgroundColor: TWINE },
   knot: { position: 'absolute', top: -2, width: 6, height: 6, borderRadius: 3, backgroundColor: TWINE },
   slot: { flex: 1, height: ROW_H },
+  scroll: { flex: 1, height: ROW_H + SHADOW_ROOM },
+  scrollContent: { height: ROW_H + SHADOW_ROOM },
   reducedPressed: { opacity: 0.85 },
   group: { position: 'absolute', top: PIVOT_Y, left: 1, right: 1, height: G },
   pin: { position: 'absolute', top: -3, alignSelf: 'center', width: 6, height: 6, borderRadius: 3, zIndex: 3 },

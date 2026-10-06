@@ -8,6 +8,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 
+import { spring } from '@/theme/motion';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 
 interface TabOption<T extends string> {
@@ -35,7 +36,7 @@ export function BottomTabBar<T extends string>({ options, value, onChange }: Bot
   const segW = useSharedValue(0);
 
   useEffect(() => {
-    x.value = reduced ? index : withSpring(index, { damping: 16, stiffness: 240, mass: 0.8 });
+    x.value = reduced ? index : withSpring(index, spring({ damping: 18, stiffness: 380, mass: 0.7 }));
   }, [index, reduced, x]);
 
   const pillStyle = useAnimatedStyle(() => ({

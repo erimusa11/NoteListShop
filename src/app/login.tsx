@@ -17,7 +17,7 @@ import { authErrorMessage, useAuth } from '@/context/AuthContext';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 
 export default function LoginScreen() {
-  const { configured, signInWithGoogle, signInWithPassword, resetPassword, enterDevMode } = useAuth();
+  const { configured, signInWithGoogle, signInWithPassword, resetPassword, enterDemoMode } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState<'google' | 'password' | null>(null);
@@ -75,14 +75,9 @@ export default function LoginScreen() {
                   <Text style={styles.noticeTitle}>Firebase nuk është konfiguruar ende</Text>
                   <Text style={styles.noticeBody}>
                     {__DEV__
-                      ? 'Shto çelësat në skedarin .env (shih .env.example) dhe rinise serverin. Deri atëherë mund të vazhdosh pa hyrje, por të dhënat nuk ruhen në llogari.'
+                      ? 'Shto çelësat në skedarin .env (shih .env.example) dhe rinise serverin. Deri atëherë mund të provosh aplikacionin në modalitetin demo, por të dhënat nuk ruhen në llogari.'
                       : 'Aplikacioni nuk është konfiguruar siç duhet. Kontakto zhvilluesin.'}
                   </Text>
-                  {__DEV__ && (
-                    <Pressable onPress={enterDevMode} accessibilityRole="button" style={styles.devButton}>
-                      <Text style={styles.devButtonText}>Vazhdo pa hyrje (zhvillim)</Text>
-                    </Pressable>
-                  )}
                 </View>
               </View>
             )}
@@ -158,6 +153,23 @@ export default function LoginScreen() {
             <Pressable onPress={forgot} disabled={!configured} accessibilityRole="button" hitSlop={8}>
               <Text style={styles.link}>Harrova fjalëkalimin</Text>
             </Pressable>
+
+            <View style={styles.divider}>
+              <View style={styles.line} />
+              <Text style={styles.dividerText}>ose</Text>
+              <View style={styles.line} />
+            </View>
+
+            <Pressable
+              onPress={enterDemoMode}
+              disabled={busy !== null}
+              accessibilityRole="button"
+              style={[styles.demoButton, busy !== null && styles.disabled]}
+            >
+              <Ionicons name="eye-outline" size={20} color={colors.primaryDark} />
+              <Text style={styles.demoText}>Provo pa llogari (demo)</Text>
+            </Pressable>
+            <Text style={styles.hint}>Modaliteti demo nuk ruan asgjë në llogari dhe ndryshimet humbasin kur del.</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -192,8 +204,17 @@ const styles = StyleSheet.create({
   noticeText: { flex: 1, gap: 4 },
   noticeTitle: { fontSize: 14, fontWeight: '700', color: colors.primaryDark },
   noticeBody: { fontSize: 13, color: colors.text },
-  devButton: { alignSelf: 'flex-start', marginTop: 4 },
-  devButtonText: { fontSize: 13, fontWeight: '700', color: colors.primaryDark, textDecorationLine: 'underline' },
+  demoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: radii.pill,
+    paddingVertical: spacing.sm + 6,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+  },
+  demoText: { fontSize: 16, fontWeight: '700', color: colors.primaryDark },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',

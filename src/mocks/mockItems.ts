@@ -20,7 +20,7 @@ export const mockItems: ShoppingItem[] = [
   {
     id: '3',
     name: 'Vezë',
-    quantity: '12 copë',
+    quantity: '12',
     price: null,
     bought: false,
     createdAt: Date.now() - 3000,
@@ -36,9 +36,20 @@ export const mockItems: ShoppingItem[] = [
   {
     id: '5',
     name: 'Mollë',
-    quantity: '1kg',
+    quantity: '1',
     price: null,
     bought: false,
     createdAt: Date.now() - 1000,
   },
+];
+
+export const mockBills: ShoppingItem[] = [
+  { id: 'b1', name: 'Qira', quantity: '', price: 25000, bought: false, createdAt: Date.now() - 3000, sharedId: 'b1' },
+  { id: 'b2', name: 'Energji elektrike', quantity: '', price: 3500, bought: true, createdAt: Date.now() - 2000, sharedId: 'b2' },
+  { id: 'b3', name: 'Internet', quantity: '', price: 1800, bought: false, createdAt: Date.now() - 1000, sharedId: 'b3' },
+];
+
+export const mockWishlist: ShoppingItem[] = [
+  { id: 'w1', name: 'Këpucë sportive', quantity: '', price: 6000, bought: false, createdAt: Date.now() - 2000 },
+  { id: 'w2', name: 'Kufje pa tel', quantity: '', price: 3500, bought: false, createdAt: Date.now() - 1000 },
 ];

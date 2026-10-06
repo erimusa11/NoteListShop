@@ -9,10 +9,11 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 
+import { ms, spring } from '@/theme/motion';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { ShoppingTrip } from '@/types/models';
 import { formatDateTimeAlbanian } from '@/utils/dates';
-import { computeSpentTotal, formatPrice, tripIncomeTotal } from '@/utils/totals';
+import { computeSpentTotal, formatPrice, tripAllItems, tripIncomeTotal } from '@/utils/totals';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -24,8 +25,9 @@ interface TripCardProps {
 
 export function TripCard({ trip, onPress, index = 0 }: TripCardProps) {
   const reduced = useReducedMotion();
-  const spentTotal = computeSpentTotal(trip.items);
-  const boughtCount = trip.items.filter((item) => item.bought).length;
+  const allItems = tripAllItems(trip);
+  const spentTotal = computeSpentTotal(allItems);
+  const boughtCount = allItems.filter((item) => item.bought).length;
   const income = tripIncomeTotal(trip);
   const hasBudget = income > 0;
   const progress = hasBudget ? Math.min(1, spentTotal / income) : 0;
@@ -36,13 +38,13 @@ export function TripCard({ trip, onPress, index = 0 }: TripCardProps) {
   const fill = useSharedValue(0);
 
   useEffect(() => {
-    if (!reduced) enter.value = withDelay(Math.min(index, 6) * 45, withSpring(1, { damping: 14, stiffness: 170 }));
+    if (!reduced) enter.value = withDelay(ms(Math.min(index, 4) * 25), withSpring(1, spring({ damping: 16, stiffness: 280 })));
   }, [index, reduced, enter]);
 
   useEffect(() => {
     fill.value = reduced
       ? progress
-      : withDelay(220 + Math.min(index, 6) * 45, withSpring(progress, { damping: 18, stiffness: 90 }));
+      : withDelay(ms(120 + Math.min(index, 4) * 25), withSpring(progress, spring({ damping: 20, stiffness: 170 })));
   }, [progress]);
 
   const pressStyle = useAnimatedStyle(() => ({
@@ -60,10 +62,10 @@ export function TripCard({ trip, onPress, index = 0 }: TripCardProps) {
       <AnimatedPressable
         onPress={onPress}
         onPressIn={() => {
-          pressed.value = withSpring(1, { damping: 18, stiffness: 500 });
+          pressed.value = withSpring(1, spring({ damping: 18, stiffness: 500 }));
         }}
         onPressOut={() => {
-          pressed.value = withSpring(0, { damping: 9, stiffness: 320, mass: 0.7 });
+          pressed.value = withSpring(0, spring({ damping: 9, stiffness: 320, mass: 0.7 }));
         }}
         style={[styles.card, shadow, pressStyle]}
       >
@@ -76,7 +78,7 @@ export function TripCard({ trip, onPress, index = 0 }: TripCardProps) {
               {trip.name}
             </Text>
             <Text style={styles.meta}>
-              {boughtCount}/{trip.items.length} artikuj të blerë
+              {boughtCount}/{allItems.length} artikuj të blerë
             </Text>
             <Text style={styles.created}>Krijuar më {formatDateTimeAlbanian(trip.createdAt)}</Text>
           </View>

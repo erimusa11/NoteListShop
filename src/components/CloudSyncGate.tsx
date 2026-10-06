@@ -1,25 +1,41 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SplashScreen from 'expo-splash-screen';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/context/AuthContext';
-import { useBills } from '@/context/BillsContext';
-import { useSupplies } from '@/context/SuppliesContext';
 import { useTrips } from '@/context/TripsContext';
-import { useWishlist } from '@/context/WishlistContext';
 import { db } from '@/lib/firebase';
 import { colors, radii, spacing } from '@/theme/theme';
+import { upgradeLegacyTrips, type StoredData } from '@/utils/tripLists';
 
 const SAVE_DELAY_MS = 700;
 const OFFLINE_LOAD_TIMEOUT_MS = 6000;
 const PENDING_BANNER_DELAY_MS = 4000;
 
+const LOAD_FAILED_MESSAGE = "Nuk mund t'i ngarkojmë të dhënat. Kontrollo internetin dhe provo përsëri.";
+
+const asList = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+
+// Data from an older version or a damaged copy may lack a list or hold a broken trip: every list becomes a real
+// array and anything that is not a trip object is dropped, so the rest of the app can rely on the shape.
+function normalize(data: Record<string, unknown> | undefined) {
+  return {
+    trips: asList(data?.trips).filter((trip) => trip !== null && typeof trip === 'object'),
+    bills: asList(data?.bills),
+    supplies: asList(data?.supplies),
+    wishlist: asList(data?.wishlist),
+  };
+}
+
+type CloudData = ReturnType<typeof normalize>;
+
 // A copy of the account data kept on the phone so the app opens and keeps working without internet.
 // `dirty` means the copy holds changes that have not reached the account yet.
 interface LocalCopy {
-  data: { trips: unknown[]; bills: unknown[]; supplies: unknown[]; wishlist: unknown[] };
+  data: CloudData;
   dirty: boolean;
 }
 
@@ -28,7 +44,9 @@ const cacheKey = (uid: string) => `cloudCopy.${uid}`;
 async function readCopy(uid: string): Promise<LocalCopy | null> {
   try {
     const raw = await AsyncStorage.getItem(cacheKey(uid));
-    return raw ? (JSON.parse(raw) as LocalCopy) : null;
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!parsed || typeof parsed.data !== 'object' || parsed.data === null) return null;
+    return { data: normalize(parsed.data), dirty: parsed.dirty === true };
   } catch {
     return null;
   }
@@ -55,11 +73,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 export function CloudSyncGate({ children }: { children: ReactNode }) {
-  const { user, hasPassword, loading, signOut } = useAuth();
+  const { user, hasPassword, loading, demoMode, signOut } = useAuth();
   const { trips, hydrate: hydrateTrips } = useTrips();
-  const { bills, hydrate: hydrateBills } = useBills();
-  const { supplies, hydrate: hydrateSupplies } = useSupplies();
-  const { wishlist, hydrate: hydrateWishlist } = useWishlist();
 
   const uid = user && hasPassword && db ? user.uid : null;
   const [loadedUid, setLoadedUid] = useState<string | null>(null);
@@ -73,10 +88,22 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
   const latestJson = useRef('');
   const previousUid = useRef<string | null>(null);
 
-  const hydrators = useRef({ hydrateTrips, hydrateBills, hydrateSupplies, hydrateWishlist });
+  const hydrators = useRef({ hydrateTrips });
   useEffect(() => {
-    hydrators.current = { hydrateTrips, hydrateBills, hydrateSupplies, hydrateWishlist };
+    hydrators.current = { hydrateTrips };
   });
+
+  // Demo data lives only in memory (uid stays null, so nothing syncs); drop it when leaving demo mode.
+  const wasDemo = useRef(false);
+  useEffect(() => {
+    if (demoMode) {
+      wasDemo.current = true;
+      return;
+    }
+    if (!wasDemo.current) return;
+    wasDemo.current = false;
+    hydrators.current.hydrateTrips([]);
+  }, [demoMode]);
 
   useEffect(() => {
     if (!uid || !db) {
@@ -87,9 +114,6 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
           if (copy && !copy.dirty) AsyncStorage.removeItem(cacheKey(leaving)).catch(() => {});
         });
         hydrators.current.hydrateTrips([]);
-        hydrators.current.hydrateBills([]);
-        hydrators.current.hydrateSupplies([]);
-        hydrators.current.hydrateWishlist([]);
         lastSaved.current = '';
       }
       previousUid.current = null;
@@ -101,18 +125,11 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
     let cancelled = false;
     setLoadError(null);
 
-    const normalize = (data: Record<string, unknown> | undefined) => ({
-      trips: (data?.trips as unknown[]) ?? [],
-      bills: (data?.bills as unknown[]) ?? [],
-      supplies: (data?.supplies as unknown[]) ?? [],
-      wishlist: (data?.wishlist as unknown[]) ?? [],
-    });
-
     (async () => {
       const copy = await readCopy(uid);
       if (cancelled) return;
 
-      let server: ReturnType<typeof normalize> | null = null;
+      let server: CloudData | null = null;
       let failure: { code?: string } | null = null;
       try {
         const request = getDoc(doc(db!, 'users', uid));
@@ -123,31 +140,31 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
       }
       if (cancelled) return;
 
-      let data: ReturnType<typeof normalize>;
+      let data: CloudData;
       if (server) {
         // Unsent changes from the phone win, so nothing made offline is lost; they are pushed right after.
-        data = copy?.dirty ? (copy.data as ReturnType<typeof normalize>) : server;
+        data = copy?.dirty ? copy.data : server;
         lastSaved.current = JSON.stringify(server);
       } else if (copy && failure?.code !== 'permission-denied') {
-        data = copy.data as ReturnType<typeof normalize>;
+        data = copy.data;
         lastSaved.current = copy.dirty ? '' : JSON.stringify(data);
       } else {
         setLoadError(
           failure?.code === 'permission-denied'
             ? 'Firestore nuk lejon leximin. Vendos rregullat nga skedari firestore.rules në Firebase (Firestore Database > Rules).'
-            : "Nuk mund t'i ngarkojmë të dhënat. Kontrollo internetin dhe provo përsëri.",
+            : LOAD_FAILED_MESSAGE,
         );
         return;
       }
 
       latestJson.current = JSON.stringify(data);
       if (!copy?.dirty) writeCopy(uid, { data, dirty: false });
-      hydrators.current.hydrateTrips(data.trips as never[]);
-      hydrators.current.hydrateBills(data.bills as never[]);
-      hydrators.current.hydrateSupplies(data.supplies as never[]);
-      hydrators.current.hydrateWishlist(data.wishlist as never[]);
+      hydrators.current.hydrateTrips(upgradeLegacyTrips(data as StoredData));
       setLoadedUid(uid);
-    })();
+    })().catch(() => {
+      // Anything unexpected while loading shows the retry panel instead of an endless spinner.
+      if (!cancelled) setLoadError(LOAD_FAILED_MESSAGE);
+    });
 
     return () => {
       cancelled = true;
@@ -156,7 +173,8 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!uid || !db || loadedUid !== uid) return;
-    const payload = { trips, bills, supplies, wishlist };
+    // bills, supplies and wishlist now live inside each trip; the empty lists stay because the Firestore rules still require them.
+    const payload = { trips, bills: [], supplies: [], wishlist: [] };
     const json = JSON.stringify(payload);
     latestJson.current = json;
     if (json === lastSaved.current) return;
@@ -179,7 +197,13 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
     }, SAVE_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [uid, loadedUid, trips, bills, supplies, wishlist]);
+  }, [uid, loadedUid, trips]);
+
+  // While this panel stands in for the app no navigator exists, and the splash screen is only hidden once one does;
+  // without this the retry and sign-out buttons would sit behind a splash that never leaves.
+  useEffect(() => {
+    if (loadError) SplashScreen.hideAsync().catch(() => {});
+  }, [loadError]);
 
   useEffect(() => {
     if (!unsynced) return;

@@ -1,17 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, {
-  cancelAnimation,
-  Easing,
-  interpolate,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from 'react-native-reanimated';
 
 import { colors, spacing } from '@/theme/theme';
 
@@ -21,42 +9,19 @@ interface EmptyStateProps {
   subtitle?: string;
 }
 
+// Kept still on purpose: an animation that never ends keeps the screen redrawing for as long as it is open.
 export function EmptyState({
   icon = 'cart-outline',
   title = 'Lista juaj është bosh',
   subtitle = 'Shtoni artikullin e parë më poshtë!',
 }: EmptyStateProps) {
-  const reduced = useReducedMotion();
-  const bob = useSharedValue(0);
-
-  useEffect(() => {
-    if (reduced) return;
-    bob.value = withRepeat(
-      withSequence(
-        withTiming(-7, { duration: 1100, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0, { duration: 1100, easing: Easing.inOut(Easing.sin) }),
-      ),
-      -1,
-    );
-    return () => cancelAnimation(bob);
-  }, [reduced]);
-
-  const circleStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: bob.value }, { rotate: `${interpolate(bob.value, [-7, 0], [2.5, -2.5])}deg` }],
-  }));
-
-  const shadowStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(bob.value, [-7, 0], [0.5, 1]),
-    transform: [{ scaleX: interpolate(bob.value, [-7, 0], [0.7, 1]) }],
-  }));
-
   return (
     <View style={styles.container}>
       <View style={styles.iconWrap}>
-        <Animated.View style={[styles.shadowEllipse, shadowStyle]} />
-        <Animated.View style={[styles.iconCircle, circleStyle]}>
+        <View style={styles.shadowEllipse} />
+        <View style={styles.iconCircle}>
           <Ionicons name={icon} size={40} color={colors.primary} />
-        </Animated.View>
+        </View>
       </View>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.subtitle}>{subtitle}</Text>

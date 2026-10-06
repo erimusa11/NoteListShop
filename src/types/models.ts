@@ -5,9 +5,10 @@ export interface ShoppingItem {
   price: number | null;
   bought: boolean;
   createdAt: number;
-  boughtInTripId?: string | null;
   /** 1 = normal … 5 = urgent. Missing means 1. */
   priority?: number;
+  /** Set when the item is starred. Its copies in other lists carry the same id and follow its name. */
+  sharedId?: string;
 }
 
 export interface IncomeEntry {
@@ -17,11 +18,29 @@ export interface IncomeEntry {
   createdAt: number;
 }
 
-export interface ShoppingTrip {
+/** The item lists every shopping list owns. Each list has its own copy, so checking one off only affects that list. */
+export type ItemListKey =
+  | 'items'
+  | 'supplies'
+  | 'bills'
+  | 'wishlist'
+  | 'clothes'
+  | 'fuel'
+  | 'refuel'
+  | 'online'
+  | 'outings'
+  | 'kitchen'
+  | 'playstation'
+  | 'health';
+
+// Besides `items` (Produktet), a list may not have every category yet (lists saved before it was added).
+// The categories and their names are in utils/categories.ts.
+export interface ShoppingTrip extends Partial<Record<Exclude<ItemListKey, 'items'>, ShoppingItem[]>> {
   id: string;
   name: string;
   createdAt: number;
   budget: number | null;
+  /** Produktet */
   items: ShoppingItem[];
   incomes?: IncomeEntry[];
 }
