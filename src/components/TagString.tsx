@@ -228,6 +228,9 @@ function Tag<T extends string>({
                 <Text
                   numberOfLines={2}
                   maxFontSizeMultiplier={1.15}
+                  // A long word ("rëndësishmet", "Guzhine") that is wider than the tab shrinks a little instead of being cut.
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
                   style={[styles.label, { fontSize: fs, color: active ? colors.text : LABEL_IDLE }]}
                 >
                   {tabLabel ?? label.replace(' & ', '\n& ')}
@@ -289,7 +292,10 @@ export function TagString<T extends string>({
   useEffect(() => {
     if (!scrolls || rowW === 0) return;
     const center = SCROLL_PAD + selIdx * (slotW + gap) + slotW / 2;
-    const x = Math.min(Math.max(0, center - rowW / 2), Math.max(0, contentW - rowW));
+    const centered = Math.min(Math.max(0, center - rowW / 2), Math.max(0, contentW - rowW));
+    // Less than half a tab from the start: stay at the start, so the first tab is not left half hidden when a list opens
+    // (the open tab is on screen from there anyway).
+    const x = centered < slotW / 2 ? 0 : centered;
     scrollRef.current?.scrollTo({ x, animated: !reduced });
   }, [selIdx, scrolls, rowW, slotW, gap, contentW, reduced]);
 

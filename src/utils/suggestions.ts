@@ -18,7 +18,10 @@ export function normalizeText(value: string): string {
     .trim();
 }
 
-export function buildSuggestions(items: ShoppingItem[]): Suggestion[] {
+// Anything with these fields can be suggested: an item in a list, or one that was deleted from it.
+type SuggestionSource = Pick<ShoppingItem, 'name' | 'quantity' | 'price' | 'createdAt'>;
+
+export function buildSuggestions(items: SuggestionSource[]): Suggestion[] {
   const byName = new Map<string, Suggestion>();
   for (const item of items) {
     const key = normalizeText(item.name);
@@ -27,7 +30,7 @@ export function buildSuggestions(items: ShoppingItem[]): Suggestion[] {
     if (!existing) {
       byName.set(key, {
         key,
-        name: item.name.trim(),
+        name: String(item.name).trim(),
         quantity: item.quantity,
         price: item.price,
         count: 1,
@@ -37,7 +40,7 @@ export function buildSuggestions(items: ShoppingItem[]): Suggestion[] {
       existing.count += 1;
       if (item.createdAt >= existing.lastUsed) {
         existing.lastUsed = item.createdAt;
-        existing.name = item.name.trim();
+        existing.name = String(item.name).trim();
         existing.quantity = item.quantity;
         existing.price = item.price;
       }
@@ -46,10 +49,16 @@ export function buildSuggestions(items: ShoppingItem[]): Suggestion[] {
   return [...byName.values()];
 }
 
-// Suggestions for one kind of item in the current list, built from every list, leaving out what it already has.
+// Suggestions for one kind of item in the current list, built from every list (including what was deleted from them),
+// leaving out what it already has.
 export function buildListSuggestions(trips: ShoppingTrip[], current: ShoppingTrip | undefined, key: ItemListKey): Suggestion[] {
   const present = new Set((current?.[key] ?? []).map((item) => normalizeText(item.name)));
-  return buildSuggestions(trips.flatMap((trip) => trip[key] ?? [])).filter((s) => !present.has(s.key));
+  const sources = trips.flatMap((trip): SuggestionSource[] => [
+    ...(trip[key] ?? []),
+    // `Array.isArray` because a list from damaged saved data may hold something else here.
+    ...(Array.isArray(trip.removed) ? trip.removed : []).filter((removed) => removed && removed.list === key),
+  ]);
+  return buildSuggestions(sources).filter((s) => !present.has(s.key));
 }
 
 export function pickSuggestions(all: Suggestion[], query: string, limit = 6): Suggestion[] {
