@@ -75,20 +75,28 @@ export function toggleStar(trips: ShoppingTrip[], tripId: string, key: ItemListK
 // a name that was deleted long ago is rarely wanted back.
 const MAX_REMOVED = 60;
 
-// The trip's record of deleted items with this one added, replacing an earlier record of the same name in the same category.
+// The trip's record of deleted items with this one added, replacing an earlier record of the same name (and the same
+// description, in a category where many items share a name: Drion, Kia Morning…) in the same category.
 function remembered(trip: ShoppingTrip, key: ItemListKey, item: ShoppingItem): RemovedItem[] {
   const name = normalizeText(item.name);
+  const note = normalizeText(item.note ?? '');
   const earlier = (Array.isArray(trip.removed) ? trip.removed : []).filter(
-    (removed) => removed && typeof removed === 'object' && !(removed.list === key && normalizeText(removed.name) === name),
+    (removed) =>
+      removed &&
+      typeof removed === 'object' &&
+      !(removed.list === key && normalizeText(removed.name) === name && normalizeText(removed.note ?? '') === note),
   );
   // Every field gets a value, never undefined: the cloud save throws on a document that holds one (an item from old or
-  // damaged data may lack a field), and that would stop everything from being saved.
+  // damaged data may lack a field), and that would stop everything from being saved. Only the description is left out
+  // when there is none, which is every item outside the categories that ask for it.
+  const text = typeof item.note === 'string' ? item.note.trim() : '';
   const record: RemovedItem = {
     list: key,
     name: String(item.name ?? ''),
     quantity: String(item.quantity ?? ''),
     price: item.price ?? null,
     createdAt: item.createdAt ?? 0,
+    ...(text ? { note: text } : {}),
   };
   return [...earlier, record].slice(-MAX_REMOVED);
 }

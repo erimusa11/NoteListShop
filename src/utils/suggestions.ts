@@ -1,8 +1,15 @@
 import type { ItemListKey, ShoppingItem, ShoppingTrip } from '@/types/models';
+import type { Category } from '@/utils/categories';
 
 export interface Suggestion {
+  /** Tells suggestions apart: the normalized text, with the group in front of it when it has one. */
   key: string;
+  /** The normalized `name`, which what is being typed is matched against. */
+  search: string;
+  /** What to add. In a category with groups (Drion, Kia Morning…) this is the description, written under `group`. */
   name: string;
+  /** The group (Drion, Naftë…) that `name` was written under. Missing for an item that has a name of its own. */
+  group?: string;
   quantity: string;
   price: number | null;
   count: number;
@@ -19,53 +26,96 @@ export function normalizeText(value: string): string {
 }
 
 // Anything with these fields can be suggested: an item in a list, or one that was deleted from it.
-type SuggestionSource = Pick<ShoppingItem, 'name' | 'quantity' | 'price' | 'createdAt'>;
+type SuggestionSource = Pick<ShoppingItem, 'name' | 'quantity' | 'price' | 'createdAt'> & { note?: string };
 
-export function buildSuggestions(items: SuggestionSource[]): Suggestion[] {
-  const byName = new Map<string, Suggestion>();
+/** How a category with groups (`nameOptions`) turns its items into suggestions. */
+export interface SuggestionGroups {
+  /** The groups, e.g. Drion, Alois. */
+  names: string[];
+  /** The group alone is the whole item (Naftë, with a price), so an item without a description is suggested as well. */
+  bare: boolean;
+}
+
+/** The groups of a category that has them, or undefined for one that does not. */
+export function suggestionGroups(category: Category): SuggestionGroups | undefined {
+  const names = category.nameOptions;
+  if (!names || names.length === 0) return undefined;
+  return { names, bare: !category.showNote && !category.otherOption };
+}
+
+interface Candidate {
+  text: string;
+  group?: string;
+  quantity: string;
+  price: number | null;
+  createdAt: number;
+}
+
+// In a category with groups many items share a name (every Drion), so what tells them apart, and what is worth
+// suggesting, is the description under the name; an item whose name is none of the groups has that name to suggest.
+function candidates(items: SuggestionSource[], groups?: SuggestionGroups): Candidate[] {
+  const wanted = groups?.names.map(normalizeText) ?? [];
+  const found: Candidate[] = [];
   for (const item of items) {
-    const key = normalizeText(item.name);
-    if (!key) continue;
-    const existing = byName.get(key);
+    const { quantity, price, createdAt } = item;
+    const name = String(item.name ?? '').trim();
+    const index = groups ? wanted.indexOf(normalizeText(name)) : -1;
+    if (!groups || index === -1) {
+      found.push({ text: name, quantity, price, createdAt });
+      continue;
+    }
+    const note = typeof item.note === 'string' ? item.note.trim() : '';
+    const group = groups.names[index];
+    if (note) found.push({ text: note, group, quantity, price, createdAt });
+    else if (groups.bare) found.push({ text: group, group, quantity, price, createdAt });
+  }
+  return found;
+}
+
+export function buildSuggestions(items: SuggestionSource[], groups?: SuggestionGroups): Suggestion[] {
+  const byKey = new Map<string, Suggestion>();
+  for (const { text, group, quantity, price, createdAt } of candidates(items, groups)) {
+    const search = normalizeText(text);
+    if (!search) continue;
+    const key = group ? `${normalizeText(group)}|${search}` : search;
+    const existing = byKey.get(key);
     if (!existing) {
-      byName.set(key, {
-        key,
-        name: String(item.name).trim(),
-        quantity: item.quantity,
-        price: item.price,
-        count: 1,
-        lastUsed: item.createdAt,
-      });
+      byKey.set(key, { key, search, name: text, group, quantity, price, count: 1, lastUsed: createdAt });
     } else {
       existing.count += 1;
-      if (item.createdAt >= existing.lastUsed) {
-        existing.lastUsed = item.createdAt;
-        existing.name = String(item.name).trim();
-        existing.quantity = item.quantity;
-        existing.price = item.price;
+      if (createdAt >= existing.lastUsed) {
+        existing.lastUsed = createdAt;
+        existing.name = text;
+        existing.quantity = quantity;
+        existing.price = price;
       }
     }
   }
-  return [...byName.values()];
+  return [...byKey.values()];
 }
 
 // Suggestions for one kind of item in the current list, built from every list (including what was deleted from them),
 // leaving out what it already has.
-export function buildListSuggestions(trips: ShoppingTrip[], current: ShoppingTrip | undefined, key: ItemListKey): Suggestion[] {
-  const present = new Set((current?.[key] ?? []).map((item) => normalizeText(item.name)));
+export function buildListSuggestions(
+  trips: ShoppingTrip[],
+  current: ShoppingTrip | undefined,
+  key: ItemListKey,
+  groups?: SuggestionGroups,
+): Suggestion[] {
+  const present = new Set(buildSuggestions(current?.[key] ?? [], groups).map((s) => s.key));
   const sources = trips.flatMap((trip): SuggestionSource[] => [
     ...(trip[key] ?? []),
     // `Array.isArray` because a list from damaged saved data may hold something else here.
     ...(Array.isArray(trip.removed) ? trip.removed : []).filter((removed) => removed && removed.list === key),
   ]);
-  return buildSuggestions(sources).filter((s) => !present.has(s.key));
+  return buildSuggestions(sources, groups).filter((s) => !present.has(s.key));
 }
 
 export function pickSuggestions(all: Suggestion[], query: string, limit = 6): Suggestion[] {
   const q = normalizeText(query);
-  const rank = (s: Suggestion) => (s.key.startsWith(q) ? 0 : 1);
+  const rank = (s: Suggestion) => (s.search.startsWith(q) ? 0 : 1);
   return all
-    .filter((s) => (q ? s.key.includes(q) && s.key !== q : true))
+    .filter((s) => (q ? s.search.includes(q) && s.search !== q : true))
     .sort((a, b) => rank(a) - rank(b) || b.count - a.count || b.lastUsed - a.lastUsed)
     .slice(0, limit);
 }

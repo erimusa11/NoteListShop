@@ -21,7 +21,7 @@ export interface IncomeEntry {
 }
 
 /** What a deleted item leaves behind in its list: just enough to suggest it again when adding one. */
-export interface RemovedItem extends Pick<ShoppingItem, 'name' | 'quantity' | 'price' | 'createdAt'> {
+export interface RemovedItem extends Pick<ShoppingItem, 'name' | 'quantity' | 'price' | 'createdAt' | 'note'> {
   list: ItemListKey;
 }
 

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useAnimatedStyle,
@@ -26,14 +26,14 @@ import { TagGridSheet } from '@/components/TagGridSheet';
 import { TagString, type TagOption } from '@/components/TagString';
 import { TotalsBar } from '@/components/TotalsBar';
 import { useTrips } from '@/context/TripsContext';
-import { TAB_SLIDE, TAB_SLIDE_OUT_EASING } from '@/theme/motion';
+import { TAB_SLIDE, TAB_SLIDE_IN_EASING, TAB_SLIDE_OUT_EASING } from '@/theme/motion';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { ItemListKey, ShoppingItem } from '@/types/models';
 import { CATEGORIES, type Category, INCOME_COLOR } from '@/utils/categories';
 import { type ImportantEntry, IMPORTANT_COLOR, IMPORTANT_SECTION, importantItems } from '@/utils/important';
 import { goBackOrHome } from '@/utils/navigation';
 import { buildOptionTotals, itemOption, itemsForOption } from '@/utils/options';
-import { buildListSuggestions, buildSuggestions } from '@/utils/suggestions';
+import { buildListSuggestions, buildSuggestions, suggestionGroups } from '@/utils/suggestions';
 import { categoriesByOpenItems, computeSpentTotal, computeTotal, tripAllItems } from '@/utils/totals';
 
 // 'income' or the `section` of a category.
@@ -165,15 +165,16 @@ export default function TripDetailScreen() {
   const openIncome = useCallback(() => selectSection('income'), [selectSection]);
 
   // Swipe left for the next tab in the strip, right for the previous one; nothing happens past either end.
-  // The lists follow the finger, slide out the way it went, and the next tab slides in from the other side.
+  // The lists follow the finger, slide off the screen the way it went, and the next tab slides in from the other side.
+  // Only the position is animated: a see-through page makes the shadow of every card show as a gray box on Android.
   const reduced = useReducedMotion();
+  const { width: screenW } = useWindowDimensions();
   const tabOrder = useMemo<Section[]>(
     () => ['income', IMPORTANT_SECTION, ...categoryOrder.map((category) => category.section)],
     [categoryOrder],
   );
   const slideX = useSharedValue(0);
-  const slideOpacity = useSharedValue(1);
-  const slideStyle = useAnimatedStyle(() => ({ opacity: slideOpacity.value, transform: [{ translateX: slideX.value }] }));
+  const slideStyle = useAnimatedStyle(() => ({ transform: [{ translateX: slideX.value }] }));
   // Set when the old tab has slid out and the next one was swapped in: the side it slides in from (1: from the right,
   // -1: from the left, 0: no animation). A new object every time, so the effect below always runs once the tab is on screen.
   const [slideIn, setSlideIn] = useState<{ dir: number } | null>(null);
@@ -188,13 +189,11 @@ export default function TripDetailScreen() {
     if (!slideIn) return;
     if (slideIn.dir === 0) {
       slideX.set(0);
-      slideOpacity.set(1);
       return;
     }
-    slideX.set(slideIn.dir * TAB_SLIDE.inDistance);
-    slideX.set(withSpring(0, TAB_SLIDE.spring));
-    slideOpacity.set(withTiming(1, { duration: TAB_SLIDE.inMs }));
-  }, [slideIn, slideX, slideOpacity]);
+    slideX.set(slideIn.dir * screenW);
+    slideX.set(withTiming(0, { duration: TAB_SLIDE.inMs, easing: TAB_SLIDE_IN_EASING }));
+  }, [slideIn, slideX, screenW]);
 
   const swipeTabs = useMemo(() => {
     const index = tabOrder.indexOf(section);
@@ -218,14 +217,13 @@ export default function TripDetailScreen() {
           scheduleOnRN(swapTab, next, 0);
           return;
         }
-        slideX.set(withTiming(-dir * TAB_SLIDE.outDistance, { duration: TAB_SLIDE.outMs, easing: TAB_SLIDE_OUT_EASING }));
-        slideOpacity.set(
-          withTiming(0, { duration: TAB_SLIDE.outMs }, (done) => {
+        slideX.set(
+          withTiming(-dir * screenW, { duration: TAB_SLIDE.outMs, easing: TAB_SLIDE_OUT_EASING }, (done) => {
             if (done) scheduleOnRN(swapTab, next, dir);
           }),
         );
       });
-  }, [tabOrder, section, reduced, swapTab, slideX, slideOpacity]);
+  }, [tabOrder, section, reduced, swapTab, slideX, screenW]);
 
   // Per tab: the group (Drion, Naftë…) its list is narrowed to. Kept here so adding an item can undo it.
   const [optionFilters, setOptionFilters] = useState<Record<Section, string | null>>({});
@@ -289,7 +287,7 @@ export default function TripDetailScreen() {
 
   const activeCategory = CATEGORIES.find((category) => category.section === section);
   const suggestions = useMemo(
-    () => (activeCategory ? buildListSuggestions(trips, trip, activeCategory.key) : []),
+    () => (activeCategory ? buildListSuggestions(trips, trip, activeCategory.key, suggestionGroups(activeCategory)) : []),
     [trips, trip, activeCategory],
   );
 

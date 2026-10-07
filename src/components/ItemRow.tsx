@@ -43,8 +43,10 @@ interface ItemRowProps {
   onMove?: (to: ItemListKey, group?: string) => void;
 }
 
-// Holding a row this long (a deliberate press, not a tap) asks whether to delete it. The row turns red while it is held.
+// Holding a row this long (a deliberate press, not a tap) asks whether to delete it. A thin red line fills along the
+// bottom of the row while it is held, but only after a moment: a tap or the start of a swipe shows nothing.
 const HOLD_TO_DELETE_MS = 1500;
+const HOLD_SHOWS_AFTER_MS = 350;
 const STAR_COLOR = '#D99100';
 const CLAMP = Extrapolation.CLAMP;
 
@@ -209,7 +211,7 @@ export function ItemRow({
     opacity: strike.value > 0 && editing.value === 0 ? 1 : 0,
   }));
 
-  const holdStyle = useAnimatedStyle(() => ({ opacity: 0.22 * hold.value }));
+  const holdStyle = useAnimatedStyle(() => ({ width: `${hold.value * 100}%` }));
 
   // Press and hold anywhere on the row (also on its texts, price and star) to be asked whether to delete it.
   const holdToDelete = Gesture.LongPress()
@@ -217,14 +219,19 @@ export function ItemRow({
     .maxDistance(12)
     .runOnJS(true)
     .onBegin(() => {
-      hold.value = withTiming(1, { duration: HOLD_TO_DELETE_MS, easing: Easing.linear });
+      hold.set(
+        withDelay(
+          HOLD_SHOWS_AFTER_MS,
+          withTiming(1, { duration: HOLD_TO_DELETE_MS - HOLD_SHOWS_AFTER_MS, easing: Easing.linear }),
+        ),
+      );
     })
     .onStart(() => {
       setConfirmUsed(true);
       setConfirmOpen(true);
     })
     .onFinalize(() => {
-      hold.value = withTiming(0, { duration: 150 });
+      hold.set(withTiming(0, { duration: 150 }));
     });
 
   return (
@@ -376,7 +383,9 @@ export function ItemRow({
               />
             </Pressable>
           </View>
-          <Animated.View style={[styles.holdWash, holdStyle]} pointerEvents="none" />
+          <View style={styles.holdTrack} pointerEvents="none">
+            <Animated.View style={[styles.holdLine, holdStyle]} />
+          </View>
         </Animated.View>
       </GestureDetector>
       {confirmUsed && (
@@ -434,7 +443,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   cardOrigin: { transformOrigin: 'right center' },
-  holdWash: { ...StyleSheet.absoluteFill, borderRadius: radii.md, backgroundColor: colors.danger },
+  holdTrack: { position: 'absolute', left: radii.md, right: radii.md, bottom: 0, height: 3 },
+  holdLine: { height: 3, borderRadius: 2, backgroundColor: colors.danger },
   checkbox: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   layer: {
     position: 'absolute',

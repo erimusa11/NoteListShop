@@ -65,10 +65,22 @@ export function AddItemButton({
 
   const priceValue = parseFloat(price.replace(',', '.'));
   const canSubmit = name.trim().length > 0 && (!requirePrice || (Number.isFinite(priceValue) && priceValue > 0));
-  const shown = useMemo(() => pickSuggestions(suggestions, name), [suggestions, name]);
+  // With choices (Drion, Kia Morning…), `name` is the choice picked and what is typed is the description (`note`), or, with
+  // the "other" choice, the name itself. What is suggested follows: before a choice is picked, everything used before;
+  // after one, the descriptions used under it; with "other", the names used without a choice.
+  const choiceMade = !!nameOptions && !other && name !== '';
+  const query = !nameOptions || other ? name : choiceMade ? note : '';
+  const shown = useMemo(() => {
+    if (!nameOptions) return pickSuggestions(suggestions, name);
+    if (other) return pickSuggestions(suggestions.filter((s) => !s.group), name);
+    if (choiceMade) return pickSuggestions(suggestions.filter((s) => s.group === name), note);
+    return pickSuggestions(suggestions, '');
+  }, [suggestions, nameOptions, other, choiceMade, name, note]);
 
   const pick = (s: Suggestion) => {
-    onAdd(s.name, showQuantity ? normalizeQuantity(s.quantity) : '', s.price, priority);
+    // A description goes in as the note under its group; a group alone (Naftë) is just that name.
+    const text = s.group && s.group !== s.name ? s.name : undefined;
+    onAdd(s.group ?? s.name, showQuantity ? normalizeQuantity(s.quantity) : '', s.price, priority, text);
     close();
   };
 
@@ -158,9 +170,9 @@ export function AddItemButton({
           </>
         )}
 
-        {!nameOptions && shown.length > 0 && (
+        {shown.length > 0 && (
           <View style={styles.suggestions}>
-            <Text style={styles.suggestionsLabel}>{name.trim() ? 'Sugjerime' : 'Më të përdorurat'}</Text>
+            <Text style={styles.suggestionsLabel}>{query.trim() ? 'Sugjerime' : 'Më të përdorurat'}</Text>
             <View style={styles.chips}>
               {shown.map((s) => (
                 <Pressable
@@ -172,6 +184,8 @@ export function AddItemButton({
                 >
                   <Ionicons name="add-circle" size={16} color={colors.primary} />
                   <Text style={styles.chipText}>{s.name}</Text>
+                  {/* Before a choice is picked, say which one the description belongs to. */}
+                  {!choiceMade && s.group && s.group !== s.name && <Text style={styles.chipPrice}>{s.group}</Text>}
                   {s.price != null && <Text style={styles.chipPrice}>{formatNumber(s.price)}</Text>}
                 </Pressable>
               ))}
