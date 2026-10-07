@@ -1,10 +1,10 @@
-import { Keyframe, ReduceMotion } from 'react-native-reanimated';
+import { Easing, Keyframe, ReduceMotion } from 'react-native-reanimated';
 
 // One dial for every animation in the app. 1 plays them at the length they were authored with;
 // 0.25 plays them at a quarter of it, so nothing waits on an animation. Raise it to bring them back.
 export const DURATION_SCALE = 0.25;
 
-// `ms` and `spring` are worklets because animation callbacks (the swipe's armed rattle, the check stamp's thud)
+// `ms` and `spring` are worklets because animation callbacks (the check stamp's thud)
 // call them on the UI thread, where a plain function throws and takes the app down.
 
 /** A duration or delay in milliseconds, shortened by the dial. */
@@ -34,6 +34,22 @@ export const dealIn = (i: number) =>
     .duration(ms(220))
     .delay(ms(Math.min(i, 4) * 25))
     .reduceMotion(ReduceMotion.System);
+
+// Switching category by swiping the lists sideways: they follow the finger, slide off the screen the way it went, and
+// the next tab slides in from the other side. Only the position changes, never the opacity: on Android a see-through
+// page turns the shadow (elevation) of every card into a gray box. Real milliseconds, not run through the dial above:
+// the dial makes everything near-instant, and this one is meant to be seen.
+export const TAB_SLIDE = {
+  /** How much of the finger's movement the lists follow (the rest is resistance); much less at the first and last tab. */
+  pull: 0.9,
+  edgePull: 0.18,
+  outMs: 140,
+  inMs: 280,
+  /** Back to place when the swipe was too short; no overshoot, so no gap opens at the edge. */
+  spring: { damping: 26, stiffness: 260, mass: 0.8, overshootClamping: true },
+};
+export const TAB_SLIDE_OUT_EASING = Easing.in(Easing.quad);
+export const TAB_SLIDE_IN_EASING = Easing.out(Easing.cubic);
 
 export const STAMP_MS = ms(80);
 export const TEAR = { fly: ms(130), collapseDelay: ms(80), collapse: ms(120) };

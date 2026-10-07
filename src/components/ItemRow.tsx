@@ -1,19 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
   Extrapolation,
   interpolate,
-  interpolateColor,
-  SharedValue,
-  useAnimatedReaction,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
   withDelay,
-  withRepeat,
   withSequence,
   withSpring,
   withTiming,
@@ -23,10 +19,11 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { BottomSheet } from '@/components/BottomSheet';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { InlineEditableField } from '@/components/InlineEditableField';
+import { MoveItemSheet } from '@/components/MoveItemSheet';
 import { PrioritySelector } from '@/components/PrioritySelector';
 import { ms, spring, STAMP_MS, SUCK, TEAR } from '@/theme/motion';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
-import type { ShoppingItem } from '@/types/models';
+import type { ItemListKey, ShoppingItem } from '@/types/models';
 import { normalizePriority, priorityInfo } from '@/utils/priority';
 import { DEFAULT_QUANTITY, normalizeQuantity, parseQuantity, sanitizeQuantityInput } from '@/utils/quantity';
 import { formatNumber, itemTotal } from '@/utils/totals';
@@ -39,83 +36,40 @@ interface ItemRowProps {
   /** Fills or empties the star; a starred item also shows up in the other lists and in new ones. */
   onToggleStar: () => void;
   showQuantity?: boolean;
+  /** Which category the item belongs to, shown above its name; for a list that mixes several categories. */
+  tag?: { label: string; color: string };
+  /** The category the item is in. With `onMove`, the row gets a button to move it to another category. */
+  moveFrom?: ItemListKey;
+  onMove?: (to: ItemListKey, group?: string) => void;
 }
 
-// The delete panel is 104 wide. The row has to be pulled almost all the way, and `friction` makes the finger travel
-// about twice as far as the row moves, so a light or accidental swipe does nothing.
-const ARM_AT = 88;
-const SWIPE_FRICTION = 2.2;
-const SWIPE_START_OFFSET = 30;
+// Holding a row this long (a deliberate press, not a tap) asks whether to delete it. A thin red line fills along the
+// bottom of the row while it is held, but only after a moment: a tap or the start of a swipe shows nothing.
+const HOLD_TO_DELETE_MS = 1500;
+const HOLD_SHOWS_AFTER_MS = 350;
 const STAR_COLOR = '#D99100';
 const CLAMP = Extrapolation.CLAMP;
 
-function DeleteAction({
-  translation,
-  swipe,
-  armed,
-}: {
-  translation: SharedValue<number>;
-  swipe: SharedValue<number>;
-  armed: SharedValue<number>;
-}) {
-  const rattle = useSharedValue(0);
-
-  useAnimatedReaction(
-    () => Math.min(1, Math.max(0, -translation.value / ARM_AT)),
-    (v) => {
-      swipe.value = v;
-    },
-  );
-
-  useAnimatedReaction(
-    () => translation.value <= -ARM_AT,
-    (isArmed, prev) => {
-      if (isArmed !== prev) {
-        armed.value = withSpring(isArmed ? 1 : 0, spring({ damping: 9, stiffness: 420 }));
-        if (isArmed) {
-          rattle.value = withSequence(
-            withTiming(-14, { duration: ms(25) }),
-            withRepeat(withTiming(14, { duration: ms(50) }), 4, true),
-            withTiming(0, { duration: ms(25) }),
-          );
-        }
-      }
-    },
-  );
-
-  const stripStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(swipe.value, [0, 0.7, 1], ['#F8CFCA', colors.danger, colors.danger]),
-  }));
-
-  const iconStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(swipe.value, [0, 0.4, 1], [0, 0.6, 1], CLAMP),
-    transform: [{ scale: 0.6 + 0.7 * armed.value }, { rotate: `${rattle.value}deg` }],
-  }));
-
-  return (
-    <Animated.View style={[styles.deleteAction, stripStyle]}>
-      <View style={styles.perforation} pointerEvents="none">
-        {[0, 1, 2, 3, 4].map((n) => (
-          <View key={n} style={styles.perfDot} />
-        ))}
-      </View>
-      <Animated.View style={iconStyle}>
-        <Ionicons name="trash" size={24} color="#FFFFFF" />
-      </Animated.View>
-    </Animated.View>
-  );
-}
-
-export function ItemRow({ item, onToggle, onUpdate, onRemove, onToggleStar, showQuantity = true }: ItemRowProps) {
+export function ItemRow({
+  item,
+  onToggle,
+  onUpdate,
+  onRemove,
+  onToggleStar,
+  showQuantity = true,
+  tag,
+  moveFrom,
+  onMove,
+}: ItemRowProps) {
   const reduced = useReducedMotion();
   const [priorityOpen, setPriorityOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  // The delete panel and the two pop-ups are only built once they are needed: a list has many rows and
-  // most of them are never swiped or opened, so drawing and tearing them down for every row was slow.
-  const [swiped, setSwiped] = useState(false);
+  // The pop-ups are only built once they are needed: a list has many rows and most of them are never
+  // held or opened, so drawing and tearing them down for every row was slow.
   const [priorityUsed, setPriorityUsed] = useState(false);
   const [confirmUsed, setConfirmUsed] = useState(false);
-  const swipeRef = useRef<SwipeableMethods>(null);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveUsed, setMoveUsed] = useState(false);
   const starred = item.sharedId !== undefined;
   // The price is for one; the row costs price × quantity, shown only when that differs from the price.
   const lineTotal = showQuantity && item.price != null && parseQuantity(item.quantity) !== 1 ? itemTotal(item) : null;
@@ -129,8 +83,8 @@ export function ItemRow({ item, onToggle, onUpdate, onRemove, onToggleStar, show
   const nameW = useSharedValue(0);
   const editing = useSharedValue(0);
 
-  const swipe = useSharedValue(0);
-  const armed = useSharedValue(0);
+  // 0 → 1 while the row is held, so it turns red until the confirmation asks to delete it.
+  const hold = useSharedValue(0);
   const kind = useSharedValue(0);
   const fly = useSharedValue(0);
   const windup = useSharedValue(0);
@@ -139,11 +93,9 @@ export function ItemRow({ item, onToggle, onUpdate, onRemove, onToggleStar, show
   const cardW = useSharedValue(320);
 
   const dismissingRef = useRef(false);
-  const onRemoveRef = useRef(onRemove);
-  useEffect(() => {
-    onRemoveRef.current = onRemove;
-  }, [onRemove]);
-  const finish = useCallback(() => onRemoveRef.current(), []);
+  // What runs once the row has flown away: the delete, or the move to another category.
+  const afterRef = useRef<() => void>(() => {});
+  const finish = useCallback(() => afterRef.current(), []);
 
   const shown = useRef(item.bought);
   const play = (bought: boolean) => {
@@ -182,13 +134,14 @@ export function ItemRow({ item, onToggle, onUpdate, onRemove, onToggleStar, show
     onToggle();
   };
 
-  const dismiss = (kindArg: 'tear' | 'suck') => {
+  const dismiss = (kindArg: 'tear' | 'suck', then: () => void) => {
     if (dismissingRef.current) return;
     dismissingRef.current = true;
     if (reduced) {
-      onRemoveRef.current();
+      then();
       return;
     }
+    afterRef.current = then;
     const isSuck = kindArg === 'suck';
     kind.value = isSuck ? 1 : 0;
     const T = isSuck ? SUCK : TEAR;
@@ -223,13 +176,12 @@ export function ItemRow({ item, onToggle, onUpdate, onRemove, onToggleStar, show
   const cardStyle = useAnimatedStyle(() => {
     const k = kind.value;
     const f = fly.value;
-    const tilt = 2 * swipe.value;
     const shrink = k === 1 ? Math.max(0.001, 1 - f) : 1;
     return {
       opacity: interpolate(f, [0, 0.8, 1], [1, 1, 0]),
       transform: [
         { translateX: k === 0 ? -f * cardW.value : 0 },
-        { rotate: `${k === 0 ? tilt + 8 * f : -8 * f}deg` },
+        { rotate: `${k === 0 ? 8 * f : -8 * f}deg` },
         { scaleX: (1 + 0.012 * thud.value - 0.03 * windup.value) * shrink },
         { scaleY: (1 - 0.035 * thud.value + 0.06 * windup.value) * shrink },
         { translateY: 1.5 * thud.value },
@@ -259,6 +211,29 @@ export function ItemRow({ item, onToggle, onUpdate, onRemove, onToggleStar, show
     opacity: strike.value > 0 && editing.value === 0 ? 1 : 0,
   }));
 
+  const holdStyle = useAnimatedStyle(() => ({ width: `${hold.value * 100}%` }));
+
+  // Press and hold anywhere on the row (also on its texts, price and star) to be asked whether to delete it.
+  const holdToDelete = Gesture.LongPress()
+    .minDuration(HOLD_TO_DELETE_MS)
+    .maxDistance(12)
+    .runOnJS(true)
+    .onBegin(() => {
+      hold.set(
+        withDelay(
+          HOLD_SHOWS_AFTER_MS,
+          withTiming(1, { duration: HOLD_TO_DELETE_MS - HOLD_SHOWS_AFTER_MS, easing: Easing.linear }),
+        ),
+      );
+    })
+    .onStart(() => {
+      setConfirmUsed(true);
+      setConfirmOpen(true);
+    })
+    .onFinalize(() => {
+      hold.set(withTiming(0, { duration: 150 }));
+    });
+
   return (
     <Animated.View
       style={[styles.slot, slotStyle]}
@@ -268,27 +243,7 @@ export function ItemRow({ item, onToggle, onUpdate, onRemove, onToggleStar, show
         cardW.value = e.nativeEvent.layout.width;
       }}
     >
-      <ReanimatedSwipeable
-        ref={swipeRef}
-        containerStyle={styles.swipeContainer}
-        // Until the first drag an empty panel of the same size stands in, so the swipe measures the same width.
-        renderRightActions={(_progress, translation) =>
-          swiped ? (
-            <DeleteAction translation={translation} swipe={swipe} armed={armed} />
-          ) : (
-            <View style={styles.deleteAction} />
-          )
-        }
-        onSwipeableOpenStartDrag={() => setSwiped(true)}
-        rightThreshold={ARM_AT}
-        dragOffsetFromRightEdge={SWIPE_START_OFFSET}
-        overshootRight={false}
-        friction={SWIPE_FRICTION}
-        onSwipeableOpen={() => {
-          setConfirmUsed(true);
-          setConfirmOpen(true);
-        }}
-      >
+      <GestureDetector gesture={holdToDelete}>
         <Animated.View style={[styles.card, shadow, styles.cardOrigin, cardStyle]}>
           <Pressable onPress={handleToggle} hitSlop={8} style={styles.checkbox}>
             <Animated.View style={outlineStyle}>
@@ -303,23 +258,49 @@ export function ItemRow({ item, onToggle, onUpdate, onRemove, onToggleStar, show
           </Pressable>
 
           <View style={styles.middle}>
+            {tag && (
+              <Text style={[styles.tag, { color: tag.color }]} numberOfLines={1}>
+                {tag.label}
+              </Text>
+            )}
+            {/* With a note (what it was for), the note is the big title and the name (e.g. the car) is the small text. */}
             <View
               style={styles.nameWrap}
               onLayout={(e) => {
                 nameW.value = e.nativeEvent.layout.width;
               }}
             >
+              {item.note ? (
+                <InlineEditableField
+                  value={item.note}
+                  placeholder="Përshkrimi"
+                  onChange={(note) => onUpdate({ note: note.trim() })}
+                  onEditingChange={(e) => {
+                    editing.value = e ? 1 : 0;
+                  }}
+                  textStyle={[styles.name, item.bought && styles.nameBought]}
+                />
+              ) : (
+                <InlineEditableField
+                  value={item.name}
+                  placeholder="Emri i artikullit"
+                  onChange={(name) => onUpdate({ name })}
+                  onEditingChange={(e) => {
+                    editing.value = e ? 1 : 0;
+                  }}
+                  textStyle={[styles.name, item.bought && styles.nameBought]}
+                />
+              )}
+              <Animated.View style={[styles.strike, strikeStyle]} pointerEvents="none" />
+            </View>
+            {item.note ? (
               <InlineEditableField
                 value={item.name}
                 placeholder="Emri i artikullit"
                 onChange={(name) => onUpdate({ name })}
-                onEditingChange={(e) => {
-                  editing.value = e ? 1 : 0;
-                }}
-                textStyle={[styles.name, item.bought && styles.nameBought]}
+                textStyle={styles.note}
               />
-              <Animated.View style={[styles.strike, strikeStyle]} pointerEvents="none" />
-            </View>
+            ) : null}
             {showQuantity && (
               <View style={styles.quantityRow}>
                 <InlineEditableField
@@ -338,21 +319,37 @@ export function ItemRow({ item, onToggle, onUpdate, onRemove, onToggleStar, show
                 )}
               </View>
             )}
-            {!item.bought && (
-              <Pressable
-                onPress={() => {
-                  setPriorityUsed(true);
-                  setPriorityOpen(true);
-                }}
-                hitSlop={6}
-                accessibilityRole="button"
-                accessibilityLabel={`Rëndësia: ${priority.label}. Ndrysho`}
-                style={[styles.priorityTag, urgent && { backgroundColor: priority.color + '22' }]}
-              >
-                <Ionicons name={urgent ? 'flag' : 'flag-outline'} size={13} color={priority.color} />
-                {urgent && <Text style={[styles.priorityText, { color: priority.color }]}>{priority.label}</Text>}
-              </Pressable>
-            )}
+            <View style={styles.actions}>
+              {!item.bought && (
+                <Pressable
+                  onPress={() => {
+                    setPriorityUsed(true);
+                    setPriorityOpen(true);
+                  }}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Rëndësia: ${priority.label}. Ndrysho`}
+                  style={[styles.priorityTag, urgent && { backgroundColor: priority.color + '22' }]}
+                >
+                  <Ionicons name={urgent ? 'flag' : 'flag-outline'} size={13} color={priority.color} />
+                  {urgent && <Text style={[styles.priorityText, { color: priority.color }]}>{priority.label}</Text>}
+                </Pressable>
+              )}
+              {moveFrom && onMove && (
+                <Pressable
+                  onPress={() => {
+                    setMoveUsed(true);
+                    setMoveOpen(true);
+                  }}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel="Kalo në kategori tjetër"
+                  style={styles.moveButton}
+                >
+                  <Ionicons name="swap-horizontal" size={14} color={colors.textMuted} />
+                </Pressable>
+              )}
+            </View>
           </View>
 
           <View style={styles.right}>
@@ -386,22 +383,37 @@ export function ItemRow({ item, onToggle, onUpdate, onRemove, onToggleStar, show
               />
             </Pressable>
           </View>
+          <View style={styles.holdTrack} pointerEvents="none">
+            <Animated.View style={[styles.holdLine, holdStyle]} />
+          </View>
         </Animated.View>
-      </ReanimatedSwipeable>
+      </GestureDetector>
       {confirmUsed && (
         <ConfirmDialog
           visible={confirmOpen}
           title="Fshi artikullin?"
           message={`A je i sigurt që do të fshish "${item.name}"?`}
-          details={starred ? ['Do të fshihet vetëm nga kjo listë; në listat e tjera mbetet.'] : []}
+          details={starred ? ['Do të fshihet edhe nga listat e tjera, përveç atyre ku është shënuar (✓).'] : []}
           confirmLabel="Fshi"
           onConfirm={() => {
             setConfirmOpen(false);
-            dismiss('tear');
+            dismiss('tear', onRemove);
           }}
-          onCancel={() => {
-            setConfirmOpen(false);
-            swipeRef.current?.close();
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
+      {moveUsed && moveFrom && onMove && (
+        <MoveItemSheet
+          visible={moveOpen}
+          onClose={() => setMoveOpen(false)}
+          current={moveFrom}
+          itemName={item.name}
+          starred={starred}
+          onPick={(to, group) => {
+            setMoveOpen(false);
+            // Staying in the same category (only its group changes), the row stays: nothing to fly away.
+            if (to === moveFrom) onMove(to, group);
+            else dismiss('suck', () => onMove(to, group));
           }}
         />
       )}
@@ -422,7 +434,6 @@ export function ItemRow({ item, onToggle, onUpdate, onRemove, onToggleStar, show
 
 const styles = StyleSheet.create({
   slot: { paddingBottom: spacing.sm },
-  swipeContainer: { overflow: 'visible' },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -432,22 +443,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   cardOrigin: { transformOrigin: 'right center' },
-  deleteAction: {
-    width: 96,
-    marginLeft: spacing.sm,
-    borderRadius: radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  perforation: {
-    position: 'absolute',
-    left: 6,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'space-evenly',
-  },
-  perfDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#FFFFFF', opacity: 0.7 },
+  holdTrack: { position: 'absolute', left: radii.md, right: radii.md, bottom: 0, height: 3 },
+  holdLine: { height: 3, borderRadius: 2, backgroundColor: colors.danger },
   checkbox: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   layer: {
     position: 'absolute',
@@ -466,6 +463,7 @@ const styles = StyleSheet.create({
     borderColor: colors.success,
   },
   middle: { flex: 1, gap: 2 },
+  tag: { fontSize: 11, fontWeight: '700', paddingHorizontal: spacing.xs },
   nameWrap: { alignSelf: 'flex-start', maxWidth: '100%' },
   strike: {
     position: 'absolute',
@@ -479,17 +477,27 @@ const styles = StyleSheet.create({
   name: { fontSize: 16, fontWeight: '600', color: colors.text },
   nameBought: { color: colors.textMuted },
   quantity: { fontSize: 13, color: colors.textMuted },
+  note: { fontSize: 13, color: colors.textMuted },
   quantityRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
   lineTotal: { fontSize: 13, fontWeight: '700', color: colors.primaryDark },
+  // Wraps: on a narrow phone a long importance label plus the move button is wider than the column, and the button
+  // would stick out over the price.
+  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', alignSelf: 'flex-start', gap: spacing.sm, marginTop: 2 },
   priorityTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
     gap: 4,
     borderRadius: radii.pill,
     paddingVertical: 2,
     paddingHorizontal: 6,
-    marginTop: 2,
+  },
+  moveButton: {
+    borderRadius: radii.pill,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    backgroundColor: colors.background,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
   },
   priorityText: { fontSize: 11, fontWeight: '700' },
   right: { alignItems: 'flex-end', gap: spacing.md - 4 },

@@ -30,6 +30,8 @@ export interface Category {
    * in the totals, the filter and the report; without it, a name that is not a choice is grouped under "Të tjera".
    */
   otherOption?: string;
+  /** With `nameOptions`: also ask for a short optional text (what it was for), shown as the title in the list, with the name small under it. */
+  showNote?: boolean;
   /** Title of the report that splits this category's spending by `nameOptions`. */
   optionsReportTitle?: string;
   emptyText: string;
@@ -84,6 +86,13 @@ export const CATEGORIES: Category[] = [
     showQuantity: false,
     totalLabel: 'Gjithsej dëshirat',
     addTitle: 'Shto dëshirë',
+    namePlaceholder: 'P.sh. Tavolinë, Biçikletë…',
+    // Wishes saved before the choice existed have free-text names (Tavolinë…); they fall under "Për të gjithë".
+    nameOptions: ['Drion', 'Alois', 'Alma', 'Eri'],
+    optionsLabel: 'Për kë',
+    otherOption: 'Për të gjithë',
+    showNote: true,
+    optionsReportTitle: 'Dëshirat sipas personit',
     emptyText: 'Lista e dëshirave është bosh.',
   },
   {
@@ -113,10 +122,11 @@ export const CATEGORIES: Category[] = [
     totalLabel: 'Gjithsej makina & shërbime',
     addTitle: 'Shto shpenzim',
     namePlaceholder: 'P.sh. Servis, Sigurim, Taksa…',
-    // Entries saved before the choice existed have free-text names (Servis, Sigurim…); they fall under "Tjetër".
+    // Entries saved before the choice existed have free-text names (Servis, Sigurim…); they fall under "Të dyja".
     nameOptions: ['Kia Morning', 'Hyundai Tucson'],
     optionsLabel: 'Për cilën makinë',
-    otherOption: 'Tjetër',
+    otherOption: 'Të dyja',
+    showNote: true,
     optionsReportTitle: 'Shpenzimet sipas makinës',
     emptyText: 'Nuk ka ende asnjë shpenzim.',
   },
@@ -205,6 +215,34 @@ export const CATEGORIES: Category[] = [
     totalLabel: 'Gjithsej guzhina & enë guzhine',
     addTitle: 'Shto artikull',
     namePlaceholder: 'P.sh. Tenxhere, Pjata…',
+    emptyText: 'Nuk ka ende asnjë artikull.',
+  },
+  {
+    key: 'bathroom',
+    section: 'bathroom',
+    label: 'Banjo & Produkte Pastrimi',
+    // Shorter than the name so it fits on two lines in the narrow tab.
+    tabLabel: 'Banjo &\nPastrimi',
+    icon: 'water-outline',
+    activeIcon: 'water',
+    color: '#A23FB3',
+    showQuantity: false,
+    totalLabel: 'Gjithsej banjo & produkte pastrimi',
+    addTitle: 'Shto artikull',
+    namePlaceholder: 'P.sh. Shampo, Sapun, Pastrues…',
+    emptyText: 'Nuk ka ende asnjë artikull.',
+  },
+  {
+    key: 'home',
+    section: 'home',
+    label: 'Shtëpia',
+    icon: 'home-outline',
+    activeIcon: 'home',
+    color: '#4F46A5',
+    showQuantity: false,
+    totalLabel: 'Gjithsej shtëpia',
+    addTitle: 'Shto artikull',
+    namePlaceholder: 'P.sh. Mobilje, Perde, Dekorime…',
     emptyText: 'Nuk ka ende asnjë artikull.',
   },
 ];

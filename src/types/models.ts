@@ -9,6 +9,8 @@ export interface ShoppingItem {
   priority?: number;
   /** Set when the item is starred. Its copies in other lists carry the same id and follow its name. */
   sharedId?: string;
+  /** What it was for (e.g. "Servis"), in a category that asks for it; shown under the name. */
+  note?: string;
 }
 
 export interface IncomeEntry {
@@ -16,6 +18,11 @@ export interface IncomeEntry {
   name: string;
   amount: number;
   createdAt: number;
+}
+
+/** What a deleted item leaves behind in its list: just enough to suggest it again when adding one. */
+export interface RemovedItem extends Pick<ShoppingItem, 'name' | 'quantity' | 'price' | 'createdAt' | 'note'> {
+  list: ItemListKey;
 }
 
 /** The item lists every shopping list owns. Each list has its own copy, so checking one off only affects that list. */
@@ -31,7 +38,9 @@ export type ItemListKey =
   | 'outings'
   | 'kitchen'
   | 'playstation'
-  | 'health';
+  | 'health'
+  | 'bathroom'
+  | 'home';
 
 // Besides `items` (Produktet), a list may not have every category yet (lists saved before it was added).
 // The categories and their names are in utils/categories.ts.
@@ -43,4 +52,6 @@ export interface ShoppingTrip extends Partial<Record<Exclude<ItemListKey, 'items
   /** Produktet */
   items: ShoppingItem[];
   incomes?: IncomeEntry[];
+  /** Items deleted from this list, one per name and category. Only used for suggestions; they are not shown anywhere else. */
+  removed?: RemovedItem[];
 }

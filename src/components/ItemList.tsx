@@ -17,13 +17,13 @@ interface ItemListProps {
   limit?: number;
 }
 
-// Every row is heavy (animations, swipe), so draw only what is on screen first and fill in the rest in small batches.
+// Every row is heavy (animations, hold gesture), so draw only what is on screen first and fill in the rest in small batches.
 // A small window keeps few rows alive at once, which also keeps closing the list quick.
-const LIST_TUNING = { initialNumToRender: 7, maxToRenderPerBatch: 3, updateCellsBatchingPeriod: 60, windowSize: 5 } as const;
+export const LIST_TUNING = { initialNumToRender: 7, maxToRenderPerBatch: 3, updateCellsBatchingPeriod: 60, windowSize: 5 } as const;
 
 // Redrawn only when its own items change, not when another tab is opened or another list is edited.
 export const ItemList = memo(function ItemList({ tripId, list, items, emptyText, showQuantity = true, limit }: ItemListProps) {
-  const { toggleItem, updateItem, removeItem, toggleStar } = useTripActions();
+  const { toggleItem, updateItem, removeItem, moveItem, toggleStar } = useTripActions();
   const data = useMemo(() => {
     const sorted = sortBoughtLast(items);
     return limit === undefined ? sorted : sorted.slice(0, limit);
@@ -42,6 +42,8 @@ export const ItemList = memo(function ItemList({ tripId, list, items, emptyText,
           onUpdate={(patch) => updateItem(tripId, list, item.id, patch)}
           onRemove={() => removeItem(tripId, list, item.id)}
           onToggleStar={() => toggleStar(tripId, list, item.id)}
+          moveFrom={list}
+          onMove={(to, group) => moveItem(tripId, list, item.id, to, group)}
           showQuantity={showQuantity}
         />
       )}

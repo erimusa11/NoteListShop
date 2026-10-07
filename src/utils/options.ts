@@ -52,6 +52,35 @@ export function itemOption(category: Category, name: string): string | null {
   return groupOf(category)?.(name) ?? null;
 }
 
+/** What an item can be put under in a category with choices: the choices, then its own "other" one if it has it. */
+export function optionTargets(category: Category): string[] {
+  const choices = optionChoices(category);
+  return choices ? [...choices.names, ...(choices.otherAlwaysShown ? [choices.otherLabel] : [])] : [];
+}
+
+/**
+ * The item put under `group` (one of `optionTargets`) of its new category.
+ * A choice (Drion, Naftë…) becomes the name, and what the item was called goes into its description, so nothing is lost
+ * and the row still reads as before. The "other" group is any name that is not a choice: the item goes back to being
+ * called by its description (or its old name), as when it was added.
+ */
+export function withOption(item: ShoppingItem, category: Category, group: string): ShoppingItem {
+  const choices = optionChoices(category);
+  if (!choices) return item;
+
+  const choiceOf = optionMatcher(choices.names);
+  if (group === choices.otherLabel) {
+    const { note, ...rest } = item;
+    const label = (typeof note === 'string' ? note.trim() : '') || String(item.name ?? '').trim();
+    // A name that is itself one of the choices would put the item straight back under that choice.
+    return { ...rest, name: label && choiceOf(label) === choices.names.length ? label : choices.otherLabel };
+  }
+
+  if (normalizeText(item.name) === normalizeText(group)) return { ...item, name: group };
+  const note = (typeof item.note === 'string' ? item.note.trim() : '') || String(item.name ?? '').trim();
+  return { ...item, name: group, ...(note ? { note } : {}) };
+}
+
 export interface OptionTotal {
   name: string;
   color: string;

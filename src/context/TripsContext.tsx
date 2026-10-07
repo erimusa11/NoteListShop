@@ -4,7 +4,7 @@ import { mockBills, mockItems, mockWishlist } from '@/mocks/mockItems';
 import type { IncomeEntry, ItemListKey, ShoppingItem, ShoppingTrip } from '@/types/models';
 import { CATEGORIES } from '@/utils/categories';
 import { formatDateAlbanian } from '@/utils/dates';
-import { copyToTrip, patchItem, starredItems, toggleStar } from '@/utils/tripLists';
+import { copyToTrip, deleteItem, moveToCategory, patchItem, starredItems, toggleStar } from '@/utils/tripLists';
 
 // Only the starred items of the existing lists come along, unchecked and at normal priority.
 function buildTrip(name: string, now: number, existing: ShoppingTrip[] = []): ShoppingTrip {
@@ -32,10 +32,20 @@ function mapItems(
 }
 
 interface TripActions {
-  addItem: (tripId: string, list: ItemListKey, name: string, quantity: string, price: number | null, priority?: number) => void;
+  addItem: (
+    tripId: string,
+    list: ItemListKey,
+    name: string,
+    quantity: string,
+    price: number | null,
+    priority?: number,
+    note?: string,
+  ) => void;
   toggleItem: (tripId: string, list: ItemListKey, itemId: string) => void;
   updateItem: (tripId: string, list: ItemListKey, itemId: string, patch: Partial<ShoppingItem>) => void;
   removeItem: (tripId: string, list: ItemListKey, itemId: string) => void;
+  /** Moves the item to another category (and into one of its groups, if it has them); a starred item takes its copies in every list with it. */
+  moveItem: (tripId: string, list: ItemListKey, itemId: string, to: ItemListKey, group?: string) => void;
   toggleStar: (tripId: string, list: ItemListKey, itemId: string) => void;
 }
 
@@ -69,11 +79,20 @@ export function TripsProvider({ children }: { children: ReactNode }) {
 
   const itemActions = useMemo<TripActions>(
     () => ({
-      addItem: (tripId, list, name, quantity, price, priority = 1) =>
+      addItem: (tripId, list, name, quantity, price, priority = 1, note) =>
         setTrips((prev) =>
           mapItems(prev, tripId, list, (items) => [
             ...items,
-            { id: String(Date.now()), name, quantity, price, bought: false, createdAt: Date.now(), priority },
+            {
+              id: String(Date.now()),
+              name,
+              quantity,
+              price,
+              bought: false,
+              createdAt: Date.now(),
+              priority,
+              ...(note ? { note } : {}),
+            },
           ]),
         ),
       toggleItem: (tripId, list, itemId) =>
@@ -83,8 +102,8 @@ export function TripsProvider({ children }: { children: ReactNode }) {
           ),
         ),
       updateItem: (tripId, list, itemId, patch) => setTrips((prev) => patchItem(prev, tripId, list, itemId, patch)),
-      removeItem: (tripId, list, itemId) =>
-        setTrips((prev) => mapItems(prev, tripId, list, (items) => items.filter((item) => item.id !== itemId))),
+      removeItem: (tripId, list, itemId) => setTrips((prev) => deleteItem(prev, tripId, list, itemId)),
+      moveItem: (tripId, list, itemId, to, group) => setTrips((prev) => moveToCategory(prev, tripId, list, itemId, to, group)),
       toggleStar: (tripId, list, itemId) => setTrips((prev) => toggleStar(prev, tripId, list, itemId)),
     }),
     [],

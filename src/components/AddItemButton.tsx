@@ -10,7 +10,7 @@ import { pickSuggestions, type Suggestion } from '@/utils/suggestions';
 import { formatNumber } from '@/utils/totals';
 
 interface AddItemButtonProps {
-  onAdd: (name: string, quantity: string, price: number | null, priority: number) => void;
+  onAdd: (name: string, quantity: string, price: number | null, priority: number, note?: string) => void;
   showPriority?: boolean;
   showQuantity?: boolean;
   title?: string;
@@ -22,6 +22,8 @@ interface AddItemButtonProps {
   optionsLabel?: string;
   /** One more choice after `nameOptions` with this label; picking it shows a field to type any name. */
   otherOption?: string;
+  /** Under the choices, ask for a short optional text (what it was for). Not asked for the "other" choice, whose typed name is that text. */
+  showNote?: boolean;
   priceLabel?: string;
   submitLabel?: string;
   requirePrice?: boolean;
@@ -36,6 +38,7 @@ export function AddItemButton({
   nameOptions,
   optionsLabel = 'Lloji',
   otherOption,
+  showNote = false,
   priceLabel = 'Çmimi (opsionale)',
   submitLabel = 'Shto në listë',
   requirePrice = false,
@@ -48,11 +51,13 @@ export function AddItemButton({
   const [priority, setPriority] = useState(1);
   // The "other" choice is picked: `name` is then whatever is typed instead of one of `nameOptions`.
   const [other, setOther] = useState(false);
+  const [note, setNote] = useState('');
 
   const close = () => {
     setVisible(false);
     setName('');
     setOther(false);
+    setNote('');
     setQuantity(DEFAULT_QUANTITY);
     setPrice('');
     setPriority(1);
@@ -60,10 +65,22 @@ export function AddItemButton({
 
   const priceValue = parseFloat(price.replace(',', '.'));
   const canSubmit = name.trim().length > 0 && (!requirePrice || (Number.isFinite(priceValue) && priceValue > 0));
-  const shown = useMemo(() => pickSuggestions(suggestions, name), [suggestions, name]);
+  // With choices (Drion, Kia Morning…), `name` is the choice picked and what is typed is the description (`note`), or, with
+  // the "other" choice, the name itself. What is suggested follows: before a choice is picked, everything used before;
+  // after one, the descriptions used under it; with "other", the names used without a choice.
+  const choiceMade = !!nameOptions && !other && name !== '';
+  const query = !nameOptions || other ? name : choiceMade ? note : '';
+  const shown = useMemo(() => {
+    if (!nameOptions) return pickSuggestions(suggestions, name);
+    if (other) return pickSuggestions(suggestions.filter((s) => !s.group), name);
+    if (choiceMade) return pickSuggestions(suggestions.filter((s) => s.group === name), note);
+    return pickSuggestions(suggestions, '');
+  }, [suggestions, nameOptions, other, choiceMade, name, note]);
 
   const pick = (s: Suggestion) => {
-    onAdd(s.name, showQuantity ? normalizeQuantity(s.quantity) : '', s.price, priority);
+    // A description goes in as the note under its group; a group alone (Naftë) is just that name.
+    const text = s.group && s.group !== s.name ? s.name : undefined;
+    onAdd(s.group ?? s.name, showQuantity ? normalizeQuantity(s.quantity) : '', s.price, priority, text);
     close();
   };
 
@@ -75,6 +92,7 @@ export function AddItemButton({
       showQuantity ? normalizeQuantity(quantity) : '',
       Number.isFinite(parsedPrice) ? parsedPrice : null,
       priority,
+      showNote && !other ? note.trim() || undefined : undefined,
     );
     close();
   };
@@ -123,6 +141,19 @@ export function AddItemButton({
                 />
               </>
             )}
+            {showNote && !other && (
+              <>
+                <Text style={[styles.label, styles.otherLabel]}>Përshkrimi (opsionale)</Text>
+                <TextInput
+                  value={note}
+                  onChangeText={setNote}
+                  placeholder={namePlaceholder}
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.input}
+                  returnKeyType="next"
+                />
+              </>
+            )}
           </>
         ) : (
           <>
@@ -139,9 +170,9 @@ export function AddItemButton({
           </>
         )}
 
-        {!nameOptions && shown.length > 0 && (
+        {shown.length > 0 && (
           <View style={styles.suggestions}>
-            <Text style={styles.suggestionsLabel}>{name.trim() ? 'Sugjerime' : 'Më të përdorurat'}</Text>
+            <Text style={styles.suggestionsLabel}>{query.trim() ? 'Sugjerime' : 'Më të përdorurat'}</Text>
             <View style={styles.chips}>
               {shown.map((s) => (
                 <Pressable
@@ -153,6 +184,8 @@ export function AddItemButton({
                 >
                   <Ionicons name="add-circle" size={16} color={colors.primary} />
                   <Text style={styles.chipText}>{s.name}</Text>
+                  {/* Before a choice is picked, say which one the description belongs to. */}
+                  {!choiceMade && s.group && s.group !== s.name && <Text style={styles.chipPrice}>{s.group}</Text>}
                   {s.price != null && <Text style={styles.chipPrice}>{formatNumber(s.price)}</Text>}
                 </Pressable>
               ))}

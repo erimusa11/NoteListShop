@@ -1,4 +1,6 @@
-import type { ItemListKey, ShoppingItem, ShoppingTrip } from '@/types/models';
+import type { ItemListKey, RemovedItem, ShoppingItem, ShoppingTrip } from '@/types/models';
+import { CATEGORIES } from '@/utils/categories';
+import { withOption } from '@/utils/options';
 import { DEFAULT_PRIORITY } from '@/utils/priority';
 import { normalizeText } from '@/utils/suggestions';
 
@@ -23,7 +25,17 @@ function withoutSharedId({ sharedId: _sharedId, ...item }: ShoppingItem): Shoppi
   return item;
 }
 
-// Stars an item: every other list gets a copy (or links the item it already has with the same name).
+// `id`, or `id` with a counter when another item of `items` already has it. Ids only have to be unique within one list
+// (an item is found by its id there), and they can meet: a copy moved into a category that holds an older item that
+// came from the same star.
+function freeId(items: ShoppingItem[], id: string): string {
+  if (!items.some((i) => i.id === id)) return id;
+  let n = 2;
+  while (items.some((i) => i.id === `${id}~${n}`)) n++;
+  return `${id}~${n}`;
+}
+
+// Stars an item: every other list gets a copy (or links the item it already has with the same name and text).
 // Tapping the star again unlinks it everywhere; each list keeps its own item as an ordinary one.
 export function toggleStar(trips: ShoppingTrip[], tripId: string, key: ItemListKey, itemId: string): ShoppingTrip[] {
   const item = trips.find((trip) => trip.id === tripId)?.[key]?.find((i) => i.id === itemId);
@@ -38,17 +50,107 @@ export function toggleStar(trips: ShoppingTrip[], tripId: string, key: ItemListK
     );
   }
 
-  const starred: ShoppingItem = { ...item, sharedId: `${tripId}:${item.id}` };
+  // The category is part of the star's id: an item id is only unique within its list, and two lists of one trip can hold
+  // the same id (after a move), which would give both the same star.
+  const starred: ShoppingItem = { ...item, sharedId: `${tripId}:${key}:${item.id}` };
   const name = normalizeText(item.name);
+  const note = normalizeText(item.note ?? '');
   return trips.map((trip) => {
     const items = trip[key] ?? [];
     if (trip.id === tripId) return { ...trip, [key]: items.map((i) => (i.id === itemId ? starred : i)) };
     const copy = copyToTrip(starred, trip.id);
     // The copy made by an earlier star is still there after unstarring (even if renamed since): link it again
-    // instead of adding a second item with the same id.
-    const twin = items.find((i) => !i.sharedId && (i.id === copy.id || normalizeText(i.name) === name));
+    // instead of adding a second item with the same id. The text counts as well as the name: in a category with groups
+    // (Drion, Kia Morning…) many unrelated items share a name, and linking one of them would make a delete or a move of
+    // this item reach it too.
+    const twin = items.find(
+      (i) => !i.sharedId && (i.id === copy.id || (normalizeText(i.name) === name && normalizeText(i.note ?? '') === note)),
+    );
     if (twin) return { ...trip, [key]: items.map((i) => (i === twin ? { ...i, sharedId: starred.sharedId } : i)) };
-    return { ...trip, [key]: [...items, copy] };
+    return { ...trip, [key]: [...items, { ...copy, id: freeId(items, copy.id) }] };
+  });
+}
+
+// How many deleted items one list remembers (the newest). Everything lives in ONE cloud document with a size limit, and
+// a name that was deleted long ago is rarely wanted back.
+const MAX_REMOVED = 60;
+
+// The trip's record of deleted items with this one added, replacing an earlier record of the same name (and the same
+// description, in a category where many items share a name: Drion, Kia Morning…) in the same category.
+function remembered(trip: ShoppingTrip, key: ItemListKey, item: ShoppingItem): RemovedItem[] {
+  const name = normalizeText(item.name);
+  const note = normalizeText(item.note ?? '');
+  const earlier = (Array.isArray(trip.removed) ? trip.removed : []).filter(
+    (removed) =>
+      removed &&
+      typeof removed === 'object' &&
+      !(removed.list === key && normalizeText(removed.name) === name && normalizeText(removed.note ?? '') === note),
+  );
+  // Every field gets a value, never undefined: the cloud save throws on a document that holds one (an item from old or
+  // damaged data may lack a field), and that would stop everything from being saved. Only the description is left out
+  // when there is none, which is every item outside the categories that ask for it.
+  const text = typeof item.note === 'string' ? item.note.trim() : '';
+  const record: RemovedItem = {
+    list: key,
+    name: String(item.name ?? ''),
+    quantity: String(item.quantity ?? ''),
+    price: item.price ?? null,
+    createdAt: item.createdAt ?? 0,
+    ...(text ? { note: text } : {}),
+  };
+  return [...earlier, record].slice(-MAX_REMOVED);
+}
+
+// Deletes an item. A starred item goes from the other lists too, except where it is checked: that stays as a record of
+// what was spent, but as an ordinary item, so it is not copied into new lists. The name is kept for suggestions.
+export function deleteItem(trips: ShoppingTrip[], tripId: string, key: ItemListKey, itemId: string): ShoppingTrip[] {
+  const item = trips.find((trip) => trip.id === tripId)?.[key]?.find((i) => i.id === itemId);
+  if (!item) return trips;
+
+  const { sharedId } = item;
+  return trips.map((trip) => {
+    const items = trip[key] ?? [];
+    if (trip.id === tripId) return { ...trip, [key]: items.filter((i) => i.id !== itemId), removed: remembered(trip, key, item) };
+    if (!sharedId || !items.some((i) => i.sharedId === sharedId)) return trip;
+    return {
+      ...trip,
+      [key]: items.flatMap((i) => (i.sharedId !== sharedId ? [i] : i.bought ? [withoutSharedId(i)] : [])),
+    };
+  });
+}
+
+// Moves an item to another category, and into one of its groups (Drion, Naftë…) when that category has them. A starred
+// item takes all its copies with it, in every list (the checked ones in earlier lists too), so the history follows it;
+// an ordinary item moves alone. Everything else about it stays as it was.
+// With the same category and a `group`, the item stays where it is and only changes group.
+export function moveToCategory(
+  trips: ShoppingTrip[],
+  tripId: string,
+  from: ItemListKey,
+  itemId: string,
+  to: ItemListKey,
+  group?: string,
+): ShoppingTrip[] {
+  const category = CATEGORIES.find((c) => c.key === to);
+  if (from === to && (!group || !category)) return trips;
+  const item = trips.find((trip) => trip.id === tripId)?.[from]?.find((i) => i.id === itemId);
+  if (!item) return trips;
+
+  const { sharedId } = item;
+  const inGroup = (i: ShoppingItem) => (group && category ? withOption(i, category, group) : i);
+  return trips.map((trip) => {
+    const source = trip[from] ?? [];
+    const isMoving = (i: ShoppingItem) => (sharedId ? i.sharedId === sharedId : trip.id === tripId && i.id === itemId);
+    if (!source.some(isMoving)) return trip;
+    if (from === to) return { ...trip, [from]: source.map((i) => (isMoving(i) ? inGroup(i) : i)) };
+    // An item that arrives where an item with its id already is gets a new id, so the two stay apart.
+    const target = trip[to] ?? [];
+    const arrived: ShoppingItem[] = [];
+    for (const i of source.filter(isMoving)) {
+      const moved = inGroup(i);
+      arrived.push({ ...moved, id: freeId([...target, ...arrived], moved.id) });
+    }
+    return { ...trip, [from]: source.filter((i) => !isMoving(i)), [to]: [...target, ...arrived] };
   });
 }
 

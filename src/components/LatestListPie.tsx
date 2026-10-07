@@ -43,7 +43,7 @@ export function LatestListPie({ listName, sections, income }: LatestListPieProps
                 <View key={section.key} style={styles.cell}>
                   <View style={[styles.dot, styles.cellDot, { backgroundColor: CATEGORY_COLORS[section.key] }]} />
                   <View style={styles.cellText}>
-                    <Text style={styles.cellName} numberOfLines={1}>
+                    <Text style={styles.cellName} numberOfLines={2}>
                       {section.label}
                     </Text>
                     <Text style={styles.cellMeta} numberOfLines={1}>
