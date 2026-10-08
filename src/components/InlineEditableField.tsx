@@ -19,8 +19,6 @@ interface InlineEditableFieldProps {
   chip?: boolean;
   /** How many lines the text may take before it is cut off with "…". One by default; a longer text goes on to the next line. */
   numberOfLines?: number;
-  /** Tells how many lines the shown text really takes, e.g. to know whether a long name went on to a second line. */
-  onLineCount?: (lines: number) => void;
   onEditingChange?: (editing: boolean) => void;
 }
 
@@ -37,7 +35,6 @@ export function InlineEditableField({
   align = 'left',
   chip = false,
   numberOfLines = 1,
-  onLineCount,
   onEditingChange,
 }:InlineEditableFieldProps) {
   const [editing, setEditing] = useState(false);
@@ -75,11 +72,7 @@ export function InlineEditableField({
     >
       <View style={align === 'right' ? styles.rowRight : styles.rowLeft}>
         {value ? (
-          <Text
-            style={[styles.text, textStyle]}
-            numberOfLines={numberOfLines}
-            onTextLayout={onLineCount ? (e) => onLineCount(e.nativeEvent.lines.length) : undefined}
-          >
+          <Text style={[styles.text, textStyle]} numberOfLines={numberOfLines}>
             {prefix}
             {displayValue ?? value}
             {suffix}

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -51,6 +51,9 @@ interface ItemRowProps {
 const HOLD_TO_DELETE_MS = 1500;
 const HOLD_SHOWS_AFTER_MS = 350;
 const STAR_COLOR = '#D99100';
+// A fixed line height tells a one-line name from a two-line one by how tall it is; its field adds `NAME_PADDING` around the text.
+const NAME_LINE_HEIGHT = 20;
+const NAME_PADDING = spacing.xs;
 const CLAMP = Extrapolation.CLAMP;
 
 export function ItemRow({
@@ -278,7 +281,10 @@ export function ItemRow({
             <View
               style={styles.nameWrap}
               onLayout={(e) => {
-                nameW.value = e.nativeEvent.layout.width;
+                const { width, height } = e.nativeEvent.layout;
+                nameW.value = width;
+                // Text that is more than one line plus a half tall has gone on to a second line.
+                setNameLines(height > NAME_LINE_HEIGHT * PixelRatio.getFontScale() * 1.5 + NAME_PADDING ? 2 : 1);
               }}
             >
               {item.note ? (
@@ -290,7 +296,6 @@ export function ItemRow({
                     editing.value = e ? 1 : 0;
                   }}
                   numberOfLines={2}
-                  onLineCount={setNameLines}
                   textStyle={[styles.name, item.bought && styles.nameBought, item.bought && wrapped && styles.nameStruck]}
                 />
               ) : (
@@ -302,7 +307,6 @@ export function ItemRow({
                     editing.value = e ? 1 : 0;
                   }}
                   numberOfLines={2}
-                  onLineCount={setNameLines}
                   textStyle={[styles.name, item.bought && styles.nameBought, item.bought && wrapped && styles.nameStruck]}
                 />
               )}
@@ -502,7 +506,7 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     backgroundColor: colors.textMuted,
   },
-  name: { fontSize: 16, fontWeight: '600', color: colors.text },
+  name: { fontSize: 16, lineHeight: NAME_LINE_HEIGHT, fontWeight: '600', color: colors.text },
   nameBought: { color: colors.textMuted },
   nameStruck: { textDecorationLine: 'line-through' },
   quantity: { fontSize: 13, color: colors.textMuted },
