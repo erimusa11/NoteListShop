@@ -1,7 +1,7 @@
 import { createContext, ReactNode, useContext, useMemo, useState } from 'react';
 
 import { mockBills, mockItems, mockWishlist } from '@/mocks/mockItems';
-import type { IncomeEntry, ItemListKey, ShoppingItem, ShoppingTrip } from '@/types/models';
+import type { IncomeEntry, IncomeKind, ItemListKey, ShoppingItem, ShoppingTrip } from '@/types/models';
 import { CATEGORIES } from '@/utils/categories';
 import { formatDateAlbanian } from '@/utils/dates';
 import { copyToTrip, deleteItem, moveToCategory, patchItem, starredItems, toggleStar } from '@/utils/tripLists';
@@ -40,6 +40,7 @@ interface TripActions {
     price: number | null,
     priority?: number,
     note?: string,
+    person?: string,
   ) => void;
   toggleItem: (tripId: string, list: ItemListKey, itemId: string) => void;
   updateItem: (tripId: string, list: ItemListKey, itemId: string, patch: Partial<ShoppingItem>) => void;
@@ -54,7 +55,7 @@ interface TripsContextValue extends TripActions {
   createList: (name: string) => string;
   renameTrip: (tripId: string, name: string) => void;
   deleteTrip: (tripId: string) => void;
-  addIncome: (tripId: string, name: string, amount: number) => void;
+  addIncome: (tripId: string, name: string, amount: number, kind?: IncomeKind) => void;
   updateIncome: (tripId: string, incomeId: string, patch: Partial<IncomeEntry>) => void;
   removeIncome: (tripId: string, incomeId: string) => void;
   hydrate: (trips: ShoppingTrip[]) => void;
@@ -79,7 +80,7 @@ export function TripsProvider({ children }: { children: ReactNode }) {
 
   const itemActions = useMemo<TripActions>(
     () => ({
-      addItem: (tripId, list, name, quantity, price, priority = 1, note) =>
+      addItem: (tripId, list, name, quantity, price, priority = 1, note, person) =>
         setTrips((prev) =>
           mapItems(prev, tripId, list, (items) => [
             ...items,
@@ -92,6 +93,7 @@ export function TripsProvider({ children }: { children: ReactNode }) {
               createdAt: Date.now(),
               priority,
               ...(note ? { note } : {}),
+              ...(person ? { person } : {}),
             },
           ]),
         ),
@@ -131,8 +133,11 @@ export function TripsProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const addIncome = (tripId: string, name: string, amount: number) => {
-    updateTripIncomes(tripId, (incomes) => [...incomes, { id: String(Date.now()), name, amount, createdAt: Date.now() }]);
+  const addIncome = (tripId: string, name: string, amount: number, kind: IncomeKind = 'rroga') => {
+    updateTripIncomes(tripId, (incomes) => [
+      ...incomes,
+      { id: String(Date.now()), name, amount, createdAt: Date.now(), kind },
+    ]);
   };
 
   const updateIncome = (tripId: string, incomeId: string, patch: Partial<IncomeEntry>) => {

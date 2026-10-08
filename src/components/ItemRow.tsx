@@ -24,6 +24,7 @@ import { PrioritySelector } from '@/components/PrioritySelector';
 import { ms, spring, STAMP_MS, SUCK, TEAR } from '@/theme/motion';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { ItemListKey, ShoppingItem } from '@/types/models';
+import { nextOption, optionMatcher, personColor } from '@/utils/options';
 import { normalizePriority, priorityInfo } from '@/utils/priority';
 import { DEFAULT_QUANTITY, normalizeQuantity, parseQuantity, sanitizeQuantityInput } from '@/utils/quantity';
 import { formatNumber, itemTotal } from '@/utils/totals';
@@ -41,6 +42,8 @@ interface ItemRowProps {
   /** The category the item is in. With `onMove`, the row gets a button to move it to another category. */
   moveFrom?: ItemListKey;
   onMove?: (to: ItemListKey, group?: string) => void;
+  /** The people an item of this category can be for (Drion, Alois): the row shows who it is for, and a tap switches it. */
+  personOptions?: string[];
 }
 
 // Holding a row this long (a deliberate press, not a tap) asks whether to delete it. A thin red line fills along the
@@ -60,6 +63,7 @@ export function ItemRow({
   tag,
   moveFrom,
   onMove,
+  personOptions,
 }: ItemRowProps) {
   const reduced = useReducedMotion();
   const [priorityOpen, setPriorityOpen] = useState(false);
@@ -75,6 +79,9 @@ export function ItemRow({
   const lineTotal = showQuantity && item.price != null && parseQuantity(item.quantity) !== 1 ? itemTotal(item) : null;
   const priority = priorityInfo(item.priority);
   const urgent = normalizePriority(item.priority) > 1;
+  // Who it is for gets its own color (the same as in the totals and reports); muted while it is not known.
+  const personTone =
+    personOptions && item.person ? personColor(optionMatcher(personOptions)(item.person)) : colors.textMuted;
 
   const stamp = useSharedValue(item.bought ? 1 : 0);
   const strike = useSharedValue(item.bought ? 1 : 0);
@@ -320,6 +327,18 @@ export function ItemRow({
               </View>
             )}
             <View style={styles.actions}>
+              {personOptions && (
+                <Pressable
+                  onPress={() => onUpdate({ person: nextOption(personOptions, item.person) })}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.person ? `Për: ${item.person}. Ndrysho` : 'Zgjidh për kë është'}
+                  style={styles.personTag}
+                >
+                  <Ionicons name="person" size={11} color={personTone} />
+                  <Text style={[styles.personText, { color: personTone }]}>{item.person || 'Për kë?'}</Text>
+                </Pressable>
+              )}
               {!item.bought && (
                 <Pressable
                   onPress={() => {
@@ -491,6 +510,18 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     paddingHorizontal: 6,
   },
+  personTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: radii.pill,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    backgroundColor: colors.background,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  personText: { fontSize: 11, fontWeight: '700' },
   moveButton: {
     borderRadius: radii.pill,
     paddingVertical: 2,

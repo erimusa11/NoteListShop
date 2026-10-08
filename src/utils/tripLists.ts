@@ -55,6 +55,7 @@ export function toggleStar(trips: ShoppingTrip[], tripId: string, key: ItemListK
   const starred: ShoppingItem = { ...item, sharedId: `${tripId}:${key}:${item.id}` };
   const name = normalizeText(item.name);
   const note = normalizeText(item.note ?? '');
+  const person = normalizeText(item.person ?? '');
   return trips.map((trip) => {
     const items = trip[key] ?? [];
     if (trip.id === tripId) return { ...trip, [key]: items.map((i) => (i.id === itemId ? starred : i)) };
@@ -62,9 +63,14 @@ export function toggleStar(trips: ShoppingTrip[], tripId: string, key: ItemListK
     // The copy made by an earlier star is still there after unstarring (even if renamed since): link it again
     // instead of adding a second item with the same id. The text counts as well as the name: in a category with groups
     // (Drion, Kia Morning…) many unrelated items share a name, and linking one of them would make a delete or a move of
-    // this item reach it too.
+    // this item reach it too. Who it is for (Drion, Alois) tells two such items apart as well.
     const twin = items.find(
-      (i) => !i.sharedId && (i.id === copy.id || (normalizeText(i.name) === name && normalizeText(i.note ?? '') === note)),
+      (i) =>
+        !i.sharedId &&
+        (i.id === copy.id ||
+          (normalizeText(i.name) === name &&
+            normalizeText(i.note ?? '') === note &&
+            normalizeText(i.person ?? '') === person)),
     );
     if (twin) return { ...trip, [key]: items.map((i) => (i === twin ? { ...i, sharedId: starred.sharedId } : i)) };
     return { ...trip, [key]: [...items, { ...copy, id: freeId(items, copy.id) }] };
@@ -90,6 +96,7 @@ function remembered(trip: ShoppingTrip, key: ItemListKey, item: ShoppingItem): R
   // damaged data may lack a field), and that would stop everything from being saved. Only the description is left out
   // when there is none, which is every item outside the categories that ask for it.
   const text = typeof item.note === 'string' ? item.note.trim() : '';
+  const person = typeof item.person === 'string' ? item.person.trim() : '';
   const record: RemovedItem = {
     list: key,
     name: String(item.name ?? ''),
@@ -97,6 +104,7 @@ function remembered(trip: ShoppingTrip, key: ItemListKey, item: ShoppingItem): R
     price: item.price ?? null,
     createdAt: item.createdAt ?? 0,
     ...(text ? { note: text } : {}),
+    ...(person ? { person } : {}),
   };
   return [...earlier, record].slice(-MAX_REMOVED);
 }

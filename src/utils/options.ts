@@ -36,6 +36,26 @@ export function optionMatcher(names: string[]): (name: string) => number {
 
 export const optionColor = (index: number) => OPTION_COLORS[index % OPTION_COLORS.length];
 
+// The people (Drion, Alois) have their own colors, so a dot never means a level (Cerdhe…) in one place and a person in another.
+export const PERSON_COLORS = ['#1F9E89', '#C93D7A', '#5F6B7A', '#7A5C3E'];
+export const personColor = (index: number) => PERSON_COLORS[index % PERSON_COLORS.length];
+
+/**
+ * The choices of a category that also asks who it is for (`personOptions`), or null for one that does not.
+ * An item without a person (one moved in from another category) is grouped under "Të tjera", listed only while it has an amount.
+ */
+export function personChoices(category: Category): OptionChoices | null {
+  const names = category.personOptions;
+  if (!names || names.length === 0) return null;
+  return { names, otherLabel: OTHER_OPTION, otherAlwaysShown: false };
+}
+
+/** The choice after `current` (the first when there is none yet), for a tap that goes through the choices. */
+export function nextOption(names: string[], current: string | undefined): string {
+  const index = optionMatcher(names)(current ?? '');
+  return names[index >= names.length ? 0 : (index + 1) % names.length];
+}
+
 // Name -> the group it falls under in this category (a choice, or the "other" label); null when it has no choices.
 function groupOf(category: Category): ((name: string) => string) | null {
   const choices = optionChoices(category);
@@ -89,23 +109,49 @@ export interface OptionTotal {
 
 // What each group adds up to in one list, bought or not, so the groups add up to the category total shown above them.
 // The "other" group appears when the category names it, or otherwise only when it has an amount.
-export function buildOptionTotals(items: ShoppingItem[], category: Category): OptionTotal[] {
-  const choices = optionChoices(category);
-  if (!choices) return [];
-
-  const { names, otherLabel, otherAlwaysShown } = choices;
+function totalsBy(
+  items: ShoppingItem[],
+  { names, otherLabel, otherAlwaysShown }: OptionChoices,
+  valueOf: (item: ShoppingItem) => string,
+  colorOf: (index: number) => string,
+): OptionTotal[] {
   const choiceOf = optionMatcher(names);
   const labels = [...names, otherLabel];
   const totals = labels.map(() => 0);
-  for (const item of items) totals[choiceOf(item.name)] += itemTotal(item);
+  for (const item of items) totals[choiceOf(valueOf(item))] += itemTotal(item);
 
   return labels
-    .map((name, index) => ({ name, color: optionColor(index), total: totals[index] }))
+    .map((name, index) => ({ name, color: colorOf(index), total: totals[index] }))
     .filter((option, index) => index < names.length || otherAlwaysShown || option.total > 0);
+}
+
+const nameOf = (item: ShoppingItem) => item.name;
+const personOf = (item: ShoppingItem) => item.person ?? '';
+
+export function buildOptionTotals(items: ShoppingItem[], category: Category): OptionTotal[] {
+  const choices = optionChoices(category);
+  return choices ? totalsBy(items, choices, nameOf, optionColor) : [];
+}
+
+/** The same for the person an item is for (Drion, Alois), in a category that asks for it. */
+export function buildPersonTotals(items: ShoppingItem[], category: Category): OptionTotal[] {
+  const choices = personChoices(category);
+  return choices ? totalsBy(items, choices, personOf, personColor) : [];
 }
 
 /** Only the items that fall under `label` (one of the groups from `buildOptionTotals`). */
 export function itemsForOption(items: ShoppingItem[], category: Category, label: string): ShoppingItem[] {
   const group = groupOf(category);
   return group ? items.filter((item) => group(item.name) === label) : items;
+}
+
+/** Only the items that are for `label` (one of the people from `buildPersonTotals`). */
+export function itemsForPerson(items: ShoppingItem[], category: Category, label: string): ShoppingItem[] {
+  const choices = personChoices(category);
+  if (!choices) return items;
+  const choiceOf = optionMatcher(choices.names);
+  return items.filter((item) => {
+    const index = choiceOf(personOf(item));
+    return (index < choices.names.length ? choices.names[index] : choices.otherLabel) === label;
+  });
 }

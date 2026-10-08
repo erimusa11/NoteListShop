@@ -1,17 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { scheduleOnRN } from 'react-native-worklets';
 
 import { AddItemButton } from '@/components/AddItemButton';
 import { BillsSummaryBar } from '@/components/BillsSummaryBar';
@@ -24,15 +17,21 @@ import { ImportantList } from '@/components/ImportantList';
 import { ItemList } from '@/components/ItemList';
 import { TagGridSheet } from '@/components/TagGridSheet';
 import { TagString, type TagOption } from '@/components/TagString';
-import { TotalsBar } from '@/components/TotalsBar';
 import { useTrips } from '@/context/TripsContext';
-import { TAB_SLIDE, TAB_SLIDE_IN_EASING, TAB_SLIDE_OUT_EASING } from '@/theme/motion';
+import { useTabSwipe } from '@/hooks/useTabSwipe';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
-import type { ItemListKey, ShoppingItem } from '@/types/models';
+import type { IncomeEntry, ItemListKey, ShoppingItem } from '@/types/models';
 import { CATEGORIES, type Category, INCOME_COLOR } from '@/utils/categories';
 import { type ImportantEntry, IMPORTANT_COLOR, IMPORTANT_SECTION, importantItems } from '@/utils/important';
+import {
+  buildIncomeKindTotals,
+  INCOME_KIND_LABELS,
+  incomeKindFromLabel,
+  incomeKindInfo,
+  incomesOfKind,
+} from '@/utils/incomes';
 import { goBackOrHome } from '@/utils/navigation';
-import { buildOptionTotals, itemOption, itemsForOption } from '@/utils/options';
+import { buildOptionTotals, buildPersonTotals, itemOption, itemsForOption, itemsForPerson } from '@/utils/options';
 import { buildListSuggestions, buildSuggestions, suggestionGroups } from '@/utils/suggestions';
 import { categoriesByOpenItems, computeSpentTotal, computeTotal, tripAllItems } from '@/utils/totals';
 
@@ -40,21 +39,14 @@ import { categoriesByOpenItems, computeSpentTotal, computeTotal, tripAllItems } 
 type Section = string;
 
 const NO_ITEMS: ShoppingItem[] = [];
+const NO_INCOMES: IncomeEntry[] = [];
 const NO_ENTRIES: ImportantEntry[] = [];
 
-// Produktet is the tab that carries the income / spent bar, wherever it stands in the strip.
-const PRODUCTS_SECTION: Section = CATEGORIES[0].section;
 const PREPARE_AFTER_MS = 600;
 const PREPARE_STEP_MS = 400;
 // A tab prepared in the background draws this many rows until it is opened (0: just its frame). Every row kept alive
 // has to be torn down when the list is closed, so drawing them all made leaving the screen slow.
 const PREVIEW_ROWS = 0;
-// Swiping the lists sideways opens the neighbouring tab. It starts after this much sideways movement, is dropped when
-// the finger goes up or down first (that is the list scrolling), and counts when it went far or fast enough.
-const SWIPE_START_X = 24;
-const SWIPE_CANCEL_Y = 14;
-const SWIPE_MIN_DISTANCE = 50;
-const SWIPE_MIN_VELOCITY = 600;
 
 // A tab that is not open stays at full size, parked off screen, so its list is already drawn when it is opened.
 function Pane({ active, children }: { active: boolean; children: ReactNode }) {
@@ -78,12 +70,13 @@ interface CategoryPaneProps {
   preview: boolean;
   total: number;
   spent: number;
-  incomeTotal: number;
   overBy: number;
-  onPressIncome: () => void;
   /** The group of a category with choices (e.g. "Drion") the list is narrowed to, or null for everything. */
   optionFilter: string | null;
   onOptionFilter: (section: Section, group: string | null) => void;
+  /** The person (Drion, Alois) of a category that asks who it is for the list is narrowed to, or null for everyone. */
+  personFilter: string | null;
+  onPersonFilter: (section: Section, person: string | null) => void;
 }
 
 // One tab. It is redrawn only when its own data changes, so opening another tab does not touch the others.
@@ -95,25 +88,24 @@ const CategoryPane = memo(function CategoryPane({
   preview,
   total,
   spent,
-  incomeTotal,
   overBy,
-  onPressIncome,
   optionFilter,
   onOptionFilter,
+  personFilter,
+  onPersonFilter,
 }: CategoryPaneProps) {
   const optionTotals = useMemo(() => buildOptionTotals(items, category), [items, category]);
-  const shownItems = useMemo(
-    () => (optionFilter ? itemsForOption(items, category, optionFilter) : items),
-    [items, category, optionFilter],
-  );
+  const personTotals = useMemo(() => buildPersonTotals(items, category), [items, category]);
+  // Both filters can be on at once: only what falls under the group and is for the person.
+  const shownItems = useMemo(() => {
+    const byGroup = optionFilter ? itemsForOption(items, category, optionFilter) : items;
+    return personFilter ? itemsForPerson(byGroup, category, personFilter) : byGroup;
+  }, [items, category, optionFilter, personFilter]);
+  const filterText = [optionFilter, personFilter].filter(Boolean).join(' · ');
 
   return (
     <Pane active={active}>
-      {category.section === PRODUCTS_SECTION ? (
-        <TotalsBar incomeTotal={incomeTotal} spentTotal={spent} onPressIncome={onPressIncome} />
-      ) : (
-        <BillsSummaryBar totalAmount={total} paidAmount={spent} totalLabel={category.totalLabel} />
-      )}
+      <BillsSummaryBar totalAmount={total} paidAmount={spent} totalLabel={category.totalLabel} />
       {optionTotals.length > 0 && (
         <OptionTotalsBar
           options={optionTotals}
@@ -121,14 +113,22 @@ const CategoryPane = memo(function CategoryPane({
           onSelect={(group) => onOptionFilter(category.section, group)}
         />
       )}
+      {personTotals.length > 0 && (
+        <OptionTotalsBar
+          options={personTotals}
+          selected={personFilter}
+          onSelect={(person) => onPersonFilter(category.section, person)}
+        />
+      )}
       {overBy > 0 && <OverBudgetCard amount={overBy} />}
       <ItemList
         tripId={tripId}
         list={category.key}
         items={shownItems}
-        emptyText={optionFilter ? `Nuk ka asnjë shpenzim për ${optionFilter}.` : category.emptyText}
+        emptyText={filterText ? `Nuk ka asnjë shpenzim për ${filterText}.` : category.emptyText}
         showQuantity={category.showQuantity}
         limit={preview ? PREVIEW_ROWS : undefined}
+        personOptions={category.personOptions}
       />
     </Pane>
   );
@@ -147,13 +147,12 @@ export default function TripDetailScreen() {
   // opened and then kept as they are, so no tab jumps around while you add or check off items; the next time the list
   // is opened they are sorted again.
   const [categoryOrder] = useState(() => categoriesByOpenItems(trip));
-  // The list opens on the first of them, so the strip starts at the left, right after Të ardhurat.
-  const firstSection = categoryOrder[0].section;
-  const [section, setSection] = useState<Section>(firstSection);
+  // The list opens on Më të rëndësishmet, so the strip starts at the left, where that tab is, right after Të ardhurat.
+  const [section, setSection] = useState<Section>(IMPORTANT_SECTION);
   // A tab is built the first time it is opened and then kept, so going back to it is instant.
-  const [mounted, setMounted] = useState<Section[]>([firstSection]);
+  const [mounted, setMounted] = useState<Section[]>([IMPORTANT_SECTION]);
   // The tabs that were really opened; they keep all their rows.
-  const [opened, setOpened] = useState<Section[]>([firstSection]);
+  const [opened, setOpened] = useState<Section[]>([IMPORTANT_SECTION]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [gridOpen, setGridOpen] = useState(false);
 
@@ -162,68 +161,13 @@ export default function TripDetailScreen() {
     setMounted((prev) => (prev.includes(next) ? prev : [...prev, next]));
     setOpened((prev) => (prev.includes(next) ? prev : [...prev, next]));
   }, []);
-  const openIncome = useCallback(() => selectSection('income'), [selectSection]);
 
-  // Swipe left for the next tab in the strip, right for the previous one; nothing happens past either end.
-  // The lists follow the finger, slide off the screen the way it went, and the next tab slides in from the other side.
-  // Only the position is animated: a see-through page makes the shadow of every card show as a gray box on Android.
-  const reduced = useReducedMotion();
-  const { width: screenW } = useWindowDimensions();
+  // Swipe left for the next tab in the strip, right for the previous one (see useTabSwipe).
   const tabOrder = useMemo<Section[]>(
     () => ['income', IMPORTANT_SECTION, ...categoryOrder.map((category) => category.section)],
     [categoryOrder],
   );
-  const slideX = useSharedValue(0);
-  const slideStyle = useAnimatedStyle(() => ({ transform: [{ translateX: slideX.value }] }));
-  // Set when the old tab has slid out and the next one was swapped in: the side it slides in from (1: from the right,
-  // -1: from the left, 0: no animation). A new object every time, so the effect below always runs once the tab is on screen.
-  const [slideIn, setSlideIn] = useState<{ dir: number } | null>(null);
-  const swapTab = useCallback(
-    (next: Section, dir: number) => {
-      selectSection(next);
-      setSlideIn({ dir });
-    },
-    [selectSection],
-  );
-  useEffect(() => {
-    if (!slideIn) return;
-    if (slideIn.dir === 0) {
-      slideX.set(0);
-      return;
-    }
-    slideX.set(slideIn.dir * screenW);
-    slideX.set(withTiming(0, { duration: TAB_SLIDE.inMs, easing: TAB_SLIDE_IN_EASING }));
-  }, [slideIn, slideX, screenW]);
-
-  const swipeTabs = useMemo(() => {
-    const index = tabOrder.indexOf(section);
-    return Gesture.Pan()
-      .activeOffsetX([-SWIPE_START_X, SWIPE_START_X])
-      .failOffsetY([-SWIPE_CANCEL_Y, SWIPE_CANCEL_Y])
-      .onUpdate((e) => {
-        if (reduced) return;
-        const hasNeighbour = tabOrder[index + (e.translationX < 0 ? 1 : -1)] !== undefined;
-        slideX.set(e.translationX * (hasNeighbour ? TAB_SLIDE.pull : TAB_SLIDE.edgePull));
-      })
-      .onEnd((e, success) => {
-        const dir = e.translationX < 0 ? 1 : -1;
-        const next = tabOrder[index + dir];
-        const far = Math.abs(e.translationX) >= SWIPE_MIN_DISTANCE || Math.abs(e.velocityX) >= SWIPE_MIN_VELOCITY;
-        if (!success || !far || next === undefined) {
-          slideX.set(withSpring(0, TAB_SLIDE.spring));
-          return;
-        }
-        if (reduced) {
-          scheduleOnRN(swapTab, next, 0);
-          return;
-        }
-        slideX.set(
-          withTiming(-dir * screenW, { duration: TAB_SLIDE.outMs, easing: TAB_SLIDE_OUT_EASING }, (done) => {
-            if (done) scheduleOnRN(swapTab, next, dir);
-          }),
-        );
-      });
-  }, [tabOrder, section, reduced, swapTab, slideX, screenW]);
+  const { gesture: swipeTabs, slideStyle } = useTabSwipe(tabOrder, section, selectSection);
 
   // Per tab: the group (Drion, Naftë…) its list is narrowed to. Kept here so adding an item can undo it.
   const [optionFilters, setOptionFilters] = useState<Record<Section, string | null>>({});
@@ -231,15 +175,17 @@ export default function TripDetailScreen() {
     (target: Section, group: string | null) => setOptionFilters((prev) => ({ ...prev, [target]: group })),
     [],
   );
+  // The same for the person (Drion, Alois) in a category that asks who it is for.
+  const [personFilters, setPersonFilters] = useState<Record<Section, string | null>>({});
+  const setPersonFilter = useCallback(
+    (target: Section, person: string | null) => setPersonFilters((prev) => ({ ...prev, [target]: person })),
+    [],
+  );
 
   // Build the other tabs one by one shortly after the list opens, so they are already there when tapped.
   useEffect(() => {
     // In the order of the strip, so the tabs closest to the open one are ready first.
-    const prepareOrder: Section[] = [
-      IMPORTANT_SECTION,
-      ...categoryOrder.slice(1).map((category) => category.section),
-      'income',
-    ];
+    const prepareOrder: Section[] = [...categoryOrder.map((category) => category.section), 'income'];
     const timers = prepareOrder.map((next, i) =>
       setTimeout(
         () => setMounted((prev) => (prev.includes(next) ? prev : [...prev, next])),
@@ -249,8 +195,15 @@ export default function TripDetailScreen() {
     return () => timers.forEach(clearTimeout);
   }, [categoryOrder]);
 
-  const incomes = trip?.incomes ?? [];
+  const incomes = trip?.incomes ?? NO_INCOMES;
   const incomeTotal = incomes.reduce((sum, income) => sum + income.amount, 0);
+  // What each kind of income (Rroga, Qoka, Të ardhura shtesë) adds up to, and the kind the list is narrowed to.
+  const incomeKindTotals = useMemo(() => buildIncomeKindTotals(incomes), [incomes]);
+  const [incomeKindFilter, setIncomeKindFilter] = useState<string | null>(null);
+  const shownIncomes = useMemo(
+    () => (incomeKindFilter ? incomesOfKind(incomes, incomeKindFilter) : incomes),
+    [incomes, incomeKindFilter],
+  );
   const incomeSuggestions = useMemo(
     () =>
       buildSuggestions(
@@ -262,6 +215,8 @@ export default function TripDetailScreen() {
             price: i.amount,
             bought: false,
             createdAt: i.createdAt,
+            // The kind of income goes where an item has who it is for: both are the add form's second select.
+            person: incomeKindInfo(i).label,
           })),
         ),
       ),
@@ -403,9 +358,14 @@ export default function TripDetailScreen() {
                         paidAmount={combinedSpent}
                         totalLabel="Të ardhurat gjithsej"
                       />
+                      <OptionTotalsBar
+                        options={incomeKindTotals}
+                        selected={incomeKindFilter}
+                        onSelect={setIncomeKindFilter}
+                      />
                       {overBy > 0 && <OverBudgetCard amount={overBy} />}
                       <FlatList
-                        data={incomes}
+                        data={shownIncomes}
                         keyExtractor={(income) => income.id}
                         style={styles.list}
                         renderItem={({ item }) => (
@@ -415,7 +375,13 @@ export default function TripDetailScreen() {
                             onRemove={() => removeIncome(trip.id, item.id)}
                           />
                         )}
-                        ListEmptyComponent={<Text style={styles.empty}>Nuk ke shtuar ende të ardhura.</Text>}
+                        ListEmptyComponent={
+                          <Text style={styles.empty}>
+                            {incomeKindFilter
+                              ? `Nuk ka asnjë të ardhur për ${incomeKindFilter}.`
+                              : 'Nuk ke shtuar ende të ardhura.'}
+                          </Text>
+                        }
                         contentContainerStyle={styles.listContent}
                         showsVerticalScrollIndicator={false}
                       />
@@ -450,11 +416,11 @@ export default function TripDetailScreen() {
                           preview={!opened.includes(category.section)}
                           total={totals[category.key]}
                           spent={combinedSpent}
-                          incomeTotal={incomeTotal}
                           overBy={overBy}
-                          onPressIncome={openIncome}
                           optionFilter={optionFilters[category.section] ?? null}
                           onOptionFilter={setOptionFilter}
+                          personFilter={personFilters[category.section] ?? null}
+                          onPersonFilter={setPersonFilter}
                         />
                       ),
                   )}
@@ -472,10 +438,16 @@ export default function TripDetailScreen() {
               </Pressable>
               {section === 'income' && (
                 <AddItemButton
-                  onAdd={(name, _quantity, amount) => addIncome(trip.id, name, amount ?? 0)}
+                  onAdd={(name, _quantity, amount, _priority, _note, kindLabel) => {
+                    addIncome(trip.id, name, amount ?? 0, incomeKindFromLabel(kindLabel));
+                    // An income of another kind than the one the list is narrowed to would be hidden, so show everything again.
+                    if (incomeKindFilter && kindLabel !== incomeKindFilter) setIncomeKindFilter(null);
+                  }}
                   showQuantity={false}
                   title="Shto të ardhura"
-                  namePlaceholder="P.sh. Rroga, Bonus…"
+                  namePlaceholder="P.sh. Rroga Alma, Bonus…"
+                  secondOptions={INCOME_KIND_LABELS}
+                  secondLabel="Lloji"
                   priceLabel="Shuma"
                   submitLabel="Shto të ardhurën"
                   requirePrice
@@ -486,7 +458,7 @@ export default function TripDetailScreen() {
               {activeCategory && (
                 <AddItemButton
                   key={activeCategory.section}
-                  onAdd={(name, quantity, price, priority, note) => {
+                  onAdd={(name, quantity, price, priority, note, person) => {
                     addItem(
                       trip.id,
                       activeCategory.key,
@@ -495,10 +467,13 @@ export default function TripDetailScreen() {
                       price,
                       priority,
                       note,
+                      person,
                     );
-                    // An item added outside the group the list is narrowed to would be hidden, so show everything again.
+                    // An item added outside the group (or the person) the list is narrowed to would be hidden, so show everything again.
                     const group = optionFilters[activeCategory.section];
                     if (group && itemOption(activeCategory, name) !== group) setOptionFilter(activeCategory.section, null);
+                    const forPerson = personFilters[activeCategory.section];
+                    if (forPerson && person !== forPerson) setPersonFilter(activeCategory.section, null);
                   }}
                   showQuantity={activeCategory.showQuantity}
                   title={activeCategory.addTitle}
@@ -507,6 +482,8 @@ export default function TripDetailScreen() {
                   optionsLabel={activeCategory.optionsLabel}
                   otherOption={activeCategory.otherOption}
                   showNote={activeCategory.showNote}
+                  secondOptions={activeCategory.personOptions}
+                  secondLabel={activeCategory.personLabel}
                   suggestions={suggestions}
                 />
               )}

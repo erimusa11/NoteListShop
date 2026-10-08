@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BottomSheet } from '@/components/BottomSheet';
 import { BottomTabBar } from '@/components/BottomTabBar';
 import { MiniColumns } from '@/components/charts/MiniColumns';
+import { QokatView } from '@/components/QokatView';
 import { CreateListButton } from '@/components/CreateListButton';
 import { EmptyState } from '@/components/EmptyState';
 import { LatestListPie } from '@/components/LatestListPie';
@@ -41,7 +42,7 @@ export default function ListsOverviewScreen() {
     ? 'Vizitor'
     : (user?.displayName?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'Eri');
   const sorted = [...trips].sort((a, b) => b.createdAt - a.createdAt);
-  const [tab, setTab] = useState<'lists' | 'reports'>('lists');
+  const [tab, setTab] = useState<'lists' | 'reports' | 'qokat'>('lists');
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
   const [shownCount, setShownCount] = useState(PAGE_SIZE);
@@ -218,8 +219,11 @@ export default function ListsOverviewScreen() {
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
           />
-        ) : (
+        ) : tab === 'reports' ? (
           <ReportsView onOpenTrip={openTrip} />
+        ) : (
+          // Only built once its tab is opened, so it costs nothing until then.
+          <QokatView onOpenTrip={openTrip} />
         )}
       </View>
 
@@ -235,6 +239,7 @@ export default function ListsOverviewScreen() {
         options={[
           { value: 'lists', label: 'Listat', icon: 'list-outline', activeIcon: 'list' },
           { value: 'reports', label: 'Raportet', icon: 'stats-chart-outline', activeIcon: 'stats-chart' },
+          { value: 'qokat', label: 'Qokat', icon: 'cafe-outline', activeIcon: 'cafe' },
         ]}
       />
     </SafeAreaView>

@@ -10,6 +10,8 @@ export interface Suggestion {
   name: string;
   /** The group (Drion, Naftë…) that `name` was written under. Missing for an item that has a name of its own. */
   group?: string;
+  /** Who it was last added for, in a category that asks (Drion, Alois). */
+  person?: string;
   quantity: string;
   price: number | null;
   count: number;
@@ -26,7 +28,7 @@ export function normalizeText(value: string): string {
 }
 
 // Anything with these fields can be suggested: an item in a list, or one that was deleted from it.
-type SuggestionSource = Pick<ShoppingItem, 'name' | 'quantity' | 'price' | 'createdAt'> & { note?: string };
+type SuggestionSource = Pick<ShoppingItem, 'name' | 'quantity' | 'price' | 'createdAt'> & { note?: string; person?: string };
 
 /** How a category with groups (`nameOptions`) turns its items into suggestions. */
 export interface SuggestionGroups {
@@ -46,6 +48,7 @@ export function suggestionGroups(category: Category): SuggestionGroups | undefin
 interface Candidate {
   text: string;
   group?: string;
+  person?: string;
   quantity: string;
   price: number | null;
   createdAt: number;
@@ -59,33 +62,35 @@ function candidates(items: SuggestionSource[], groups?: SuggestionGroups): Candi
   for (const item of items) {
     const { quantity, price, createdAt } = item;
     const name = String(item.name ?? '').trim();
+    const person = typeof item.person === 'string' && item.person.trim() ? item.person.trim() : undefined;
     const index = groups ? wanted.indexOf(normalizeText(name)) : -1;
     if (!groups || index === -1) {
-      found.push({ text: name, quantity, price, createdAt });
+      found.push({ text: name, person, quantity, price, createdAt });
       continue;
     }
     const note = typeof item.note === 'string' ? item.note.trim() : '';
     const group = groups.names[index];
-    if (note) found.push({ text: note, group, quantity, price, createdAt });
-    else if (groups.bare) found.push({ text: group, group, quantity, price, createdAt });
+    if (note) found.push({ text: note, group, person, quantity, price, createdAt });
+    else if (groups.bare) found.push({ text: group, group, person, quantity, price, createdAt });
   }
   return found;
 }
 
 export function buildSuggestions(items: SuggestionSource[], groups?: SuggestionGroups): Suggestion[] {
   const byKey = new Map<string, Suggestion>();
-  for (const { text, group, quantity, price, createdAt } of candidates(items, groups)) {
+  for (const { text, group, person, quantity, price, createdAt } of candidates(items, groups)) {
     const search = normalizeText(text);
     if (!search) continue;
     const key = group ? `${normalizeText(group)}|${search}` : search;
     const existing = byKey.get(key);
     if (!existing) {
-      byKey.set(key, { key, search, name: text, group, quantity, price, count: 1, lastUsed: createdAt });
+      byKey.set(key, { key, search, name: text, group, person, quantity, price, count: 1, lastUsed: createdAt });
     } else {
       existing.count += 1;
       if (createdAt >= existing.lastUsed) {
         existing.lastUsed = createdAt;
         existing.name = text;
+        existing.person = person ?? existing.person;
         existing.quantity = quantity;
         existing.price = price;
       }

@@ -10,7 +10,7 @@ import { pickSuggestions, type Suggestion } from '@/utils/suggestions';
 import { formatNumber } from '@/utils/totals';
 
 interface AddItemButtonProps {
-  onAdd: (name: string, quantity: string, price: number | null, priority: number, note?: string) => void;
+  onAdd: (name: string, quantity: string, price: number | null, priority: number, note?: string, second?: string) => void;
   showPriority?: boolean;
   showQuantity?: boolean;
   title?: string;
@@ -24,6 +24,10 @@ interface AddItemButtonProps {
   otherOption?: string;
   /** Under the choices, ask for a short optional text (what it was for). Not asked for the "other" choice, whose typed name is that text. */
   showNote?: boolean;
+  /** A second select that has to be answered before adding (who it is for, e.g. Drion or Alois; the kind of income). */
+  secondOptions?: string[];
+  /** Heading above the `secondOptions` (default "Për kë"). */
+  secondLabel?: string;
   priceLabel?: string;
   submitLabel?: string;
   requirePrice?: boolean;
@@ -39,6 +43,8 @@ export function AddItemButton({
   optionsLabel = 'Lloji',
   otherOption,
   showNote = false,
+  secondOptions,
+  secondLabel = 'Për kë',
   priceLabel = 'Çmimi (opsionale)',
   submitLabel = 'Shto në listë',
   requirePrice = false,
@@ -52,35 +58,53 @@ export function AddItemButton({
   // The "other" choice is picked: `name` is then whatever is typed instead of one of `nameOptions`.
   const [other, setOther] = useState(false);
   const [note, setNote] = useState('');
+  const [second, setSecond] = useState('');
 
   const close = () => {
     setVisible(false);
     setName('');
     setOther(false);
     setNote('');
+    setSecond('');
     setQuantity(DEFAULT_QUANTITY);
     setPrice('');
     setPriority(1);
   };
 
   const priceValue = parseFloat(price.replace(',', '.'));
-  const canSubmit = name.trim().length > 0 && (!requirePrice || (Number.isFinite(priceValue) && priceValue > 0));
+  const canSubmit =
+    name.trim().length > 0 &&
+    (!secondOptions || second !== '') &&
+    (!requirePrice || (Number.isFinite(priceValue) && priceValue > 0));
   // With choices (Drion, Kia Morning…), `name` is the choice picked and what is typed is the description (`note`), or, with
   // the "other" choice, the name itself. What is suggested follows: before a choice is picked, everything used before;
   // after one, the descriptions used under it; with "other", the names used without a choice.
   const choiceMade = !!nameOptions && !other && name !== '';
   const query = !nameOptions || other ? name : choiceMade ? note : '';
+  // A suggestion is added in one tap, so it needs to know its second choice (who it is for, what kind of income): the one
+  // picked above, or else the one it was last added with. Until one is picked, only the suggestions that know theirs are offered.
+  const usable = useMemo(
+    () => (secondOptions && !second ? suggestions.filter((s) => s.person) : suggestions),
+    [suggestions, secondOptions, second],
+  );
   const shown = useMemo(() => {
-    if (!nameOptions) return pickSuggestions(suggestions, name);
-    if (other) return pickSuggestions(suggestions.filter((s) => !s.group), name);
-    if (choiceMade) return pickSuggestions(suggestions.filter((s) => s.group === name), note);
-    return pickSuggestions(suggestions, '');
-  }, [suggestions, nameOptions, other, choiceMade, name, note]);
+    if (!nameOptions) return pickSuggestions(usable, name);
+    if (other) return pickSuggestions(usable.filter((s) => !s.group), name);
+    if (choiceMade) return pickSuggestions(usable.filter((s) => s.group === name), note);
+    return pickSuggestions(usable, '');
+  }, [usable, nameOptions, other, choiceMade, name, note]);
 
   const pick = (s: Suggestion) => {
     // A description goes in as the note under its group; a group alone (Naftë) is just that name.
     const text = s.group && s.group !== s.name ? s.name : undefined;
-    onAdd(s.group ?? s.name, showQuantity ? normalizeQuantity(s.quantity) : '', s.price, priority, text);
+    onAdd(
+      s.group ?? s.name,
+      showQuantity ? normalizeQuantity(s.quantity) : '',
+      s.price,
+      priority,
+      text,
+      secondOptions ? second || s.person : undefined,
+    );
     close();
   };
 
@@ -93,9 +117,33 @@ export function AddItemButton({
       Number.isFinite(parsedPrice) ? parsedPrice : null,
       priority,
       showNote && !other ? note.trim() || undefined : undefined,
+      secondOptions ? second : undefined,
     );
     close();
   };
+
+  // Right under the name or its choices, so both selects are answered before the text and the price.
+  const secondSelect = secondOptions ? (
+    <>
+      <Text style={[styles.label, styles.otherLabel]}>{secondLabel}</Text>
+      <View style={styles.options} accessibilityRole="radiogroup">
+        {secondOptions.map((option) => {
+          const selected = second === option;
+          return (
+            <Pressable
+              key={option}
+              onPress={() => setSecond(option)}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selected }}
+              style={[styles.option, selected && styles.optionSelected]}
+            >
+              <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{option}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </>
+  ) : null;
 
   return (
     <>
@@ -127,6 +175,7 @@ export function AddItemButton({
                 );
               })}
             </View>
+            {secondSelect}
             {other && (
               <>
                 <Text style={[styles.label, styles.otherLabel]}>Emri</Text>
@@ -167,6 +216,7 @@ export function AddItemButton({
               autoFocus
               returnKeyType="next"
             />
+            {secondSelect}
           </>
         )}
 

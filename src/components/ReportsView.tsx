@@ -11,8 +11,8 @@ import { CATEGORIES } from '@/utils/categories';
 import { formatDayMonthShort } from '@/utils/dates';
 import {
   buildCategoryHistory,
-  buildListSpend,
   buildOptionHistory,
+  buildPersonHistory,
   type CategoryHistory,
   type OptionHistory,
 } from '@/utils/reports';
@@ -85,7 +85,7 @@ const OptionCard = memo(function OptionCard({
         </View>
         <View style={styles.cardTitles}>
           <Text style={styles.cardTitle} numberOfLines={1}>
-            {category.optionsReportTitle ?? category.label}
+            {history.title}
           </Text>
           <Text style={styles.cardSubtitle}>{hasSpend ? listsLabel(listCount) : 'Asnjë shpenzim ende'}</Text>
         </View>
@@ -167,21 +167,23 @@ type ReportRow =
 export function ReportsView({ onOpenTrip }: ReportsViewProps) {
   const { trips } = useTrips();
   const histories = useMemo(() => buildCategoryHistory(trips), [trips]);
-  // A category with a choice gets its split-by-choice card straight after its own card.
+  // A category with a choice gets its split-by-choice card straight after its own card, and one that also asks who it
+  // is for (Kopesht & Shkolle) gets a split by person after that.
   const rows = useMemo<ReportRow[]>(() => {
-    const optionHistories = new Map(
-      CATEGORIES.flatMap((category) => {
-        const history = buildOptionHistory(trips, category);
-        return history ? [[category.section, history] as const] : [];
-      }),
+    const splits = new Map(
+      CATEGORIES.map((category) => [
+        category.section,
+        [buildOptionHistory(trips, category), buildPersonHistory(trips, category)] as const,
+      ]),
     );
     return [
       ...histories.flatMap((history): ReportRow[] => {
         const { section } = history.category;
-        const options = optionHistories.get(section);
+        const [options, people] = splits.get(section) ?? [null, null];
         return [
           { kind: 'category', key: section, history },
           ...(options ? [{ kind: 'options' as const, key: `${section}-options`, history: options }] : []),
+          ...(people ? [{ kind: 'options' as const, key: `${section}-people`, history: people }] : []),
         ];
       }),
       { kind: 'totals', key: 'totals' },
@@ -197,11 +199,6 @@ export function ReportsView({ onOpenTrip }: ReportsViewProps) {
       />
     );
   }
-
-  const lists = buildListSpend(trips);
-  const totalSpent = lists.reduce((sum, l) => sum + l.spent, 0);
-  const totalPlanned = lists.reduce((sum, l) => sum + l.planned, 0);
-  const remaining = Math.max(0, totalPlanned - totalSpent);
 
   return (
     <FlatList
@@ -225,16 +222,6 @@ export function ReportsView({ onOpenTrip }: ReportsViewProps) {
       }}
       ListHeaderComponent={
         <View style={styles.header}>
-          <View style={styles.tiles}>
-            <View style={[styles.tile, shadow]}>
-              <Text style={styles.tileLabel}>Shpenzuar gjithsej</Text>
-              <Text style={[styles.tileValue, { color: colors.success }]}>{formatPrice(totalSpent)}</Text>
-            </View>
-            <View style={[styles.tile, shadow]}>
-              <Text style={styles.tileLabel}>Mbetet për t&apos;u blerë</Text>
-              <Text style={[styles.tileValue, { color: colors.primaryDark }]}>{formatPrice(remaining)}</Text>
-            </View>
-          </View>
           <Text style={styles.intro}>Shpenzimet e secilës kategori, listë pas liste. Trokit një kolonë për të hapur listën.</Text>
         </View>
       }
@@ -246,10 +233,6 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { paddingBottom: spacing.xl },
   header: { gap: spacing.sm, marginBottom: spacing.md },
-  tiles: { flexDirection: 'row', gap: spacing.sm },
-  tile: { flex: 1, backgroundColor: colors.card, borderRadius: radii.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.md - 4 },
-  tileLabel: { fontSize: 11, color: colors.textMuted },
-  tileValue: { fontSize: 15, fontWeight: '700', color: colors.text },
   intro: { fontSize: 12, color: colors.textMuted },
   cardGap: { marginBottom: spacing.md },
   card: { backgroundColor: colors.card, borderRadius: radii.md, padding: spacing.md, gap: spacing.md },

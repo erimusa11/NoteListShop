@@ -34,6 +34,15 @@ export interface Category {
   showNote?: boolean;
   /** Title of the report that splits this category's spending by `nameOptions`. */
   optionsReportTitle?: string;
+  /**
+   * Besides the name, adding an item also asks (required) for one of these, e.g. which child it is for. Saved as the
+   * item's `person`, shown on its row, totalled under the category total and split in its own report.
+   */
+  personOptions?: string[];
+  /** Heading above the `personOptions` choices (default "Për kë"). */
+  personLabel?: string;
+  /** Title of the report that splits this category's spending by `personOptions`. */
+  personReportTitle?: string;
   emptyText: string;
 }
 
@@ -244,6 +253,59 @@ export const CATEGORIES: Category[] = [
     addTitle: 'Shto artikull',
     namePlaceholder: 'P.sh. Mobilje, Perde, Dekorime…',
     emptyText: 'Nuk ka ende asnjë artikull.',
+  },
+  {
+    key: 'daily',
+    section: 'daily',
+    label: 'Shpenzime ditore pune',
+    tabLabel: 'Shpenzime\nditore pune',
+    icon: 'briefcase-outline',
+    activeIcon: 'briefcase',
+    color: '#0B7285',
+    showQuantity: false,
+    totalLabel: 'Gjithsej shpenzime ditore pune',
+    addTitle: 'Shto shpenzim',
+    namePlaceholder: 'P.sh. Drekë, Kafe, Transport…',
+    nameOptions: ['Alma', 'Eri'],
+    optionsLabel: 'Për kë',
+    showNote: true,
+    optionsReportTitle: 'Shpenzimet ditore sipas personit',
+    emptyText: 'Nuk ka ende asnjë shpenzim.',
+  },
+  {
+    key: 'school',
+    section: 'school',
+    label: 'Kopesht & Shkolle',
+    tabLabel: 'Kopesht &\nShkolle',
+    icon: 'school-outline',
+    activeIcon: 'school',
+    color: '#D9480F',
+    showQuantity: false,
+    totalLabel: 'Gjithsej kopesht & shkolle',
+    addTitle: 'Shto shpenzim',
+    namePlaceholder: 'P.sh. Tarifa, Libra, Ushqim…',
+    nameOptions: ['Cerdhe', 'Kopesht', 'Shkolle', 'Kurse'],
+    optionsLabel: 'Niveli',
+    showNote: true,
+    optionsReportTitle: 'Kopesht & Shkolle sipas nivelit',
+    personOptions: ['Drion', 'Alois'],
+    personLabel: 'Për kë',
+    personReportTitle: 'Kopesht & Shkolle sipas fëmijës',
+    emptyText: 'Nuk ka ende asnjë shpenzim.',
+  },
+  // A "qokë": the coffee and the money left for a family after a birth, a recovery… Checked ones also show in the Qokat menu.
+  {
+    key: 'qoka',
+    section: 'qoka',
+    label: 'Qoka',
+    icon: 'cafe-outline',
+    activeIcon: 'cafe',
+    color: '#A0522D',
+    showQuantity: false,
+    totalLabel: 'Gjithsej qokat',
+    addTitle: 'Shto qokë',
+    namePlaceholder: 'P.sh. Lindja e Ardit, Shërimi i Besnikut…',
+    emptyText: 'Nuk ka ende asnjë qokë.',
   },
 ];
 
