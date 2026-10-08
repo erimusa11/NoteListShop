@@ -188,6 +188,17 @@ export default function ListsOverviewScreen() {
       )}
 
       <View style={styles.content}>
+        {/* A faint cart behind the shopping pages: seen through the gaps between the cards and in the empty space. */}
+        {isShopTab(tab) && (
+          <View style={styles.watermark} pointerEvents="none">
+            <Image
+              source={require('@/assets/images/logo-watermark.png')}
+              style={styles.watermarkLogo}
+              resizeMode="contain"
+              accessible={false}
+            />
+          </View>
+        )}
         {tab === 'home' ? (
           <HomeChooser
             name={fullName}
@@ -343,6 +354,18 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: '700', color: colors.text },
   subtitle: { fontSize: 12, color: colors.textMuted },
   content: { flex: 1, paddingHorizontal: spacing.md },
+  // At the bottom, where the lists leave room, and clear of the text that is centered on the empty pages.
+  watermark: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: spacing.lg,
+  },
+  watermarkLogo: { width: 200, height: 194, opacity: 0.17 },
   list: { flex: 1 },
   listContent: { flexGrow: 1, paddingBottom: spacing.sm },
   loadMore: {

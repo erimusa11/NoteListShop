@@ -110,7 +110,7 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone 
           source={require('@/assets/images/note-list-logo.png')}
           style={styles.logo}
           resizeMode="contain"
-          accessibilityLabel="Note Shop List by Eri"
+          accessibilityLabel="Note List Shop by Eri"
         />
       </View>
       <Text style={styles.welcomeTitle}>Asnjë detyrë ende</Text>
@@ -373,7 +373,7 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     marginBottom: spacing.sm,
   },
-  logo: { width: 240, height: 163 },
+  logo: { width: 240, height: 166 },
   welcomeTitle: { fontSize: 17, fontWeight: '600', color: colors.text },
   welcomeText: { fontSize: 14, color: colors.textMuted },
   doneHeader: {
