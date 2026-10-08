@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Keyboard, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,6 +10,9 @@ import { useAuth } from '@/context/AuthContext';
 import { useProfile } from '@/context/ProfileContext';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import { cleanName } from '@/utils/profileName';
+
+// How long after the last keystroke the name is saved.
+const AUTOSAVE_MS = 800;
 
 // The profile: a name and surname that are used across the app. While they are empty, the name of the Google account is used.
 export default function ProfileScreen() {
@@ -27,6 +30,29 @@ export default function ProfileScreen() {
   const unchanged = cleanName(first) === profile.custom.firstName && cleanName(last) === profile.custom.lastName;
   const canSave = !needsFirst && !unchanged;
   const badge = shown.isCustom ? 'Emri yt' : profile.accountName ? 'Emri nga Google' : null;
+
+  // The name saves by itself a moment after the typing stops, and when the page is left, so it is never lost by leaving
+  // without pressing the button.
+  const saveName = profile.save;
+  useEffect(() => {
+    if (!canSave) return;
+    const timer = setTimeout(() => {
+      saveName(first, last);
+      setSaved(true);
+    }, AUTOSAVE_MS);
+    return () => clearTimeout(timer);
+  }, [canSave, first, last, saveName]);
+  const unsaved = useRef({ canSave, first, last, saveName });
+  useEffect(() => {
+    unsaved.current = { canSave, first, last, saveName };
+  });
+  useEffect(
+    () => () => {
+      const latest = unsaved.current;
+      if (latest.canSave) latest.saveName(latest.first, latest.last);
+    },
+    [],
+  );
 
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/'));
 
