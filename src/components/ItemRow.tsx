@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -51,6 +51,9 @@ interface ItemRowProps {
 const HOLD_TO_DELETE_MS = 1500;
 const HOLD_SHOWS_AFTER_MS = 350;
 const STAR_COLOR = '#D99100';
+// A fixed line height tells a one-line name from a two-line one by how tall it is; its field adds `NAME_PADDING` around the text.
+const NAME_LINE_HEIGHT = 20;
+const NAME_PADDING = spacing.xs;
 const CLAMP = Extrapolation.CLAMP;
 
 export function ItemRow({
@@ -74,6 +77,10 @@ export function ItemRow({
   const [confirmUsed, setConfirmUsed] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveUsed, setMoveUsed] = useState(false);
+  // A long name goes on to a second line. The animated strike is one bar across a single line, so a name on two lines is
+  // struck through by the text itself instead.
+  const [nameLines, setNameLines] = useState(1);
+  const wrapped = nameLines > 1;
   const starred = item.sharedId !== undefined;
   // The price is for one; the row costs price × quantity, shown only when that differs from the price.
   const lineTotal = showQuantity && item.price != null && parseQuantity(item.quantity) !== 1 ? itemTotal(item) : null;
@@ -274,7 +281,10 @@ export function ItemRow({
             <View
               style={styles.nameWrap}
               onLayout={(e) => {
-                nameW.value = e.nativeEvent.layout.width;
+                const { width, height } = e.nativeEvent.layout;
+                nameW.value = width;
+                // Text that is more than one line plus a half tall has gone on to a second line.
+                setNameLines(height > NAME_LINE_HEIGHT * PixelRatio.getFontScale() * 1.5 + NAME_PADDING ? 2 : 1);
               }}
             >
               {item.note ? (
@@ -285,7 +295,8 @@ export function ItemRow({
                   onEditingChange={(e) => {
                     editing.value = e ? 1 : 0;
                   }}
-                  textStyle={[styles.name, item.bought && styles.nameBought]}
+                  numberOfLines={2}
+                  textStyle={[styles.name, item.bought && styles.nameBought, item.bought && wrapped && styles.nameStruck]}
                 />
               ) : (
                 <InlineEditableField
@@ -295,16 +306,18 @@ export function ItemRow({
                   onEditingChange={(e) => {
                     editing.value = e ? 1 : 0;
                   }}
-                  textStyle={[styles.name, item.bought && styles.nameBought]}
+                  numberOfLines={2}
+                  textStyle={[styles.name, item.bought && styles.nameBought, item.bought && wrapped && styles.nameStruck]}
                 />
               )}
-              <Animated.View style={[styles.strike, strikeStyle]} pointerEvents="none" />
+              {!wrapped && <Animated.View style={[styles.strike, strikeStyle]} pointerEvents="none" />}
             </View>
             {item.note ? (
               <InlineEditableField
                 value={item.name}
                 placeholder="Emri i artikullit"
                 onChange={(name) => onUpdate({ name })}
+                numberOfLines={2}
                 textStyle={styles.note}
               />
             ) : null}
@@ -493,8 +506,9 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     backgroundColor: colors.textMuted,
   },
-  name: { fontSize: 16, fontWeight: '600', color: colors.text },
+  name: { fontSize: 16, lineHeight: NAME_LINE_HEIGHT, fontWeight: '600', color: colors.text },
   nameBought: { color: colors.textMuted },
+  nameStruck: { textDecorationLine: 'line-through' },
   quantity: { fontSize: 13, color: colors.textMuted },
   note: { fontSize: 13, color: colors.textMuted },
   quantityRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },

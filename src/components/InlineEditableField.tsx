@@ -17,6 +17,8 @@ interface InlineEditableFieldProps {
   textStyle?: StyleProp<TextStyle>;
   align?: 'left' | 'right';
   chip?: boolean;
+  /** How many lines the text may take before it is cut off with "…". One by default; a longer text goes on to the next line. */
+  numberOfLines?: number;
   onEditingChange?: (editing: boolean) => void;
 }
 
@@ -32,6 +34,7 @@ export function InlineEditableField({
   textStyle,
   align = 'left',
   chip = false,
+  numberOfLines = 1,
   onEditingChange,
 }:InlineEditableFieldProps) {
   const [editing, setEditing] = useState(false);
@@ -69,7 +72,7 @@ export function InlineEditableField({
     >
       <View style={align === 'right' ? styles.rowRight : styles.rowLeft}>
         {value ? (
-          <Text style={[styles.text, textStyle]} numberOfLines={1}>
+          <Text style={[styles.text, textStyle]} numberOfLines={numberOfLines}>
             {prefix}
             {displayValue ?? value}
             {suffix}
@@ -87,13 +90,15 @@ export function InlineEditableField({
 
 const styles = StyleSheet.create({
   pressable: {
+    flexShrink: 1,
     paddingVertical: spacing.xs / 2,
     paddingHorizontal: spacing.xs,
     borderRadius: radii.sm,
   },
   rowLeft: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start' },
   rowRight: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
-  text: { color: colors.text },
+  // Shrinking lets a long text wrap inside the row instead of pushing past its edge.
+  text: { color: colors.text, flexShrink: 1 },
   placeholder: { color: colors.textMuted },
   chip: {
     backgroundColor: colors.background,

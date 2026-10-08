@@ -1,20 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useState } from 'react';
-import { FlatList, Image, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { BackHandler, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { BottomSheet } from '@/components/BottomSheet';
 import { BottomTabBar } from '@/components/BottomTabBar';
 import { MiniColumns } from '@/components/charts/MiniColumns';
 import { QokatView } from '@/components/QokatView';
 import { CreateListButton } from '@/components/CreateListButton';
 import { EmptyState } from '@/components/EmptyState';
+import { HomeChooser } from '@/components/HomeChooser';
 import { LatestListPie } from '@/components/LatestListPie';
+import { NotesView } from '@/components/NotesView';
 import { ReportsView } from '@/components/ReportsView';
 import { TripCard } from '@/components/TripCard';
-import { useAppLock } from '@/context/AppLockContext';
 import { useAuth } from '@/context/AuthContext';
+import { useProfile } from '@/context/ProfileContext';
 import { useTrips } from '@/context/TripsContext';
 import { colors, spacing } from '@/theme/theme';
 import { buildListSpend, buildSectionSpend } from '@/utils/reports';
@@ -22,6 +23,11 @@ import { tripIncomeTotal } from '@/utils/totals';
 
 // The lists screen shows this many lists at first and this many more each time "load more" is pressed.
 const PAGE_SIZE = 5;
+
+type Tab = 'home' | 'lists' | 'reports' | 'qokat' | 'notes';
+// The pages of Note Shop List, the ones with the tabs at the bottom.
+type ShopTab = 'lists' | 'reports' | 'qokat';
+const isShopTab = (value: Tab): value is ShopTab => value === 'lists' || value === 'reports' || value === 'qokat';
 
 // Lower-case and strip accents so "shtator" finds "Shtator" and "mire" finds "Mirë".
 function normalizeText(value: string): string {
@@ -34,15 +40,31 @@ function normalizeText(value: string): string {
 
 export default function ListsOverviewScreen() {
   const { trips, createList } = useTrips();
-  const { user, demoMode, signOut } = useAuth();
-  const { supported, enabled: lockEnabled, setEnabled: setLockEnabled } = useAppLock();
-  const [lockError, setLockError] = useState<string | null>(null);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const firstName = demoMode
-    ? 'Vizitor'
-    : (user?.displayName?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'Eri');
+  const { demoMode } = useAuth();
+  // The name from the profile page, or the account's (Google) name while the profile has none.
+  const { firstName, fullName, initial } = useProfile();
   const sorted = [...trips].sort((a, b) => b.createdAt - a.createdAt);
-  const [tab, setTab] = useState<'lists' | 'reports' | 'qokat'>('lists');
+  // The app opens on the chooser; from there the user goes to the shopping pages or to Note List Shop.
+  const [tab, setTab] = useState<Tab>('home');
+  // The shopping page that was open last, so the way back to Note Shop List leads there.
+  const [returnTab, setReturnTab] = useState<ShopTab>('lists');
+  const goTo = (next: Tab) => {
+    if (isShopTab(tab)) setReturnTab(tab);
+    setTab(next);
+  };
+  // Only the chooser is a way out of the app: from any other page the phone's back button leads back to the chooser.
+  // Only while this screen is the one in front: with a list open on top of it, back has to close that list.
+  useFocusEffect(
+    useCallback(() => {
+      if (tab === 'home') return;
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (isShopTab(tab)) setReturnTab(tab);
+        setTab('home');
+        return true;
+      });
+      return () => subscription.remove();
+    }, [tab, setTab, setReturnTab]),
+  );
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
   const [shownCount, setShownCount] = useState(PAGE_SIZE);
@@ -77,98 +99,104 @@ export default function ListsOverviewScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom', 'left', 'right']}>
-      <View style={styles.header}>
-        <View style={styles.logoBadge}>
-          <Image source={require('@/assets/images/logo-mark.png')} style={styles.logo} resizeMode="contain" />
-        </View>
-        {searching && tab === 'lists' ? (
-          <View style={styles.searchBox}>
-            <Ionicons name="search" size={18} color={colors.textMuted} />
-            <TextInput
-              value={query}
-              onChangeText={changeQuery}
-              placeholder="Kërko listën…"
-              placeholderTextColor={colors.textMuted}
-              style={styles.searchInput}
-              autoFocus
-              autoCorrect={false}
-              returnKeyType="search"
-            />
-            <Pressable onPress={closeSearch} hitSlop={8} accessibilityRole="button" accessibilityLabel="Mbyll kërkimin">
-              <Ionicons name="close-circle" size={20} color={colors.textMuted} />
-            </Pressable>
-          </View>
-        ) : (
-          <>
-            <View style={styles.titleBlock}>
-              <Text style={styles.title}>Note Shop List</Text>
-              <Text style={styles.subtitle}>
-                {demoMode ? 'Modalitet demo · ndryshimet nuk ruhen' : `Mirë se erdhe, ${firstName}`}
-              </Text>
-            </View>
-            {tab === 'lists' && trips.length > 1 && (
-              <Pressable
-                onPress={() => setSearching(true)}
-                style={styles.searchButton}
-                accessibilityRole="button"
-                accessibilityLabel="Kërko listë"
-              >
-                <Ionicons name="search" size={20} color={colors.primaryDark} />
-              </Pressable>
+      {/* The chooser has no header: the avatar is the big one in the middle of that screen. */}
+      {tab !== 'home' && (
+        <View style={styles.header}>
+          {/* The shopping pages keep the cart; the Note List Shop page has its own logo. Either one leads back to the chooser. */}
+          <Pressable
+            onPress={() => goTo('home')}
+            style={styles.logoBadge}
+            accessibilityRole="button"
+            accessibilityLabel="Kthehu në fillim"
+          >
+            {tab === 'notes' ? (
+              <Image source={require('@/assets/images/note-list-icon.png')} style={styles.logoNotes} resizeMode="contain" />
+            ) : (
+              <Image source={require('@/assets/images/logo-mark.png')} style={styles.logo} resizeMode="contain" />
             )}
-          </>
-        )}
-        <Pressable
-          onPress={() => setProfileOpen(true)}
-          style={styles.avatar}
-          accessibilityRole="button"
-          accessibilityLabel="Profili"
-        >
-          <Text style={styles.avatarText}>{firstName.charAt(0).toUpperCase()}</Text>
-        </Pressable>
-      </View>
-
-      <BottomSheet visible={profileOpen} onClose={() => setProfileOpen(false)} title="Profili">
-        <View style={styles.profileRow}>
-          <View style={[styles.avatar, styles.avatarLarge]}>
-            <Text style={[styles.avatarText, styles.avatarTextLarge]}>{firstName.charAt(0).toUpperCase()}</Text>
-          </View>
-          <View style={styles.profileText}>
-            <Text style={styles.profileName}>{user?.displayName ?? firstName}</Text>
-            <Text style={styles.profileEmail}>{user?.email ?? 'Modalitet demo (pa llogari)'}</Text>
-          </View>
-        </View>
-        {supported && !demoMode && (
-          <View style={styles.lockRow}>
-            <Ionicons name="finger-print" size={22} color={colors.primaryDark} />
-            <View style={styles.profileText}>
-              <Text style={styles.lockTitle}>Kyçja e aplikacionit</Text>
-              <Text style={styles.profileEmail}>Gjurmë gishti, PIN ose model kur e hap</Text>
+          </Pressable>
+          {searching && tab === 'lists' ? (
+            <View style={styles.searchBox}>
+              <Ionicons name="search" size={18} color={colors.textMuted} />
+              <TextInput
+                value={query}
+                onChangeText={changeQuery}
+                placeholder="Kërko listën…"
+                placeholderTextColor={colors.textMuted}
+                style={styles.searchInput}
+                autoFocus
+                autoCorrect={false}
+                returnKeyType="search"
+              />
+              <Pressable onPress={closeSearch} hitSlop={8} accessibilityRole="button" accessibilityLabel="Mbyll kërkimin">
+                <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+              </Pressable>
             </View>
-            <Switch
-              value={lockEnabled}
-              onValueChange={async (next) => setLockError(await setLockEnabled(next))}
-              trackColor={{ true: colors.primary, false: colors.border }}
-              accessibilityLabel="Kyçja e aplikacionit"
-            />
-          </View>
-        )}
-        {lockError && <Text style={styles.lockError}>{lockError}</Text>}
-        <Pressable
-          onPress={() => {
-            setProfileOpen(false);
-            signOut();
-          }}
-          accessibilityRole="button"
-          style={styles.signOutButton}
-        >
-          <Ionicons name="log-out-outline" size={20} color={colors.danger} />
-          <Text style={styles.signOutText}>{demoMode ? 'Dil nga demo' : 'Dil nga llogaria'}</Text>
-        </Pressable>
-      </BottomSheet>
+          ) : (
+            <>
+              <View style={styles.titleBlock}>
+                <Text style={styles.title}>{tab === 'notes' ? 'Note List Shop' : 'Note Shop List'}</Text>
+                <Text style={styles.subtitle}>
+                  {demoMode
+                    ? 'Modalitet demo · ndryshimet nuk ruhen'
+                    : tab === 'notes'
+                      ? 'Lista jote e detyrave'
+                      : `Mirë se erdhe, ${firstName}`}
+                </Text>
+              </View>
+              {tab === 'lists' && trips.length > 1 && (
+                <Pressable
+                  onPress={() => setSearching(true)}
+                  style={styles.searchButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Kërko listë"
+                >
+                  <Ionicons name="search" size={20} color={colors.primaryDark} />
+                </Pressable>
+              )}
+              {/* A quick switch to the other part: the notepad opens Note List Shop, the cart goes to Note Shop List. */}
+              {tab === 'notes' ? (
+                <Pressable
+                  onPress={() => goTo(returnTab)}
+                  style={styles.notesButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Hap Note Shop List"
+                >
+                  <Image source={require('@/assets/images/logo-mark.png')} style={styles.notesButtonLogo} resizeMode="contain" />
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() => goTo('notes')}
+                  style={styles.notesButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Hap Note List Shop"
+                >
+                  <Image source={require('@/assets/images/note-list-icon.png')} style={styles.notesButtonLogo} resizeMode="contain" />
+                </Pressable>
+              )}
+            </>
+          )}
+          <Pressable
+            onPress={() => router.push('/profile')}
+            style={styles.avatar}
+            accessibilityRole="button"
+            accessibilityLabel="Profili"
+          >
+            <Text style={styles.avatarText}>{initial}</Text>
+          </Pressable>
+        </View>
+      )}
 
       <View style={styles.content}>
-        {tab === 'lists' ? (
+        {tab === 'home' ? (
+          <HomeChooser
+            name={fullName}
+            initial={initial}
+            demo={demoMode}
+            onOpenProfile={() => router.push('/profile')}
+            onChoose={(section) => goTo(section === 'notes' ? 'notes' : returnTab)}
+          />
+        ) : tab === 'lists' ? (
           <FlatList
             data={shownTrips}
             keyExtractor={(trip) => trip.id}
@@ -221,9 +249,12 @@ export default function ListsOverviewScreen() {
           />
         ) : tab === 'reports' ? (
           <ReportsView onOpenTrip={openTrip} />
-        ) : (
+        ) : tab === 'qokat' ? (
           // Only built once its tab is opened, so it costs nothing until then.
           <QokatView onOpenTrip={openTrip} />
+        ) : (
+          // Same here: nothing of the Note List Shop page runs, or is read from the phone, until its tab is opened.
+          <NotesView />
         )}
       </View>
 
@@ -233,15 +264,18 @@ export default function ListsOverviewScreen() {
         </View>
       )}
 
-      <BottomTabBar
-        value={tab}
-        onChange={setTab}
-        options={[
-          { value: 'lists', label: 'Listat', icon: 'list-outline', activeIcon: 'list' },
-          { value: 'reports', label: 'Raportet', icon: 'stats-chart-outline', activeIcon: 'stats-chart' },
-          { value: 'qokat', label: 'Qokat', icon: 'cafe-outline', activeIcon: 'cafe' },
-        ]}
-      />
+      {/* The tabs belong to the shopping pages; the chooser and Note List Shop are pages of their own and have none. */}
+      {isShopTab(tab) && (
+        <BottomTabBar
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'lists', label: 'Listat', icon: 'list-outline', activeIcon: 'list' },
+            { value: 'reports', label: 'Raportet', icon: 'stats-chart-outline', activeIcon: 'stats-chart' },
+            { value: 'qokat', label: 'Qokat', icon: 'cafe-outline', activeIcon: 'cafe' },
+          ]}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -265,6 +299,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logo: { width: 30, height: 30 },
+  logoNotes: { width: 36, height: 36 },
+  notesButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notesButtonLogo: { width: 28, height: 28 },
   avatar: {
     width: 38,
     height: 38,
@@ -276,33 +320,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarText: { fontSize: 16, fontWeight: '700', color: colors.primaryDark },
-  avatarLarge: { width: 52, height: 52, borderRadius: 26 },
-  avatarTextLarge: { fontSize: 22 },
-  profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  lockRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  lockTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
-  lockError: { fontSize: 13, color: colors.danger },
-  profileText: { flex: 1 },
-  profileName: { fontSize: 17, fontWeight: '700', color: colors.text },
-  profileEmail: { fontSize: 13, color: colors.textMuted },
-  signOutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.sm + 4,
-    marginTop: spacing.sm,
-  },
-  signOutText: { fontSize: 15, fontWeight: '700', color: colors.danger },
   titleBlock: { flex: 1 },
   searchButton: {
     width: 38,

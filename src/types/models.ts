@@ -15,6 +15,20 @@ export interface ShoppingItem {
   person?: string;
 }
 
+/** A to-do on the Note List Shop page. They are not part of any shopping list. */
+export interface Task {
+  id: string;
+  title: string;
+  /** Optional text under the title. */
+  description?: string;
+  /** 1 = normal … 5 = urgent, the same scale as an item's priority. */
+  importance: number;
+  done: boolean;
+  createdAt: number;
+  /** When it was checked off; the done tab lists the latest first. */
+  doneAt?: number;
+}
+
 /** What an income is: a salary, a qokë given to us, or any other extra income. */
 export type IncomeKind = 'rroga' | 'qoka' | 'shtese';
 

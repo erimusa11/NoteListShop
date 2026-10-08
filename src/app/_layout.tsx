@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { CloudSyncGate } from '@/components/CloudSyncGate';
 import { AppLockProvider } from '@/context/AppLockContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { ProfileProvider } from '@/context/ProfileContext';
 import { TripsProvider } from '@/context/TripsContext';
 import { colors } from '@/theme/theme';
 
@@ -25,6 +26,7 @@ function RootNavigator() {
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="index" />
         <Stack.Screen name="trip/[id]" />
+        <Stack.Screen name="profile" />
       </Stack.Protected>
       <Stack.Protected guard={user === null && !demoMode}>
         <Stack.Screen name="login" />
@@ -41,12 +43,14 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
         <TripsProvider>
-          <StatusBar style="dark" />
-          <CloudSyncGate>
-            <AppLockProvider>
-              <RootNavigator />
-            </AppLockProvider>
-          </CloudSyncGate>
+          <ProfileProvider>
+            <StatusBar style="dark" />
+            <CloudSyncGate>
+              <AppLockProvider>
+                <RootNavigator />
+              </AppLockProvider>
+            </CloudSyncGate>
+          </ProfileProvider>
         </TripsProvider>
       </AuthProvider>
     </GestureHandlerRootView>
