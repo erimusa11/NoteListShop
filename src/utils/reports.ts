@@ -1,6 +1,13 @@
-import type { ShoppingTrip } from '@/types/models';
+import type { ShoppingItem, ShoppingTrip } from '@/types/models';
 import { CATEGORIES, INCOME_COLOR, type Category } from '@/utils/categories';
-import { optionChoices, optionColor, optionMatcher } from '@/utils/options';
+import {
+  type OptionChoices,
+  optionChoices,
+  optionColor,
+  optionMatcher,
+  personChoices,
+  personColor,
+} from '@/utils/options';
 import { computeSpentTotal, computeTotal, tripAllItems, tripIncomeTotal } from '@/utils/totals';
 
 export interface ListSpend {
@@ -45,6 +52,8 @@ export interface OptionSpend {
 
 export interface OptionHistory {
   category: Category;
+  /** The heading of the card. */
+  title: string;
   options: OptionSpend[];
   total: number;
 }
@@ -116,8 +125,31 @@ export function buildOptionHistory(
 ): OptionHistory | null {
   const choices = optionChoices(category);
   if (!choices) return null;
+  const title = category.optionsReportTitle ?? category.label;
+  return historyBy(trips, category, choices, title, (item) => item.name, optionColor, limit);
+}
 
-  const { names, otherLabel, otherAlwaysShown } = choices;
+// The same, split by who the items are for (Drion, Alois), in a category that asks for it.
+export function buildPersonHistory(
+  trips: ShoppingTrip[],
+  category: Category,
+  limit: number = HISTORY_LISTS,
+): OptionHistory | null {
+  const choices = personChoices(category);
+  if (!choices) return null;
+  const title = category.personReportTitle ?? `${category.label} sipas personit`;
+  return historyBy(trips, category, choices, title, (item) => item.person ?? '', personColor, limit);
+}
+
+function historyBy(
+  trips: ShoppingTrip[],
+  category: Category,
+  { names, otherLabel, otherAlwaysShown }: OptionChoices,
+  title: string,
+  valueOf: (item: ShoppingItem) => string,
+  colorOf: (index: number) => string,
+  limit: number,
+): OptionHistory {
   const recent = recentTrips(trips, limit);
   const labels = [...names, otherLabel];
   const choiceOf = optionMatcher(names);
@@ -127,11 +159,11 @@ export function buildOptionHistory(
       id: trip.id,
       name: trip.name,
       createdAt: trip.createdAt,
-      spent: computeSpentTotal((trip[category.key] ?? []).filter((item) => choiceOf(item.name) === index)),
+      spent: computeSpentTotal((trip[category.key] ?? []).filter((item) => choiceOf(valueOf(item)) === index)),
     }));
     return {
       name,
-      color: optionColor(index),
+      color: colorOf(index),
       columns,
       total: columns.reduce((sum, column) => sum + column.spent, 0),
     };
@@ -139,5 +171,5 @@ export function buildOptionHistory(
 
   // The "other" group is listed when the category names it, or otherwise only once it has spending.
   const options = all.filter((option, index) => index < names.length || otherAlwaysShown || option.total > 0);
-  return { category, options, total: options.reduce((sum, option) => sum + option.total, 0) };
+  return { category, title, options, total: options.reduce((sum, option) => sum + option.total, 0) };
 }

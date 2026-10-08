@@ -11,17 +11,24 @@ export interface ShoppingItem {
   sharedId?: string;
   /** What it was for (e.g. "Servis"), in a category that asks for it; shown under the name. */
   note?: string;
+  /** Who it is for (e.g. "Drion"), in a category that asks for it (`personOptions`). */
+  person?: string;
 }
+
+/** What an income is: a salary, a qokë given to us, or any other extra income. */
+export type IncomeKind = 'rroga' | 'qoka' | 'shtese';
 
 export interface IncomeEntry {
   id: string;
   name: string;
   amount: number;
   createdAt: number;
+  /** Missing means a salary: that is what every income was before the kinds existed. */
+  kind?: IncomeKind;
 }
 
 /** What a deleted item leaves behind in its list: just enough to suggest it again when adding one. */
-export interface RemovedItem extends Pick<ShoppingItem, 'name' | 'quantity' | 'price' | 'createdAt' | 'note'> {
+export interface RemovedItem extends Pick<ShoppingItem, 'name' | 'quantity' | 'price' | 'createdAt' | 'note' | 'person'> {
   list: ItemListKey;
 }
 
@@ -40,7 +47,10 @@ export type ItemListKey =
   | 'playstation'
   | 'health'
   | 'bathroom'
-  | 'home';
+  | 'home'
+  | 'daily'
+  | 'school'
+  | 'qoka';
 
 // Besides `items` (Produktet), a list may not have every category yet (lists saved before it was added).
 // The categories and their names are in utils/categories.ts.
