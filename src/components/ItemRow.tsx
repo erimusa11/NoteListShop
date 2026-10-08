@@ -74,6 +74,10 @@ export function ItemRow({
   const [confirmUsed, setConfirmUsed] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveUsed, setMoveUsed] = useState(false);
+  // A long name goes on to a second line. The animated strike is one bar across a single line, so a name on two lines is
+  // struck through by the text itself instead.
+  const [nameLines, setNameLines] = useState(1);
+  const wrapped = nameLines > 1;
   const starred = item.sharedId !== undefined;
   // The price is for one; the row costs price × quantity, shown only when that differs from the price.
   const lineTotal = showQuantity && item.price != null && parseQuantity(item.quantity) !== 1 ? itemTotal(item) : null;
@@ -285,7 +289,9 @@ export function ItemRow({
                   onEditingChange={(e) => {
                     editing.value = e ? 1 : 0;
                   }}
-                  textStyle={[styles.name, item.bought && styles.nameBought]}
+                  numberOfLines={2}
+                  onLineCount={setNameLines}
+                  textStyle={[styles.name, item.bought && styles.nameBought, item.bought && wrapped && styles.nameStruck]}
                 />
               ) : (
                 <InlineEditableField
@@ -295,16 +301,19 @@ export function ItemRow({
                   onEditingChange={(e) => {
                     editing.value = e ? 1 : 0;
                   }}
-                  textStyle={[styles.name, item.bought && styles.nameBought]}
+                  numberOfLines={2}
+                  onLineCount={setNameLines}
+                  textStyle={[styles.name, item.bought && styles.nameBought, item.bought && wrapped && styles.nameStruck]}
                 />
               )}
-              <Animated.View style={[styles.strike, strikeStyle]} pointerEvents="none" />
+              {!wrapped && <Animated.View style={[styles.strike, strikeStyle]} pointerEvents="none" />}
             </View>
             {item.note ? (
               <InlineEditableField
                 value={item.name}
                 placeholder="Emri i artikullit"
                 onChange={(name) => onUpdate({ name })}
+                numberOfLines={2}
                 textStyle={styles.note}
               />
             ) : null}
@@ -495,6 +504,7 @@ const styles = StyleSheet.create({
   },
   name: { fontSize: 16, fontWeight: '600', color: colors.text },
   nameBought: { color: colors.textMuted },
+  nameStruck: { textDecorationLine: 'line-through' },
   quantity: { fontSize: 13, color: colors.textMuted },
   note: { fontSize: 13, color: colors.textMuted },
   quantityRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },

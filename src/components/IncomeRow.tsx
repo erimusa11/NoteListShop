@@ -29,6 +29,7 @@ export function IncomeRow({ income, onUpdate, onRemove }: IncomeRowProps) {
               const trimmed = name.trim();
               if (trimmed) onUpdate({ name: trimmed });
             }}
+            numberOfLines={2}
             textStyle={styles.name}
           />
           <Pressable
