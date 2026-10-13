@@ -1,5 +1,10 @@
-import { GoogleSignin, isErrorWithCode, isSuccessResponse } from '@react-native-google-signin/google-signin';
 import { Platform } from 'react-native';
+
+// The Google sign-in module is native code that only builds made after it was added contain, so it is only loaded when a
+// backup is really used (never on the web, nor before the Google client is set up). Everything else in the app keeps working.
+type GoogleModule = typeof import('@react-native-google-signin/google-signin');
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- loaded on demand, see above
+const google = (): GoogleModule => require('@react-native-google-signin/google-signin') as GoogleModule;
 
 // Only the files this app made are visible to it (the drive.file scope): it never sees the rest of the user's Drive.
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
@@ -20,13 +25,14 @@ const KEEP_BACKUPS = 6;
 let configured = false;
 function configure() {
   if (configured) return;
-  GoogleSignin.configure({ webClientId: WEB_CLIENT_ID, scopes: [DRIVE_SCOPE] });
+  google().GoogleSignin.configure({ webClientId: WEB_CLIENT_ID, scopes: [DRIVE_SCOPE] });
   configured = true;
 }
 
 /** Opens the Google account picker. Returns the email of the account, or null when it was closed without choosing. */
 export async function connectDrive(): Promise<string | null> {
   configure();
+  const { GoogleSignin, isSuccessResponse } = google();
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
   const result = await GoogleSignin.signIn();
   if (!isSuccessResponse(result)) return null;
@@ -41,11 +47,12 @@ export async function connectDrive(): Promise<string | null> {
 
 export async function disconnectDrive(): Promise<void> {
   configure();
-  await GoogleSignin.signOut();
+  await google().GoogleSignin.signOut();
 }
 
 async function accessToken(): Promise<string> {
   configure();
+  const { GoogleSignin } = google();
   const user = await GoogleSignin.signInSilently();
   if (user.type !== 'success') throw new Error('drive-not-connected');
   return (await GoogleSignin.getTokens()).accessToken;
@@ -58,7 +65,7 @@ async function driveFetch(url: string, init: RequestInit = {}): Promise<Response
   let token = await accessToken();
   let response = await send(token);
   if (response.status === 401) {
-    await GoogleSignin.clearCachedAccessToken(token);
+    await google().GoogleSignin.clearCachedAccessToken(token);
     token = await accessToken();
     response = await send(token);
   }
@@ -114,7 +121,7 @@ export function driveErrorMessage(error: unknown): string {
   const message = (error as { message?: string })?.message ?? '';
   if (MESSAGES[message]) return MESSAGES[message];
   if (message.startsWith('drive-http-')) return 'Google Drive dështoi. Provo përsëri pas pak.';
-  if (isErrorWithCode(error)) return 'Hyrja me Google dështoi. Provo përsëri.';
+  if (typeof (error as { code?: unknown })?.code === 'string') return 'Hyrja me Google dështoi. Provo përsëri.';
   if (message.includes('Network request failed')) return 'Nuk ka lidhje me internetin.';
   return 'Kopja në Google Drive dështoi. Provo përsëri.';
 }
