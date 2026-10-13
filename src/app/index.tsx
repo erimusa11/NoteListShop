@@ -15,6 +15,7 @@ import { NotesView } from '@/components/NotesView';
 import { ReportsView } from '@/components/ReportsView';
 import { SchoolDaysTab } from '@/components/SchoolDaysTab';
 import { SavingsCard } from '@/components/SavingsCard';
+import { TrashSheet } from '@/components/TrashSheet';
 import { TripCard } from '@/components/TripCard';
 import { useAuth } from '@/context/AuthContext';
 import { useProfile } from '@/context/ProfileContext';
@@ -22,7 +23,7 @@ import { useTrips } from '@/context/TripsContext';
 import { colors, spacing } from '@/theme/theme';
 import { buildListSpend, buildSavings, buildSectionSpend } from '@/utils/reports';
 import { SPENT_SECTION } from '@/utils/spent';
-import { tripIncomeTotal } from '@/utils/totals';
+import { tripAllItems, tripIncomeTotal } from '@/utils/totals';
 
 // The lists screen shows this many lists at first and this many more each time "load more" is pressed.
 const PAGE_SIZE = 5;
@@ -43,7 +44,8 @@ function normalizeText(value: string): string {
 }
 
 export default function ListsOverviewScreen() {
-  const { trips, createList } = useTrips();
+  const { trips, trashedTrips, createList, restoreTrip, purgeTrip } = useTrips();
+  const [trashOpen, setTrashOpen] = useState(false);
   const { demoMode } = useAuth();
   // The name from the profile page, or the account's (Google) name while the profile has none.
   const { firstName, fullName, initial } = useProfile();
@@ -241,20 +243,33 @@ export default function ListsOverviewScreen() {
               <TripCard index={index % PAGE_SIZE} trip={trip} onPress={() => openTrip(trip.id)} />
             )}
             ListFooterComponent={
-              hiddenCount > 0 ? (
-                <Pressable
-                  onPress={() => setShownCount((count) => count + PAGE_SIZE)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Shfaq edhe ${Math.min(PAGE_SIZE, hiddenCount)} lista`}
-                  style={({ pressed }) => [styles.loadMore, pressed && styles.loadMorePressed]}
-                >
-                  <Ionicons name="chevron-down" size={18} color={colors.primaryDark} />
-                  <Text style={styles.loadMoreText}>Shfaq edhe {Math.min(PAGE_SIZE, hiddenCount)} lista</Text>
-                  <Text style={styles.loadMoreMeta}>
-                    {shownTrips.length} nga {visibleTrips.length}
-                  </Text>
-                </Pressable>
-              ) : null
+              <>
+                {hiddenCount > 0 && (
+                  <Pressable
+                    onPress={() => setShownCount((count) => count + PAGE_SIZE)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Shfaq edhe ${Math.min(PAGE_SIZE, hiddenCount)} lista`}
+                    style={({ pressed }) => [styles.loadMore, pressed && styles.loadMorePressed]}
+                  >
+                    <Ionicons name="chevron-down" size={18} color={colors.primaryDark} />
+                    <Text style={styles.loadMoreText}>Shfaq edhe {Math.min(PAGE_SIZE, hiddenCount)} lista</Text>
+                    <Text style={styles.loadMoreMeta}>
+                      {shownTrips.length} nga {visibleTrips.length}
+                    </Text>
+                  </Pressable>
+                )}
+                {trashedTrips.length > 0 && !needle && (
+                  <Pressable
+                    onPress={() => setTrashOpen(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Koshi, ${trashedTrips.length} lista të fshira`}
+                    style={({ pressed }) => [styles.trashLink, pressed && styles.loadMorePressed]}
+                  >
+                    <Ionicons name="trash-outline" size={16} color={colors.textMuted} />
+                    <Text style={styles.trashLinkText}>Koshi · {trashedTrips.length}</Text>
+                  </Pressable>
+                )}
+              </>
             }
             ListEmptyComponent={
               needle ? (
@@ -284,6 +299,29 @@ export default function ListsOverviewScreen() {
           <NotesView />
         )}
       </View>
+
+      <TrashSheet
+        visible={trashOpen && tab === 'lists'}
+        onClose={() => setTrashOpen(false)}
+        title="Koshi i listave"
+        entries={trashedTrips.map((trip) => {
+          const count = tripAllItems(trip).length;
+          return {
+            id: trip.id,
+            name: trip.name,
+            meta: `${count} ${count === 1 ? 'artikull' : 'artikuj'}`,
+            deletedAt: trip.deletedAt ?? 0,
+          };
+        })}
+        onRestore={(id) => {
+          restoreTrip(id);
+          if (trashedTrips.length <= 1) setTrashOpen(false);
+        }}
+        onPurge={(id) => {
+          purgeTrip(id);
+          if (trashedTrips.length <= 1) setTrashOpen(false);
+        }}
+      />
 
       {tab === 'lists' && (
         <View style={styles.footer}>
@@ -398,6 +436,18 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   loadMorePressed: { backgroundColor: colors.primaryLight },
+  trashLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs + 2,
+    alignSelf: 'center',
+    borderRadius: 14,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
+  },
+  trashLinkText: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
   loadMoreText: { fontSize: 14, fontWeight: '700', color: colors.primaryDark },
   loadMoreMeta: { fontSize: 12, color: colors.textMuted },
   footer: {

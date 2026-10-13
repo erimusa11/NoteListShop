@@ -11,13 +11,16 @@ import { NoteListSheet, type NoteListSheetState } from '@/components/NoteListShe
 import { NoteListsPanel } from '@/components/NoteListsPanel';
 import { TaskRow } from '@/components/TaskRow';
 import { TaskSheet, type TaskSheetState } from '@/components/TaskSheet';
+import { TrashSheet } from '@/components/TrashSheet';
+import { useUndo } from '@/context/UndoContext';
 import { useNoteLists } from '@/hooks/useNoteLists';
 import { useTabSwipe } from '@/hooks/useTabSwipe';
 import { useTasks } from '@/hooks/useTasks';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
-import type { NoteList, Task } from '@/types/models';
+import type { NoteList, NoteListKind, Task } from '@/types/models';
 import { newestFirst } from '@/utils/noteLists';
 import { doneTasks, filterTasks, openTasks, type TaskFields } from '@/utils/tasks';
+import { TRASH_DAYS } from '@/utils/trash';
 
 // Listat: the groups (named lists with their own items). The other two are the to-do tasks.
 type NotesTab = 'lists' | 'todo' | 'done';
@@ -40,7 +43,7 @@ const PAGE_SIZE = 10;
 // The page is only built when its menu is opened, and the tasks are only read from the phone then, so the rest of the app
 // does not pay for it.
 export function NotesView() {
-  const { tasks, failed, retry, add, update, toggle, remove, clearDone } = useTasks();
+  const { tasks, failed, retry, add, update, toggle, remove, restore, clearDone } = useTasks();
 
   if (!tasks) {
     return failed ? (
@@ -56,7 +59,15 @@ export function NotesView() {
   }
 
   return (
-    <NotesContent tasks={tasks} onAdd={add} onUpdate={update} onToggle={toggle} onRemove={remove} onClearDone={clearDone} />
+    <NotesContent
+      tasks={tasks}
+      onAdd={add}
+      onUpdate={update}
+      onToggle={toggle}
+      onRemove={remove}
+      onRestore={restore}
+      onClearDone={clearDone}
+    />
   );
 }
 
@@ -66,10 +77,11 @@ interface NotesContentProps {
   onUpdate: (id: string, fields: TaskFields) => void;
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
+  onRestore: (task: Task) => void;
   onClearDone: () => void;
 }
 
-function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone }: NotesContentProps) {
+function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onRestore, onClearDone }: NotesContentProps) {
   // The page opens on Listat, where a group is made first.
   const [active, setActive] = useState<NotesTab>('lists');
   const { gesture, slideStyle } = useTabSwipe(ORDER, active, setActive);
@@ -77,7 +89,9 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone 
   // another one is open.
   const [queries, setQueries] = useState<Record<TaskTab, string>>({ todo: '', done: '' });
   const [shownCounts, setShownCounts] = useState<Record<TaskTab, number>>({ todo: PAGE_SIZE, done: PAGE_SIZE });
-  const { lists: noteLists, addList, removeList } = useNoteLists();
+  const { lists: noteLists, trashedLists, addList, removeList, restoreList, purgeList } = useNoteLists();
+  const { showUndo } = useUndo();
+  const [trashOpen, setTrashOpen] = useState(false);
   const groups = useMemo(() => newestFirst(noteLists ?? []), [noteLists]);
   const [listSheet, setListSheet] = useState<NoteListSheetState | null>(null);
   // The group that is asked about; kept after the question closes so its name does not vanish while the dialog fades out.
@@ -104,8 +118,8 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone 
   const closeListSheet = () => setListSheet((prev) => (prev ? { ...prev, open: false } : prev));
   const openGroup = (id: string) => router.push({ pathname: '/note/[id]', params: { id } });
   // A new group is opened right away, so its first item can be added.
-  const createGroup = (name: string) => {
-    const id = addList(name);
+  const createGroup = (name: string, kind: NoteListKind) => {
+    const id = addList(name, kind);
     closeListSheet();
     openGroup(id);
   };
@@ -123,8 +137,13 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone 
     closeSheet();
   };
 
+  const removeTask = (task: Task) => {
+    onRemove(task.id);
+    showUndo(`"${task.title}" u fshi`, () => onRestore(task));
+  };
+
   const deleteOpened = () => {
-    if (sheet?.task) onRemove(sheet.task.id);
+    if (sheet?.task) removeTask(sheet.task);
     closeSheet();
   };
 
@@ -220,6 +239,8 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone 
               empty={listsEmpty ?? <View style={styles.flex} />}
               onOpen={(list) => openGroup(list.id)}
               onDelete={askDeleteGroup}
+              trashCount={trashedLists.length}
+              onOpenTrash={() => setTrashOpen(true)}
             />
           ) : (
             <TaskList
@@ -255,6 +276,25 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone 
       )}
 
       {sheet && <TaskSheet sheet={sheet} onClose={closeSheet} onSave={save} onDelete={deleteOpened} />}
+      <TrashSheet
+        visible={trashOpen}
+        onClose={() => setTrashOpen(false)}
+        title="Koshi i listave"
+        entries={trashedLists.map((list) => ({
+          id: list.id,
+          name: list.name,
+          meta: `${list.items.length} ${list.items.length === 1 ? 'artikull' : 'artikuj'}`,
+          deletedAt: list.deletedAt ?? 0,
+        }))}
+        onRestore={(id) => {
+          restoreList(id);
+          if (trashedLists.length <= 1) setTrashOpen(false);
+        }}
+        onPurge={(id) => {
+          purgeList(id);
+          if (trashedLists.length <= 1) setTrashOpen(false);
+        }}
+      />
       {listSheet && <NoteListSheet sheet={listSheet} onClose={closeListSheet} onSave={createGroup} />}
 
       <ConfirmDialog
@@ -264,15 +304,19 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone 
         details={
           listDeleteTarget && listDeleteTarget.items.length > 0
             ? [
-                `${listDeleteTarget.items.length} ${listDeleteTarget.items.length === 1 ? 'artikull' : 'artikuj'} në të do të fshihen.`,
-                'Ky veprim nuk kthehet mbrapsht.',
+                `${listDeleteTarget.items.length} ${listDeleteTarget.items.length === 1 ? 'artikull' : 'artikuj'} në të.`,
+                `Lista ruhet ${TRASH_DAYS} ditë në Koshin dhe mund ta kthesh.`,
               ]
-            : ['Ky veprim nuk kthehet mbrapsht.']
+            : [`Lista ruhet ${TRASH_DAYS} ditë në Koshin dhe mund ta kthesh.`]
         }
         confirmLabel="Fshi"
         onConfirm={() => {
           setListDeleteOpen(false);
-          if (listDeleteTarget) removeList(listDeleteTarget.id);
+          if (listDeleteTarget) {
+            const { id, name } = listDeleteTarget;
+            removeList(id);
+            showUndo(`"${name}" u fshi`, () => restoreList(id));
+          }
         }}
         onCancel={() => setListDeleteOpen(false)}
       />
@@ -284,7 +328,7 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone 
         confirmLabel="Fshi"
         onConfirm={() => {
           setDeleteOpen(false);
-          if (deleteTarget) onRemove(deleteTarget.id);
+          if (deleteTarget) removeTask(deleteTarget);
         }}
         onCancel={() => setDeleteOpen(false)}
       />

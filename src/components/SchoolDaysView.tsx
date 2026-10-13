@@ -13,6 +13,7 @@ import {
   attendanceKids,
   attendancePlaces,
   clearDays,
+  calendarItemsOf,
   countMarks,
   dayKey,
   fillDays,
@@ -74,7 +75,7 @@ export function TotalPill({ amount }: { amount: number }) {
   );
 }
 
-// The days calendar of Kopesht & Shkolle. Pick where each child goes (Cerdhe, Kopesht, Shkolle, or sick), then tap the
+// The days calendar of Kopesht & Shkolle. Pick where each child goes (Cerdhe, Kopesht, Shkolle, Kurse, or sick), then tap the
 // days: the days at a paid place become one line per child and place in the list, times what a day costs. Everything is
 // saved as it is changed. It is a screen of its own (from the list) and a page of the bottom menu; both are this.
 export function SchoolDaysView({ trip, trips, category, header, inset = spacing.md }: SchoolDaysViewProps) {
@@ -132,13 +133,13 @@ export function SchoolDaysView({ trip, trips, category, header, inset = spacing.
   const showNotice = (text: string, undoable: boolean) => {
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     // `trip` is the list as it is now, before the change that is being announced.
-    setNotice({ text, undo: undoable ? { attendance: trip.attendance, items: trip[category.key] ?? [] } : undefined });
+    setNotice({ text, undo: undoable ? { attendance: trip.attendance, items: calendarItemsOf(trip) } : undefined });
     noticeTimer.current = setTimeout(() => setNotice(null), NOTICE_MS);
   };
   const undo = () => {
     const snapshot = notice?.undo;
     if (!snapshot) return;
-    changeTrip(trip.id, (current) => ({ ...current, attendance: snapshot.attendance ?? {}, [category.key]: snapshot.items }));
+    changeTrip(trip.id, (current) => ({ ...current, attendance: snapshot.attendance ?? {}, calendarItems: snapshot.items }));
     dismissNotice();
   };
 

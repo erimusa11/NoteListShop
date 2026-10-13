@@ -28,7 +28,7 @@ interface AttendanceCalendarProps {
 const MARKER = 18;
 
 // One month, Monday first. Each day shows a small circle for every child that has something on it: the child's letter on
-// the color of the place (or red for sick). The same slot is always the same child, so who is who is clear at a glance.
+// the color of the place (or green for sick). The same slot is always the same child, so who is who is clear at a glance.
 export function AttendanceCalendar({
   year,
   month,

@@ -8,6 +8,7 @@ import { AppLockProvider } from '@/context/AppLockContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { ProfileProvider } from '@/context/ProfileContext';
 import { TripsProvider } from '@/context/TripsContext';
+import { UndoProvider } from '@/context/UndoContext';
 import { colors } from '@/theme/theme';
 
 function RootNavigator() {
@@ -27,7 +28,6 @@ function RootNavigator() {
         <Stack.Screen name="index" />
         <Stack.Screen name="trip/[id]" />
         <Stack.Screen name="note/[id]" />
-        <Stack.Screen name="school/[id]" />
         <Stack.Screen name="profile" />
       </Stack.Protected>
       <Stack.Protected guard={user === null && !demoMode}>
@@ -49,7 +49,9 @@ export default function RootLayout() {
             <StatusBar style="dark" />
             <CloudSyncGate>
               <AppLockProvider>
-                <RootNavigator />
+                <UndoProvider>
+                  <RootNavigator />
+                </UndoProvider>
               </AppLockProvider>
             </CloudSyncGate>
           </ProfileProvider>

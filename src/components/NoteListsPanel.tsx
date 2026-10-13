@@ -5,6 +5,8 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { NoteList } from '@/types/models';
 import { formatDateAlbanian } from '@/utils/dates';
+import { isProductList, noteListTotal } from '@/utils/noteLists';
+import { formatNumber } from '@/utils/totals';
 
 interface NoteListsPanelProps {
   /** Newest first. */
@@ -13,10 +15,13 @@ interface NoteListsPanelProps {
   empty: ReactElement;
   onOpen: (list: NoteList) => void;
   onDelete: (list: NoteList) => void;
+  /** How many deleted groups wait in the trash; the link to it is only shown when there are some. */
+  trashCount: number;
+  onOpenTrash: () => void;
 }
 
 // The groups of the Note List Shop page: the name, the day it was made, and how much of it is done. A tap opens the group.
-export function NoteListsPanel({ lists, empty, onOpen, onDelete }: NoteListsPanelProps) {
+export function NoteListsPanel({ lists, empty, onOpen, onDelete, trashCount, onOpenTrash }: NoteListsPanelProps) {
   return (
     <FlatList
       data={lists}
@@ -25,6 +30,19 @@ export function NoteListsPanel({ lists, empty, onOpen, onDelete }: NoteListsPane
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
       ListEmptyComponent={empty}
+      ListFooterComponent={
+        trashCount > 0 ? (
+          <Pressable
+            onPress={onOpenTrash}
+            accessibilityRole="button"
+            accessibilityLabel={`Koshi, ${trashCount} lista të fshira`}
+            style={({ pressed }) => [styles.trashLink, pressed && styles.pressed]}
+          >
+            <Ionicons name="trash-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.trashLinkText}>Koshi · {trashCount}</Text>
+          </Pressable>
+        ) : null
+      }
       renderItem={({ item: list }) => {
         const done = list.items.filter((item) => item.done).length;
         const total = list.items.length;
@@ -37,7 +55,7 @@ export function NoteListsPanel({ lists, empty, onOpen, onDelete }: NoteListsPane
             style={({ pressed }) => [styles.card, shadow, pressed && styles.pressed]}
           >
             <View style={styles.iconBadge}>
-              <Ionicons name="list" size={22} color={colors.primaryDark} />
+              <Ionicons name={isProductList(list) ? 'pricetag' : 'list'} size={22} color={colors.primaryDark} />
             </View>
             <View style={styles.text}>
               <Text style={styles.name} numberOfLines={2}>
@@ -45,6 +63,7 @@ export function NoteListsPanel({ lists, empty, onOpen, onDelete }: NoteListsPane
               </Text>
               <Text style={styles.meta}>
                 {total === 0 ? 'Asnjë artikull ende' : `${done} nga ${total} artikuj të kryer`}
+                {isProductList(list) && noteListTotal(list) > 0 ? ` · ${formatNumber(noteListTotal(list))} Lekë` : ''}
               </Text>
               {total > 0 && (
                 <View style={styles.track}>
@@ -96,6 +115,17 @@ const styles = StyleSheet.create({
   track: { height: 4, borderRadius: radii.pill, backgroundColor: colors.border, overflow: 'hidden', marginVertical: 2 },
   fill: { height: '100%', borderRadius: radii.pill, backgroundColor: colors.success },
   date: { fontSize: 11, color: colors.textMuted },
+  trashLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs + 2,
+    alignSelf: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.xs,
+  },
+  trashLinkText: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
   trash: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   trashPressed: { backgroundColor: '#FDE6E3' },
 });

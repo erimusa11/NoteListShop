@@ -43,3 +43,6 @@ example
 # generated native folders
 /ios
 /android
+
+# Built APKs stay out of git (GitHub 100 MB limit)
+Build APK/

@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Note Shop List",
-    "slug": "note-shop-list",
+    "slug": "notelistshop",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -40,9 +40,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "7c4c3852-b893-4ff6-94f6-30988e7cc71c"
+        "projectId": "efe7f7a4-e17d-4f5c-ac3f-44ccef2ccba0"
       }
     },
-    "owner": "dilavermusa.9"
+    "owner": "erimusa11"
   }
 }

@@ -1,9 +1,16 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { BottomSheet } from '@/components/BottomSheet';
 import { colors, radii, spacing } from '@/theme/theme';
+import type { NoteListKind } from '@/types/models';
 import { formatDateAlbanian } from '@/utils/dates';
+
+const KINDS: { value: NoteListKind; title: string; hint: string; icon: 'briefcase-outline' | 'pricetag-outline' }[] = [
+  { value: 'work', title: 'Listë pune', hint: 'Detyra dhe artikuj me sasi', icon: 'briefcase-outline' },
+  { value: 'products', title: 'Listë produktesh', hint: 'Me çmim dhe shumën gjithsej', icon: 'pricetag-outline' },
+];
 
 /** `key` changes with every opening, so the form starts fresh. */
 export interface NoteListSheetState {
@@ -14,7 +21,7 @@ export interface NoteListSheetState {
 interface NoteListSheetProps {
   sheet: NoteListSheetState;
   onClose: () => void;
-  onSave: (name: string) => void;
+  onSave: (name: string, kind: NoteListKind) => void;
 }
 
 // Naming a new group. The day it is made is put on it by itself; it is only shown here so it is clear it is kept.
@@ -28,11 +35,12 @@ export function NoteListSheet({ sheet, onClose, onSave }: NoteListSheetProps) {
 
 function NoteListForm({ onSave }: Pick<NoteListSheetProps, 'onSave'>) {
   const [name, setName] = useState('');
+  const [kind, setKind] = useState<NoteListKind>('work');
   // The day is read once, when the form opens.
   const [today] = useState(() => formatDateAlbanian(Date.now()));
   const canSave = name.trim().length > 0;
   const save = () => {
-    if (canSave) onSave(name);
+    if (canSave) onSave(name, kind);
   };
 
   return (
@@ -49,6 +57,25 @@ function NoteListForm({ onSave }: Pick<NoteListSheetProps, 'onSave'>) {
         onSubmitEditing={save}
         maxLength={60}
       />
+      <Text style={[styles.label, styles.kindLabel]}>Lloji i listës</Text>
+      <View style={styles.kinds} accessibilityRole="radiogroup">
+        {KINDS.map((entry) => {
+          const selected = kind === entry.value;
+          return (
+            <Pressable
+              key={entry.value}
+              onPress={() => setKind(entry.value)}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selected }}
+              style={[styles.kind, selected && styles.kindSelected]}
+            >
+              <Ionicons name={entry.icon} size={22} color={selected ? colors.primaryDark : colors.textMuted} />
+              <Text style={[styles.kindTitle, selected && styles.kindTitleSelected]}>{entry.title}</Text>
+              <Text style={styles.kindHint}>{entry.hint}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
       <View style={styles.dateRow}>
         <Text style={styles.dateLabel}>Krijohet më</Text>
         <Text style={styles.dateValue}>{today}</Text>
@@ -75,6 +102,22 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
   },
+  kindLabel: { marginTop: spacing.sm },
+  kinds: { flexDirection: 'row', gap: spacing.sm },
+  kind: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+    padding: spacing.sm + 2,
+    borderRadius: radii.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  kindSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  kindTitle: { fontSize: 14, fontWeight: '700', color: colors.textMuted, textAlign: 'center' },
+  kindTitleSelected: { color: colors.primaryDark },
+  kindHint: { fontSize: 11, color: colors.textMuted, textAlign: 'center' },
   dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xs },
   dateLabel: { fontSize: 13, color: colors.textMuted },
   dateValue: { fontSize: 13, fontWeight: '700', color: colors.text },

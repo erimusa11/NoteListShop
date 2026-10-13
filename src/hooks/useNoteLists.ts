@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 
 import { useAuth } from '@/context/AuthContext';
-import type { NoteItem, NoteList } from '@/types/models';
+import type { NoteItem, NoteList, NoteListKind } from '@/types/models';
 import {
   createNoteItem,
   createNoteList,
@@ -27,10 +27,19 @@ export function useNoteLists() {
   const { user, demoMode } = useAuth();
   const scope = !demoMode && user ? user.uid : DEMO_NOTE_SCOPE;
 
-  const lists = useSyncExternalStore(
+  const allLists = useSyncExternalStore(
     subscribeNoteLists,
     () => cachedNoteLists(scope),
     () => null,
+  );
+  // Deleted groups wait in the trash (newest deletion first) and are left out of `lists` until they are brought back.
+  const lists = useMemo(() => allLists?.filter((list) => list.deletedAt === undefined) ?? null, [allLists]);
+  const trashedLists = useMemo(
+    () =>
+      (allLists ?? [])
+        .filter((list) => list.deletedAt !== undefined)
+        .sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0)),
+    [allLists],
   );
   // What was deleted, kept only to suggest it again when adding an item.
   const history = useSyncExternalStore(
@@ -38,7 +47,7 @@ export function useNoteLists() {
     () => cachedNoteHistory(scope),
     () => cachedNoteHistory(scope),
   );
-  const hasLists = lists !== null;
+  const hasLists = allLists !== null;
   const [attempt, setAttempt] = useState(0);
   const [failedAttempt, setFailedAttempt] = useState<number | null>(null);
 
@@ -76,14 +85,25 @@ export function useNoteLists() {
 
   const actions = useMemo(
     () => ({
-      /** Makes a new group and returns its id. */
-      addList: (name: string): string => {
-        const list = createNoteList(name);
+      /** Makes a new group (a work list, or a list of products) and returns its id. */
+      addList: (name: string, kind?: NoteListKind): string => {
+        const list = createNoteList(name, kind);
         commit((all) => [...all, list]);
         return list.id;
       },
       renameList: (id: string, name: string) => changeList(id, (list) => ({ ...list, name: name.trim() || list.name })),
+      /** Moves the group to the trash, where it can be brought back until `TRASH_DAYS` have passed. */
       removeList: (id: string) => {
+        const now = Date.now();
+        changeList(id, (list) => ({ ...list, deletedAt: now }));
+      },
+      restoreList: (id: string) =>
+        changeList(id, (list) => {
+          const { deletedAt: _deletedAt, ...restored } = list;
+          return restored;
+        }),
+      /** Deletes a group from the trash for good; what it held is only kept as suggestions. */
+      purgeList: (id: string) => {
         forget(cachedNoteLists(scope)?.find((list) => list.id === id)?.items ?? []);
         commit((all) => all.filter((list) => list.id !== id));
       },
@@ -99,6 +119,14 @@ export function useNoteLists() {
           ...list,
           items: list.items.map((item) => (item.id === itemId ? { ...item, done: !item.done } : item)),
         })),
+      /** Puts a deleted item back in its group, at the place its creation date gives it. */
+      restoreItem: (listId: string, item: NoteItem) =>
+        changeList(listId, (list) => {
+          if (list.items.some((entry) => entry.id === item.id)) return list;
+          const at = list.items.findIndex((entry) => entry.createdAt > item.createdAt);
+          const items = at === -1 ? [...list.items, item] : [...list.items.slice(0, at), item, ...list.items.slice(at)];
+          return { ...list, items };
+        }),
       removeItem: (listId: string, itemId: string) => {
         const list = cachedNoteLists(scope)?.find((entry) => entry.id === listId);
         forget(list?.items.filter((item) => item.id === itemId) ?? []);
@@ -110,6 +138,7 @@ export function useNoteLists() {
 
   return {
     lists,
+    trashedLists,
     history,
     failed: !hasLists && failedAttempt === attempt,
     retry: () => setAttempt((n) => n + 1),

@@ -5,6 +5,7 @@ import { SectionList, StyleSheet, Text, View } from 'react-native';
 import { LIST_TUNING } from '@/components/ItemList';
 import { ItemRow } from '@/components/ItemRow';
 import { useTripActions } from '@/context/TripsContext';
+import { useRemoveItem } from '@/hooks/useRemoveItem';
 import { colors, radii, spacing } from '@/theme/theme';
 import type { ShoppingItem } from '@/types/models';
 import type { SpentGroup } from '@/utils/spent';
@@ -31,7 +32,8 @@ const SCROLL_TRIES = 6;
 // Everything already checked off, one block per category: the category and what it took on top, then its items. Each
 // row works on its own category's item, so unchecking one here unchecks it there (and it leaves this list).
 export const SpentList = memo(function SpentList({ tripId, groups, emptyText, focusSection }: SpentListProps) {
-  const { toggleItem, updateItem, removeItem, moveItem, toggleStar } = useTripActions();
+  const { toggleItem, updateItem, moveItem, toggleStar } = useTripActions();
+  const removeItem = useRemoveItem();
   const sections = useMemo<Block[]>(() => groups.map((group) => ({ group, data: group.items })), [groups]);
   const focusIndex = focusSection ? sections.findIndex(({ group }) => group.category.section === focusSection) : -1;
 
@@ -92,7 +94,7 @@ export const SpentList = memo(function SpentList({ tripId, groups, emptyText, fo
             item={item}
             onToggle={() => toggleItem(tripId, category.key, item.id)}
             onUpdate={(patch) => updateItem(tripId, category.key, item.id, patch)}
-            onRemove={() => removeItem(tripId, category.key, item.id)}
+            onRemove={() => removeItem(tripId, category.key, item)}
             onToggleStar={() => toggleStar(tripId, category.key, item.id)}
             moveFrom={category.key}
             onMove={(to, groupName) => moveItem(tripId, category.key, item.id, to, groupName)}

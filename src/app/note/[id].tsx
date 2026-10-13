@@ -9,18 +9,23 @@ import { EmptyState } from '@/components/EmptyState';
 import { InlineEditableField } from '@/components/InlineEditableField';
 import { NoteItemRow } from '@/components/NoteItemRow';
 import { NoteItemSheet, type NoteItemSheetState } from '@/components/NoteItemSheet';
+import { useUndo } from '@/context/UndoContext';
 import { useNoteLists } from '@/hooks/useNoteLists';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { NoteItem } from '@/types/models';
 import { formatDateAlbanian } from '@/utils/dates';
 import { goBackOrHome } from '@/utils/navigation';
-import { buildNoteSuggestions, type NoteItemFields, sortNoteItems } from '@/utils/noteLists';
+import { buildNoteSuggestions, isProductList, type NoteItemFields, noteListTotal, sortNoteItems } from '@/utils/noteLists';
+import { formatNumber } from '@/utils/totals';
+import { TRASH_DAYS } from '@/utils/trash';
 
 // One group of the Note List Shop page: its name and the day it was made on top, then its items. Each item has an amount
 // (1 unless changed) counted in copë, kg, gr or liters.
 export default function NoteListScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { lists, history, renameList, removeList, addItem, updateItem, toggleItem, removeItem } = useNoteLists();
+  const { lists, history, renameList, removeList, restoreList, addItem, updateItem, toggleItem, removeItem, restoreItem } =
+    useNoteLists();
+  const { showUndo } = useUndo();
   const list = lists?.find((entry) => entry.id === id);
   // The sheet is only built once it is first opened.
   const [sheet, setSheet] = useState<NoteItemSheetState | null>(null);
@@ -30,6 +35,9 @@ export default function NoteListScreen() {
   const [deleteListOpen, setDeleteListOpen] = useState(false);
 
   const items = useMemo(() => sortNoteItems(list?.items ?? []), [list?.items]);
+  // A list of products: its items have a price, and the list shows what they all cost together.
+  const products = list ? isProductList(list) : false;
+  const listTotal = list ? noteListTotal(list) : 0;
   const done = items.filter((item) => item.done).length;
   // What was added before, in any group or since deleted, that this one does not have yet.
   const suggestions = useMemo(
@@ -54,16 +62,22 @@ export default function NoteListScreen() {
     else addItem(list.id, fields);
     closeSheet();
   };
+  const removeWithUndo = (listId: string, item: NoteItem) => {
+    removeItem(listId, item.id);
+    showUndo(`"${item.name}" u fshi`, () => restoreItem(listId, item));
+  };
   const deleteOpened = () => {
-    if (list && sheet?.item) removeItem(list.id, sheet.item.id);
+    if (list && sheet?.item) removeWithUndo(list.id, sheet.item);
     closeSheet();
   };
   // Leaves the screen first, so the group is never seen as "not found" while it is being removed.
   const deleteList = () => {
     if (!list) return;
+    const { id: listId, name } = list;
     setDeleteListOpen(false);
     goBackOrHome();
-    removeList(list.id);
+    removeList(listId);
+    showUndo(`"${name}" u fshi`, () => restoreList(listId));
   };
 
   return (
@@ -113,6 +127,15 @@ export default function NoteListScreen() {
                   {done} nga {items.length}
                 </Text>
               </View>
+              {products && (
+                <>
+                  <View style={styles.divider} />
+                  <View style={styles.summaryHalf}>
+                    <Text style={styles.summaryLabel}>Gjithsej</Text>
+                    <Text style={styles.summaryCount}>{formatNumber(listTotal)} Lekë</Text>
+                  </View>
+                </>
+              )}
             </View>
 
             <FlatList
@@ -123,7 +146,7 @@ export default function NoteListScreen() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => (
-                <NoteItemRow item={item} onToggle={toggle} onPress={openSheet} onDelete={askDelete} />
+                <NoteItemRow item={item} onToggle={toggle} onPress={openSheet} onDelete={askDelete} showPrice={products} />
               )}
               ListEmptyComponent={
                 <EmptyState icon="basket-outline" title="Lista është bosh" subtitle="Shtyp + për të shtuar artikullin e parë." />
@@ -149,6 +172,7 @@ export default function NoteListScreen() {
               onSave={save}
               onDelete={deleteOpened}
               suggestions={suggestions}
+              showPrice={products}
             />}
 
           <ConfirmDialog
@@ -158,7 +182,7 @@ export default function NoteListScreen() {
             confirmLabel="Fshi"
             onConfirm={() => {
               setDeleteOpen(false);
-              if (deleteTarget) removeItem(list.id, deleteTarget.id);
+              if (deleteTarget) removeWithUndo(list.id, deleteTarget);
             }}
             onCancel={() => setDeleteOpen(false)}
           />
@@ -170,10 +194,10 @@ export default function NoteListScreen() {
             details={
               list.items.length > 0
                 ? [
-                    `${list.items.length} ${list.items.length === 1 ? 'artikull' : 'artikuj'} në të do të fshihen.`,
-                    'Ky veprim nuk kthehet mbrapsht.',
+                    `${list.items.length} ${list.items.length === 1 ? 'artikull' : 'artikuj'} në të.`,
+                    `Lista ruhet ${TRASH_DAYS} ditë në Koshin dhe mund ta kthesh.`,
                   ]
-                : ['Ky veprim nuk kthehet mbrapsht.']
+                : [`Lista ruhet ${TRASH_DAYS} ditë në Koshin dhe mund ta kthesh.`]
             }
             confirmLabel="Fshi"
             onConfirm={deleteList}

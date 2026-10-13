@@ -145,6 +145,7 @@ export function ItemRow({
 
   useEffect(() => {
     play(item.bought);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only replay the animation when `bought` changes
   }, [item.bought]);
 
   const handleToggle = () => {
@@ -258,8 +259,8 @@ export function ItemRow({
       style={[styles.slot, slotStyle]}
       onLayout={(e) => {
         if (dismissingRef.current) return;
-        fullH.value = e.nativeEvent.layout.height;
-        cardW.value = e.nativeEvent.layout.width;
+        fullH.set(e.nativeEvent.layout.height);
+        cardW.set(e.nativeEvent.layout.width);
       }}
     >
       <GestureDetector gesture={holdToDelete}>

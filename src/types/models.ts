@@ -18,7 +18,7 @@ export interface ShoppingItem {
 }
 
 /** Where a child spent a day: one of the places that are paid by the day, or at home sick. */
-export type AttendancePlace = 'Cerdhe' | 'Kopesht' | 'Shkolle' | 'sick';
+export type AttendancePlace = 'Cerdhe' | 'Kopesht' | 'Shkolle' | 'Kurse' | 'sick';
 
 /** The days each child went to a place, or was sick: day ('YYYY-MM-DD') → child → place. */
 export type Attendance = Record<string, Record<string, AttendancePlace>>;
@@ -49,7 +49,12 @@ export interface NoteItem {
   unit: QuantityUnit;
   done: boolean;
   createdAt: number;
+  /** What the item costs (for the whole line), in a list of products. Missing when none was given. */
+  price?: number;
 }
+
+/** What a group is for: a work list (to-dos with amounts) or a list of products, whose items have a price that adds up. */
+export type NoteListKind = 'work' | 'products';
 
 /** A group on the Note List Shop page: a named list, with the day it was made, that holds its own items. */
 export interface NoteList {
@@ -57,6 +62,10 @@ export interface NoteList {
   name: string;
   createdAt: number;
   items: NoteItem[];
+  /** Missing means a work list: that is what every group was before the kinds existed. */
+  kind?: NoteListKind;
+  /** Set when the group is deleted: it waits in the trash, and can be brought back, until `TRASH_DAYS` have passed. */
+  deletedAt?: number;
 }
 
 /** What an income is: a salary, a qokë given to us, or any other extra income. */
@@ -81,6 +90,7 @@ export type ItemListKey =
   | 'items'
   | 'supplies'
   | 'bills'
+  | 'utilities'
   | 'wishlist'
   | 'clothes'
   | 'fuel'
@@ -90,6 +100,7 @@ export type ItemListKey =
   | 'kitchen'
   | 'playstation'
   | 'health'
+  | 'children'
   | 'bathroom'
   | 'home'
   | 'daily'
@@ -108,6 +119,10 @@ export interface ShoppingTrip extends Partial<Record<Exclude<ItemListKey, 'items
   incomes?: IncomeEntry[];
   /** The calendar of the category that counts days (Kopesht & Shkolle): what the children did on each day. */
   attendance?: Attendance;
+  /** What the calendar counts: the days of each child at each place (with the price of a day) and its fixed amounts. Not part of the category's own list. */
+  calendarItems?: ShoppingItem[];
   /** Items deleted from this list, one per name and category. Only used for suggestions; they are not shown anywhere else. */
   removed?: RemovedItem[];
+  /** Set when the list is deleted: it waits in the trash, and can be brought back, until `TRASH_DAYS` have passed. */
+  deletedAt?: number;
 }

@@ -1,4 +1,4 @@
-import type { NoteItem, NoteList, QuantityUnit } from '@/types/models';
+import type { NoteItem, NoteList, NoteListKind, QuantityUnit } from '@/types/models';
 import { parseQuantity } from '@/utils/quantity';
 import { normalizeText } from '@/utils/suggestions';
 import { formatNumber } from '@/utils/totals';
@@ -34,17 +34,33 @@ export interface NoteItemFields {
   name: string;
   quantity: string;
   unit: QuantityUnit;
+  /** The text of the price field, only in a list of products. Empty or invalid means no price. */
+  price?: string;
+}
+
+/** The price typed in a field: a number from zero up, or undefined for nothing usable. */
+export function parseNotePrice(text: string | undefined): number | undefined {
+  const value = parseFloat((text ?? '').replace(',', '.'));
+  return Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+export const isProductList = (list: Pick<NoteList, 'kind'>): boolean => list.kind === 'products';
+
+/** What every item of the list costs together; items without a price add nothing. */
+export function noteListTotal(list: NoteList): number {
+  return list.items.reduce((sum, item) => sum + (item.price ?? 0), 0);
 }
 
 export function newNoteId(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-export function createNoteList(name: string): NoteList {
-  return { id: newNoteId(), name: name.trim(), createdAt: Date.now(), items: [] };
+export function createNoteList(name: string, kind: NoteListKind = 'work'): NoteList {
+  return { id: newNoteId(), name: name.trim(), createdAt: Date.now(), items: [], ...(kind === 'products' ? { kind } : {}) };
 }
 
-export function createNoteItem({ name, quantity, unit }: NoteItemFields): NoteItem {
+export function createNoteItem({ name, quantity, unit, price }: NoteItemFields): NoteItem {
+  const cost = parseNotePrice(price);
   return {
     id: newNoteId(),
     name: name.trim(),
@@ -52,11 +68,21 @@ export function createNoteItem({ name, quantity, unit }: NoteItemFields): NoteIt
     unit: isUnit(unit) ? unit : DEFAULT_UNIT,
     done: false,
     createdAt: Date.now(),
+    ...(cost !== undefined ? { price: cost } : {}),
   };
 }
 
-export function editNoteItem(item: NoteItem, { name, quantity, unit }: NoteItemFields): NoteItem {
-  return { ...item, name: name.trim(), quantity: parseQuantity(quantity), unit: isUnit(unit) ? unit : DEFAULT_UNIT };
+export function editNoteItem(item: NoteItem, { name, quantity, unit, price }: NoteItemFields): NoteItem {
+  const { price: _before, ...rest } = item;
+  // The price field is only there in a list of products; where it is not, the item keeps the price it has.
+  const cost = price === undefined ? _before : parseNotePrice(price);
+  return {
+    ...rest,
+    name: name.trim(),
+    quantity: parseQuantity(quantity),
+    unit: isUnit(unit) ? unit : DEFAULT_UNIT,
+    ...(cost !== undefined ? { price: cost } : {}),
+  };
 }
 
 /** What was saved on the phone may be damaged or from an older version: keep only what is a real list with real items. */
@@ -73,6 +99,8 @@ export function normalizeNoteLists(raw: unknown): NoteList[] {
         id: list.id,
         name,
         createdAt: Number.isFinite(list.createdAt) ? Number(list.createdAt) : 0,
+        ...(Number.isFinite(list.deletedAt) ? { deletedAt: Number(list.deletedAt) } : {}),
+        ...(list.kind === 'products' ? { kind: 'products' as const } : {}),
         items: items.flatMap((value): NoteItem[] => {
           if (value === null || typeof value !== 'object') return [];
           const item = value as Partial<Record<keyof NoteItem, unknown>>;
@@ -86,6 +114,7 @@ export function normalizeNoteLists(raw: unknown): NoteList[] {
               unit: isUnit(item.unit) ? item.unit : DEFAULT_UNIT,
               done: item.done === true,
               createdAt: Number.isFinite(item.createdAt) ? Number(item.createdAt) : 0,
+              ...(Number.isFinite(item.price) && Number(item.price) >= 0 ? { price: Number(item.price) } : {}),
             },
           ];
         }),

@@ -54,7 +54,7 @@ export function BottomTabBar<T extends string>({ options, value, onChange }: Bot
       <View
         style={[styles.bar, shadow]}
         onLayout={(e) => {
-          segW.value = (e.nativeEvent.layout.width - PADDING * 2) / options.length;
+          segW.set((e.nativeEvent.layout.width - PADDING * 2) / options.length);
         }}
       >
         <Animated.View style={[styles.pill, pillStyle]} pointerEvents="none" />

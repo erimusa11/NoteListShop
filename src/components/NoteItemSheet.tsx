@@ -27,14 +27,23 @@ interface NoteItemSheetProps {
   onClose: () => void;
   onSave: (fields: NoteItemFields) => void;
   onDelete: () => void;
+  /** In a list of products: also ask for the price of the item. */
+  showPrice?: boolean;
   /** What was added before, offered while a new item is typed: one tap adds it with the amount it was last used with. */
   suggestions: NoteSuggestion[];
 }
 
-export function NoteItemSheet({ sheet, onClose, onSave, onDelete, suggestions }: NoteItemSheetProps) {
+export function NoteItemSheet({ sheet, onClose, onSave, onDelete, suggestions, showPrice }: NoteItemSheetProps) {
   return (
     <BottomSheet visible={sheet.open} onClose={onClose} title={sheet.item ? 'Ndrysho artikullin' : 'Artikull i ri'}>
-      <NoteItemForm key={sheet.key} item={sheet.item} onSave={onSave} onDelete={onDelete} suggestions={suggestions} />
+      <NoteItemForm
+        key={sheet.key}
+        item={sheet.item}
+        onSave={onSave}
+        onDelete={onDelete}
+        suggestions={suggestions}
+        showPrice={showPrice}
+      />
     </BottomSheet>
   );
 }
@@ -44,11 +53,13 @@ function NoteItemForm({
   onSave,
   onDelete,
   suggestions,
-}: Pick<NoteItemSheetProps, 'onSave' | 'onDelete' | 'suggestions'> & { item: NoteItem | null }) {
+  showPrice,
+}: Pick<NoteItemSheetProps, 'onSave' | 'onDelete' | 'suggestions' | 'showPrice'> & { item: NoteItem | null }) {
   const [name, setName] = useState(item?.name ?? '');
   // The amount is 1 until it is changed; an empty or invalid one is saved as 1 too.
   const [quantity, setQuantity] = useState(item ? String(item.quantity) : DEFAULT_QUANTITY);
   const [unit, setUnit] = useState<QuantityUnit>(item?.unit ?? DEFAULT_UNIT);
+  const [price, setPrice] = useState(item?.price != null ? String(item.price) : '');
   // Deleting takes a second tap, so a stray touch cannot remove an item.
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -57,7 +68,7 @@ function NoteItemForm({
 
   const canSave = name.trim().length > 0;
   const save = () => {
-    if (canSave) onSave({ name, quantity, unit });
+    if (canSave) onSave({ name, quantity, unit, ...(showPrice ? { price } : {}) });
   };
 
   return (
@@ -126,6 +137,22 @@ function NoteItemForm({
           })}
         </View>
       </View>
+
+      {showPrice && (
+        <>
+          <Text style={[styles.label, styles.gap]}>Çmimi i artikullit (opsionale)</Text>
+          <TextInput
+            value={price}
+            onChangeText={setPrice}
+            placeholder="Lekë"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="decimal-pad"
+            style={styles.input}
+            accessibilityLabel="Çmimi"
+            onSubmitEditing={save}
+          />
+        </>
+      )}
 
       <Pressable onPress={save} disabled={!canSave} accessibilityRole="button" style={[styles.save, !canSave && styles.saveDisabled]}>
         <Text style={styles.saveText}>{item ? 'Ruaj ndryshimet' : 'Shto artikullin'}</Text>
