@@ -47,21 +47,10 @@ export function tripAllItems(trip: ShoppingTrip): ShoppingItem[] {
   return CATEGORIES.flatMap(({ key }) => trip[key] ?? []);
 }
 
-// The categories of one list in the order its tabs are shown: by the number on the tab, which is how many items are
-// still to buy, the biggest first. A tie goes to the category with more items in all, then to the bigger total, then to
-// the usual order. Categories with nothing left to buy (all bought, then empty ones) come last.
-export function categoriesByOpenItems(trip: ShoppingTrip | undefined): Category[] {
-  if (!trip) return CATEGORIES;
-  return CATEGORIES.map((category, index) => {
-    const items = trip[category.key] ?? [];
-    return {
-      category,
-      index,
-      open: items.filter((item) => !item.bought).length,
-      count: items.length,
-      total: computeTotal(items),
-    };
-  })
-    .sort((a, b) => b.open - a.open || b.count - a.count || b.total - a.total || a.index - b.index)
-    .map(({ category }) => category);
+// The categories in the order their tabs and the category menu show them: by name, A to Z (accents and case ignored, so
+// "Ë" sorts with "E").
+const plain = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+const ALPHABETICAL = [...CATEGORIES].sort((a, b) => plain(a.label).localeCompare(plain(b.label)));
+export function categoriesAlphabetically(): Category[] {
+  return ALPHABETICAL;
 }

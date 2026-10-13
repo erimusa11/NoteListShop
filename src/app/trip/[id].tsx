@@ -39,7 +39,7 @@ import { buildOptionTotals, buildPersonTotals, itemOption, itemsForOption, items
 import { SPENT_COLOR, SPENT_SECTION, type SpentGroup, spentItems } from '@/utils/spent';
 import { buildListSuggestions, buildSuggestions, suggestionGroups } from '@/utils/suggestions';
 import { TRASH_DAYS } from '@/utils/trash';
-import { categoriesByOpenItems, computeSpentTotal, computeTotal, tripAllItems } from '@/utils/totals';
+import { categoriesAlphabetically, computeSpentTotal, computeTotal, tripAllItems } from '@/utils/totals';
 
 // 'income' or the `section` of a category.
 type Section = string;
@@ -154,10 +154,8 @@ export default function TripDetailScreen() {
   const { trips, addItem, addIncome, updateIncome, removeIncome, renameTrip, deleteTrip, restoreTrip } = useTrips();
   const { showUndo } = useUndo();
   const trip = trips.find((t) => t.id === id);
-  // The category tabs are sorted by the number on them (most items left to buy first, empty ones last) when the list is
-  // opened and then kept as they are, so no tab jumps around while you add or check off items; the next time the list
-  // is opened they are sorted again.
-  const [categoryOrder] = useState(() => categoriesByOpenItems(trip));
+  // The category tabs and the category menu are in alphabetical order, so a category is always in the same place.
+  const categoryOrder = categoriesAlphabetically();
   // The list opens on Më të rëndësishmet (or Të shpenzuarat, from the pie), so the strip starts at the left, where those
   // tabs are, right after Të ardhurat.
   const [section, setSection] = useState<Section>(startSection);
