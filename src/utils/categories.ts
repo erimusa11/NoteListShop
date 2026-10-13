@@ -220,23 +220,23 @@ export const CATEGORIES: Category[] = [
     optionsReportTitle: 'Shendeti sipas personit',
     emptyText: 'Nuk ka ende asnjë shpenzim.',
   },
-  // What is spent on the boys (toys, clothes, school things…): for Alois, for Drion, or for both.
+  // What is spent on the children (toys, clothes, school things…): for Alois, for Drion, or for both.
   {
     key: 'children',
     section: 'children',
-    label: 'Alois & Drion',
+    label: 'Fëmijët',
     icon: 'happy-outline',
     activeIcon: 'happy',
     color: '#7048E8',
     showQuantity: false,
-    totalLabel: 'Gjithsej Alois & Drion',
+    totalLabel: 'Gjithsej fëmijët',
     addTitle: 'Shto shpenzim',
     namePlaceholder: 'P.sh. Lodra, Libra, Rroba…',
     nameOptions: ['Alois', 'Drion'],
     optionsLabel: 'Për kë',
     otherOption: 'Të dy',
     showNote: true,
-    optionsReportTitle: 'Alois & Drion sipas personit',
+    optionsReportTitle: 'Fëmijët sipas personit',
     emptyText: 'Nuk ka ende asnjë shpenzim.',
   },
   {
