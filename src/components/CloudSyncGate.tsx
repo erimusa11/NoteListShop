@@ -9,6 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useTrips } from '@/context/TripsContext';
 import { db } from '@/lib/firebase';
 import { colors, radii, spacing } from '@/theme/theme';
+import { clearDemoNoteLists } from '@/utils/noteListStore';
 import { clearDemoTasks } from '@/utils/taskStore';
 import { upgradeLegacyTrips, type StoredData } from '@/utils/tripLists';
 
@@ -105,6 +106,7 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
     wasDemo.current = false;
     hydrators.current.hydrateTrips([]);
     clearDemoTasks();
+    clearDemoNoteLists();
   }, [demoMode]);
 
   useEffect(() => {

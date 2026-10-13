@@ -28,6 +28,8 @@ export interface TagOption<T extends string> {
   accent: string;
   remaining: number;
   total: number;
+  /** What a screen reader says after the label, when "X nga Y mbeten" does not fit the tab. */
+  status?: string;
 }
 
 const GAP = 6;
@@ -77,7 +79,7 @@ function Tag<T extends string>({
   reduced,
   slotWidth,
 }: TagProps<T>) {
-  const { label, tabLabel, icon, activeIcon, accent, remaining, total } = option;
+  const { label, tabLabel, icon, activeIcon, accent, remaining, total, status } = option;
   const ratio = total ? (total - remaining) / total : 0;
 
   const sel = useSharedValue(active ? 1 : 0);
@@ -147,7 +149,7 @@ function Tag<T extends string>({
     transform: [{ scale: 1 + 0.35 * pop.value }, { rotate: `${-8 * pop.value}deg` }],
   }));
 
-  const a11yLabel = total === 0 ? `${label}, bosh` : `${label}, ${remaining} nga ${total} mbeten`;
+  const a11yLabel = total === 0 ? `${label}, bosh` : `${label}, ${status ?? `${remaining} nga ${total} mbeten`}`;
 
   return (
     <Pressable

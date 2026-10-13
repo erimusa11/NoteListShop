@@ -26,8 +26,12 @@ interface BottomTabBarProps<T extends string> {
 
 const PADDING = 6;
 
+// With more tabs than this the icon goes above the name, which may then take two lines ("Kopesht &\nShkolle").
+const STACK_FROM = 4;
+
 export function BottomTabBar<T extends string>({ options, value, onChange }: BottomTabBarProps<T>) {
   const reduced = useReducedMotion();
+  const stacked = options.length >= STACK_FROM;
   const index = Math.max(
     0,
     options.findIndex((o) => o.value === value),
@@ -63,14 +67,20 @@ export function BottomTabBar<T extends string>({ options, value, onChange }: Bot
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
               aria-selected={active}
-              style={styles.tab}
+              accessibilityLabel={option.label.replace('\n', ' ')}
+              style={[styles.tab, stacked && styles.tabStacked]}
             >
               <Ionicons
                 name={active ? option.activeIcon : option.icon}
-                size={22}
+                size={stacked ? 20 : 22}
                 color={active ? colors.primaryDark : colors.textMuted}
               />
-              <Animated.Text style={[styles.label, active && styles.labelActive]}>{option.label}</Animated.Text>
+              <Animated.Text
+                numberOfLines={stacked ? 2 : 1}
+                style={[styles.label, stacked && styles.labelStacked, active && styles.labelActive]}
+              >
+                {option.label}
+              </Animated.Text>
             </Pressable>
           );
         })}
@@ -104,6 +114,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     borderRadius: radii.pill,
   },
+  tabStacked: { flexDirection: 'column', gap: 1, paddingVertical: spacing.xs + 2, paddingHorizontal: 2 },
   label: { fontSize: 14, fontWeight: '600', color: colors.textMuted },
+  labelStacked: { fontSize: 11, lineHeight: 13, textAlign: 'center' },
   labelActive: { color: colors.primaryDark },
 });

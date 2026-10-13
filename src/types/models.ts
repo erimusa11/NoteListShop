@@ -13,7 +13,15 @@ export interface ShoppingItem {
   note?: string;
   /** Who it is for (e.g. "Drion"), in a category that asks for it (`personOptions`). */
   person?: string;
+  /** Counted by the day (Cerdhe, Kopesht…): the quantity is the number of days and the price is what one day costs. */
+  perDay?: boolean;
 }
+
+/** Where a child spent a day: one of the places that are paid by the day, or at home sick. */
+export type AttendancePlace = 'Cerdhe' | 'Kopesht' | 'Shkolle' | 'sick';
+
+/** The days each child went to a place, or was sick: day ('YYYY-MM-DD') → child → place. */
+export type Attendance = Record<string, Record<string, AttendancePlace>>;
 
 /** A to-do on the Note List Shop page. They are not part of any shopping list. */
 export interface Task {
@@ -27,6 +35,28 @@ export interface Task {
   createdAt: number;
   /** When it was checked off; the done tab lists the latest first. */
   doneAt?: number;
+}
+
+/** How an amount on the Note List Shop page is counted: by number (copë), kilograms, grams or liters. */
+export type QuantityUnit = 'pcs' | 'kg' | 'gr' | 'l';
+
+/** One thing in a group (a note list) on the Note List Shop page. */
+export interface NoteItem {
+  id: string;
+  name: string;
+  /** Above zero; 1 when none was given. */
+  quantity: number;
+  unit: QuantityUnit;
+  done: boolean;
+  createdAt: number;
+}
+
+/** A group on the Note List Shop page: a named list, with the day it was made, that holds its own items. */
+export interface NoteList {
+  id: string;
+  name: string;
+  createdAt: number;
+  items: NoteItem[];
 }
 
 /** What an income is: a salary, a qokë given to us, or any other extra income. */
@@ -76,6 +106,8 @@ export interface ShoppingTrip extends Partial<Record<Exclude<ItemListKey, 'items
   /** Produktet */
   items: ShoppingItem[];
   incomes?: IncomeEntry[];
+  /** The calendar of the category that counts days (Kopesht & Shkolle): what the children did on each day. */
+  attendance?: Attendance;
   /** Items deleted from this list, one per name and category. Only used for suggestions; they are not shown anywhere else. */
   removed?: RemovedItem[];
 }

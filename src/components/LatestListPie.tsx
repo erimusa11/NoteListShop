@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PieChart } from '@/components/charts/PieChart';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
@@ -9,12 +9,14 @@ interface LatestListPieProps {
   listName: string;
   sections: SectionSpend[];
   income: number;
+  /** A category of the legend (or its slice) was tapped: the key is its section, to open Të shpenzuarat at that part. */
+  onPressSection?: (sectionKey: string) => void;
 }
 
 // More entries than this and the legend is laid out in two columns instead of one long list.
 const TWO_COLUMNS_FROM = 4;
 
-export function LatestListPie({ listName, sections, income }: LatestListPieProps) {
+export function LatestListPie({ listName, sections, income, onPressSection }: LatestListPieProps) {
   const total = sections.reduce((sum, s) => sum + s.spent, 0);
   // Only the categories with spending, so all the categories do not make this card a long list of zeros.
   const spent = sections.filter((s) => s.spent > 0);
@@ -35,12 +37,18 @@ export function LatestListPie({ listName, sections, income }: LatestListPieProps
           <PieChart
             size={176}
             slices={spent.map((s) => ({ key: s.key, value: s.spent, color: CATEGORY_COLORS[s.key] }))}
+            onPressSlice={onPressSection}
           />
           <View style={twoColumns ? styles.legendGrid : styles.legend}>
             {spent.map((section) => {
               const percent = total > 0 ? `${Math.round((section.spent / total) * 100)}%` : '0%';
+              const press = {
+                onPress: onPressSection && (() => onPressSection(section.key)),
+                accessibilityRole: 'button' as const,
+                accessibilityLabel: `${section.label}, ${percent}, ${formatPrice(section.spent)}. Hap të shpenzuarat`,
+              };
               return twoColumns ? (
-                <View key={section.key} style={styles.cell}>
+                <Pressable key={section.key} style={({ pressed }) => [styles.cell, pressed && styles.pressed]} {...press}>
                   <View style={[styles.dot, styles.cellDot, { backgroundColor: CATEGORY_COLORS[section.key] }]} />
                   <View style={styles.cellText}>
                     <Text style={styles.cellName} numberOfLines={2}>
@@ -50,16 +58,16 @@ export function LatestListPie({ listName, sections, income }: LatestListPieProps
                       {percent} · {formatPrice(section.spent)}
                     </Text>
                   </View>
-                </View>
+                </Pressable>
               ) : (
-                <View key={section.key} style={styles.row}>
+                <Pressable key={section.key} style={({ pressed }) => [styles.row, pressed && styles.pressed]} {...press}>
                   <View style={[styles.dot, { backgroundColor: CATEGORY_COLORS[section.key] }]} />
                   <Text style={styles.name} numberOfLines={1}>
                     {section.label}
                   </Text>
                   <Text style={styles.percent}>{percent}</Text>
                   <Text style={styles.value}>{formatPrice(section.spent)}</Text>
-                </View>
+                </Pressable>
               );
             })}
           </View>
@@ -101,6 +109,7 @@ const styles = StyleSheet.create({
   legend: { gap: 6 },
   legendGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  pressed: { opacity: 0.55 },
   cell: { width: '48%', flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   cellDot: { marginTop: 3 },
   cellText: { flex: 1 },

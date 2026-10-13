@@ -1,7 +1,7 @@
 import type { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
 
-import type { ItemListKey } from '@/types/models';
+import type { AttendancePlace, ItemListKey } from '@/types/models';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -44,6 +44,11 @@ export interface Category {
   /** Title of the report that splits this category's spending by `personOptions`. */
   personReportTitle?: string;
   emptyText: string;
+  /**
+   * Levels (from `nameOptions`) that are paid by the day. The category gets a calendar where the days each person went to
+   * them (or was sick) are marked; the days times the price of a day make the amount.
+   */
+  attendancePlaces?: Exclude<AttendancePlace, 'sick'>[];
 }
 
 // Every category works the same way: its own list per shopping list, star to repeat it, priority, price, totals.
@@ -292,6 +297,7 @@ export const CATEGORIES: Category[] = [
     personLabel: 'Për kë',
     personReportTitle: 'Kopesht & Shkolle sipas fëmijës',
     emptyText: 'Nuk ka ende asnjë shpenzim.',
+    attendancePlaces: ['Cerdhe', 'Kopesht', 'Shkolle'],
   },
   // A "qokë": the coffee and the money left for a family after a birth, a recovery… Checked ones also show in the Qokat menu.
   {

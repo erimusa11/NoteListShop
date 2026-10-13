@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { ReactElement, useMemo, useState } from 'react';
 import { FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
@@ -6,17 +7,24 @@ import Animated from 'react-native-reanimated';
 
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { EmptyState } from '@/components/EmptyState';
+import { NoteListSheet, type NoteListSheetState } from '@/components/NoteListSheet';
+import { NoteListsPanel } from '@/components/NoteListsPanel';
 import { TaskRow } from '@/components/TaskRow';
 import { TaskSheet, type TaskSheetState } from '@/components/TaskSheet';
+import { useNoteLists } from '@/hooks/useNoteLists';
 import { useTabSwipe } from '@/hooks/useTabSwipe';
 import { useTasks } from '@/hooks/useTasks';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
-import type { Task } from '@/types/models';
+import type { NoteList, Task } from '@/types/models';
+import { newestFirst } from '@/utils/noteLists';
 import { doneTasks, filterTasks, openTasks, type TaskFields } from '@/utils/tasks';
 
-type NotesTab = 'todo' | 'done';
+// Listat: the groups (named lists with their own items). The other two are the to-do tasks.
+type NotesTab = 'lists' | 'todo' | 'done';
+type TaskTab = Exclude<NotesTab, 'lists'>;
 
 const TABS: { value: NotesTab; label: string }[] = [
+  { value: 'lists', label: 'Listat' },
   { value: 'todo', label: "Për t'u bërë" },
   { value: 'done', label: 'Të kryera' },
 ];
@@ -25,9 +33,10 @@ const ORDER = TABS.map((tab) => tab.value);
 // Each tab shows this many tasks at first and this many more each time "load more" is pressed.
 const PAGE_SIZE = 10;
 
-// The Note List Shop page: a to-do list apart from the shopping lists. Open tasks come most important first; checking
-// one off moves it to the Të kryera tab, where it can be brought back. Swipe sideways or tap to go from one tab to the other.
-// Both tabs have a search box that looks in all their tasks, and show them 10 at a time.
+// The Note List Shop page: lists and a to-do list apart from the shopping lists. The Listat tab holds the groups: each is
+// made by naming it (the day is put on it) and opened to add its own items, with an amount and a unit. Open tasks come most
+// important first; checking one off moves it to the Të kryera tab, where it can be brought back. Swipe sideways or tap to go
+// from one tab to the other. The task tabs have a search box that looks in all their tasks, and show them 10 at a time.
 // The page is only built when its menu is opened, and the tasks are only read from the phone then, so the rest of the app
 // does not pay for it.
 export function NotesView() {
@@ -61,12 +70,19 @@ interface NotesContentProps {
 }
 
 function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone }: NotesContentProps) {
-  const [active, setActive] = useState<NotesTab>('todo');
+  // The page opens on Listat, where a group is made first.
+  const [active, setActive] = useState<NotesTab>('lists');
   const { gesture, slideStyle } = useTabSwipe(ORDER, active, setActive);
-  // What is typed in each tab's search box and how many of its tasks are shown. Kept here, so a tab keeps them while the
-  // other one is open.
-  const [queries, setQueries] = useState<Record<NotesTab, string>>({ todo: '', done: '' });
-  const [shownCounts, setShownCounts] = useState<Record<NotesTab, number>>({ todo: PAGE_SIZE, done: PAGE_SIZE });
+  // What is typed in each task tab's search box and how many of its tasks are shown. Kept here, so a tab keeps them while
+  // another one is open.
+  const [queries, setQueries] = useState<Record<TaskTab, string>>({ todo: '', done: '' });
+  const [shownCounts, setShownCounts] = useState<Record<TaskTab, number>>({ todo: PAGE_SIZE, done: PAGE_SIZE });
+  const { lists: noteLists, addList, removeList } = useNoteLists();
+  const groups = useMemo(() => newestFirst(noteLists ?? []), [noteLists]);
+  const [listSheet, setListSheet] = useState<NoteListSheetState | null>(null);
+  // The group that is asked about; kept after the question closes so its name does not vanish while the dialog fades out.
+  const [listDeleteTarget, setListDeleteTarget] = useState<NoteList | null>(null);
+  const [listDeleteOpen, setListDeleteOpen] = useState(false);
   // The sheet is only built once it is first opened.
   const [sheet, setSheet] = useState<TaskSheetState | null>(null);
   const [clearing, setClearing] = useState(false);
@@ -76,13 +92,27 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone 
 
   const open = useMemo(() => openTasks(tasks), [tasks]);
   const done = useMemo(() => doneTasks(tasks), [tasks]);
-  const byTab: Record<NotesTab, Task[]> = { todo: open, done };
+  const byTab: Record<TaskTab, Task[]> = { todo: open, done };
 
-  const changeQuery = (tab: NotesTab, text: string) => {
+  const changeQuery = (tab: TaskTab, text: string) => {
     setQueries((prev) => ({ ...prev, [tab]: text }));
     setShownCounts((prev) => ({ ...prev, [tab]: PAGE_SIZE }));
   };
-  const showMore = (tab: NotesTab) => setShownCounts((prev) => ({ ...prev, [tab]: prev[tab] + PAGE_SIZE }));
+  const showMore = (tab: TaskTab) => setShownCounts((prev) => ({ ...prev, [tab]: prev[tab] + PAGE_SIZE }));
+
+  const openListSheet = () => setListSheet((prev) => ({ open: true, key: (prev?.key ?? 0) + 1 }));
+  const closeListSheet = () => setListSheet((prev) => (prev ? { ...prev, open: false } : prev));
+  const openGroup = (id: string) => router.push({ pathname: '/note/[id]', params: { id } });
+  // A new group is opened right away, so its first item can be added.
+  const createGroup = (name: string) => {
+    const id = addList(name);
+    closeListSheet();
+    openGroup(id);
+  };
+  const askDeleteGroup = (list: NoteList) => {
+    setListDeleteTarget(list);
+    setListDeleteOpen(true);
+  };
 
   const openSheet = (task: Task | null) => setSheet((prev) => ({ task, open: true, key: (prev?.key ?? 0) + 1 }));
   const closeSheet = () => setSheet((prev) => (prev ? { ...prev, open: false } : prev));
@@ -103,7 +133,7 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone 
     setDeleteOpen(true);
   };
 
-  const welcome = (
+  const welcome = (title: string, text: string) => (
     <View style={styles.welcome}>
       <View style={[styles.logoCard, shadow]}>
         <Image
@@ -113,14 +143,16 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone 
           accessibilityLabel="Note List Shop by Eri"
         />
       </View>
-      <Text style={styles.welcomeTitle}>Asnjë detyrë ende</Text>
-      <Text style={styles.welcomeText}>Shtyp + për të shtuar detyrën e parë.</Text>
+      <Text style={styles.welcomeTitle}>{title}</Text>
+      <Text style={styles.welcomeText}>{text}</Text>
     </View>
   );
 
+  const listsEmpty = noteLists ? welcome('Asnjë listë ende', 'Shtyp + për të krijuar listën e parë.') : null;
+
   const todoEmpty =
     tasks.length === 0 ? (
-      welcome
+      welcome('Asnjë detyrë ende', 'Shtyp + për të shtuar detyrën e parë.')
     ) : (
       <EmptyState icon="checkmark-done-outline" title="Gjithçka u krye!" subtitle="Nuk ke asnjë detyrë të hapur." />
     );
@@ -151,7 +183,7 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone 
     </View>
   );
 
-  const counts: Record<NotesTab, number> = { todo: open.length, done: done.length };
+  const counts: Record<NotesTab, number> = { lists: groups.length, todo: open.length, done: done.length };
 
   return (
     <View style={styles.flex}>
@@ -166,7 +198,12 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone 
               accessibilityState={{ selected }}
               style={[styles.tab, selected && styles.tabActive]}
             >
-              <Text style={[styles.tabText, selected && styles.tabTextActive]} numberOfLines={1}>
+              <Text
+                style={[styles.tabText, selected && styles.tabTextActive]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+              >
                 {tab.label}
                 {counts[tab.value] > 0 ? ` · ${counts[tab.value]}` : ''}
               </Text>
@@ -177,29 +214,38 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone 
 
       <GestureDetector gesture={gesture}>
         <Animated.View style={[styles.flex, slideStyle]}>
-          <TaskList
-            // A fresh list for each tab, so it starts at the top.
-            key={active}
-            all={byTab[active]}
-            query={queries[active]}
-            onQueryChange={(text) => changeQuery(active, text)}
-            shownCount={shownCounts[active]}
-            onShowMore={() => showMore(active)}
-            empty={active === 'todo' ? todoEmpty : doneEmpty}
-            summary={active === 'done' && done.length > 0 ? doneSummary : null}
-            onToggle={onToggle}
-            onEdit={openSheet}
-            onDelete={askDelete}
-          />
+          {active === 'lists' ? (
+            <NoteListsPanel
+              lists={groups}
+              empty={listsEmpty ?? <View style={styles.flex} />}
+              onOpen={(list) => openGroup(list.id)}
+              onDelete={askDeleteGroup}
+            />
+          ) : (
+            <TaskList
+              // A fresh list for each tab, so it starts at the top.
+              key={active}
+              all={byTab[active]}
+              query={queries[active]}
+              onQueryChange={(text) => changeQuery(active, text)}
+              shownCount={shownCounts[active]}
+              onShowMore={() => showMore(active)}
+              empty={active === 'todo' ? todoEmpty : doneEmpty}
+              summary={active === 'done' && done.length > 0 ? doneSummary : null}
+              onToggle={onToggle}
+              onEdit={openSheet}
+              onDelete={askDelete}
+            />
+          )}
         </Animated.View>
       </GestureDetector>
 
-      {active === 'todo' && (
+      {active !== 'done' && (
         <View style={styles.footer}>
           <Pressable
-            onPress={() => openSheet(null)}
+            onPress={() => (active === 'lists' ? openListSheet() : openSheet(null))}
             accessibilityRole="button"
-            accessibilityLabel="Shto detyrë"
+            accessibilityLabel={active === 'lists' ? 'Krijo listë' : 'Shto detyrë'}
             style={[styles.fab, shadow]}
             hitSlop={8}
           >
@@ -209,6 +255,27 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onClearDone 
       )}
 
       {sheet && <TaskSheet sheet={sheet} onClose={closeSheet} onSave={save} onDelete={deleteOpened} />}
+      {listSheet && <NoteListSheet sheet={listSheet} onClose={closeListSheet} onSave={createGroup} />}
+
+      <ConfirmDialog
+        visible={listDeleteOpen}
+        title="Fshi listën?"
+        message={`A je i sigurt që do të fshish "${listDeleteTarget?.name ?? ''}"?`}
+        details={
+          listDeleteTarget && listDeleteTarget.items.length > 0
+            ? [
+                `${listDeleteTarget.items.length} ${listDeleteTarget.items.length === 1 ? 'artikull' : 'artikuj'} në të do të fshihen.`,
+                'Ky veprim nuk kthehet mbrapsht.',
+              ]
+            : ['Ky veprim nuk kthehet mbrapsht.']
+        }
+        confirmLabel="Fshi"
+        onConfirm={() => {
+          setListDeleteOpen(false);
+          if (listDeleteTarget) removeList(listDeleteTarget.id);
+        }}
+        onCancel={() => setListDeleteOpen(false)}
+      />
 
       <ConfirmDialog
         visible={deleteOpen}

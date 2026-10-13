@@ -51,6 +51,8 @@ interface ItemRowProps {
 const HOLD_TO_DELETE_MS = 1500;
 const HOLD_SHOWS_AFTER_MS = 350;
 const STAR_COLOR = '#D99100';
+// Days are whole numbers.
+const sanitizeDaysInput = (text: string) => text.replace(/\D/g, '').slice(0, 3);
 // A fixed line height tells a one-line name from a two-line one by how tall it is; its field adds `NAME_PADDING` around the text.
 const NAME_LINE_HEIGHT = 20;
 const NAME_PADDING = spacing.xs;
@@ -83,7 +85,10 @@ export function ItemRow({
   const wrapped = nameLines > 1;
   const starred = item.sharedId !== undefined;
   // The price is for one; the row costs price × quantity, shown only when that differs from the price.
-  const lineTotal = showQuantity && item.price != null && parseQuantity(item.quantity) !== 1 ? itemTotal(item) : null;
+  // An item counted by the day (from the days calendar) always shows its days, as "Ditë: 12", and what a day costs.
+  const perDay = item.perDay === true;
+  const countsQuantity = showQuantity || perDay;
+  const lineTotal = countsQuantity && item.price != null && parseQuantity(item.quantity) !== 1 ? itemTotal(item) : null;
   const priority = priorityInfo(item.priority);
   const urgent = normalizePriority(item.priority) > 1;
   // Who it is for gets its own color (the same as in the totals and reports); muted while it is not known.
@@ -321,14 +326,14 @@ export function ItemRow({
                 textStyle={styles.note}
               />
             ) : null}
-            {showQuantity && (
+            {countsQuantity && (
               <View style={styles.quantityRow}>
                 <InlineEditableField
                   value={String(item.quantity ?? '').trim() || DEFAULT_QUANTITY}
-                  placeholder="Sasia"
-                  prefix="Sasia: "
+                  placeholder={perDay ? 'Ditë' : 'Sasia'}
+                  prefix={perDay ? 'Ditë: ' : 'Sasia: '}
                   keyboardType="numeric"
-                  sanitize={sanitizeQuantityInput}
+                  sanitize={perDay ? sanitizeDaysInput : sanitizeQuantityInput}
                   onChange={(quantity) => onUpdate({ quantity: normalizeQuantity(quantity) })}
                   textStyle={styles.quantity}
                 />
@@ -394,26 +399,29 @@ export function ItemRow({
                 onUpdate({ price: Number.isFinite(parsed) ? parsed : null });
               }}
               keyboardType="numeric"
-              suffix=" Lekë"
+              suffix={perDay ? ' Lekë/ditë' : ' Lekë'}
               align="right"
               chip
               textStyle={[styles.price, item.bought && styles.priceBought]}
             />
-            <Pressable
-              onPress={onToggleStar}
-              // No extra touch area above the star, so it never overlaps the price.
-              hitSlop={{ top: 0, bottom: 8, left: 8, right: 8 }}
-              accessibilityRole="button"
-              accessibilityState={{ selected: starred }}
-              accessibilityLabel={starred ? 'Ylli aktiv: shfaqet në të gjitha listat. Hiqe' : 'Shfaqe në të gjitha listat'}
-              style={styles.starButton}
-            >
-              <Ionicons
-                name={starred ? 'star' : 'star-outline'}
-                size={20}
-                color={starred ? STAR_COLOR : colors.textMuted}
-              />
-            </Pressable>
+            {/* No star on the days of a child: repeating them in every list makes no sense, and the price of a day is remembered anyway. */}
+            {(!perDay || starred) && (
+              <Pressable
+                onPress={onToggleStar}
+                // No extra touch area above the star, so it never overlaps the price.
+                hitSlop={{ top: 0, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: starred }}
+                accessibilityLabel={starred ? 'Ylli aktiv: shfaqet në të gjitha listat. Hiqe' : 'Shfaqe në të gjitha listat'}
+                style={styles.starButton}
+              >
+                <Ionicons
+                  name={starred ? 'star' : 'star-outline'}
+                  size={20}
+                  color={starred ? STAR_COLOR : colors.textMuted}
+                />
+              </Pressable>
+            )}
           </View>
           <View style={styles.holdTrack} pointerEvents="none">
             <Animated.View style={[styles.holdLine, holdStyle]} />

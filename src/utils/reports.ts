@@ -86,6 +86,52 @@ export function buildListSpend(trips: ShoppingTrip[]): ListSpend[] {
   });
 }
 
+export interface Savings {
+  /** The income of the lists that have any. */
+  income: number;
+  /** What those lists spent. */
+  spent: number;
+  /** Income minus spending, added up over those lists: below zero when more was spent than came in. */
+  left: number;
+  /** How many lists have income, so a "left" can be told. */
+  lists: number;
+  /** How many of them spent more than their income. */
+  overLists: number;
+  /** The same for each of those lists, in the order the lists were given. */
+  perList: ListSavings[];
+}
+
+export interface ListSavings {
+  id: string;
+  name: string;
+  income: number;
+  spent: number;
+  /** Income minus spending: below zero when the list went over. */
+  left: number;
+}
+
+// The bank: what is left of the income over all the lists. A list with no income has no limit to be left under or over,
+// so it is not counted; a list that went over takes its overrun off the others' savings.
+export function buildSavings(trips: ShoppingTrip[]): Savings {
+  const savings: Savings = { income: 0, spent: 0, left: 0, lists: 0, overLists: 0, perList: [] };
+  for (const list of buildListSpend(trips)) {
+    if (list.budget == null) continue;
+    savings.lists += 1;
+    savings.income += list.budget;
+    savings.spent += list.spent;
+    if (list.spent > list.budget) savings.overLists += 1;
+    savings.perList.push({
+      id: list.id,
+      name: list.name,
+      income: list.budget,
+      spent: list.spent,
+      left: list.budget - list.spent,
+    });
+  }
+  savings.left = savings.income - savings.spent;
+  return savings;
+}
+
 export function buildSectionSpend(trips: ShoppingTrip[]): SectionSpend[] {
   return CATEGORIES.map(({ section, label, key: list }) => {
     const items = trips.flatMap((trip) => trip[list] ?? []);
