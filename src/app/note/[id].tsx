@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -15,12 +15,19 @@ import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { NoteItem } from '@/types/models';
 import { formatDateAlbanian } from '@/utils/dates';
 import { goBackOrHome } from '@/utils/navigation';
-import { buildNoteSuggestions, isProductList, type NoteItemFields, noteListTotal, sortNoteItems } from '@/utils/noteLists';
+import {
+  buildNoteSuggestions,
+  isProductList,
+  type NoteItemFields,
+  noteListTotal,
+  sortNoteItems,
+} from '@/utils/noteLists';
 import { formatNumber } from '@/utils/totals';
 import { TRASH_DAYS } from '@/utils/trash';
 
-// One group of the Note List Shop page: its name and the day it was made on top, then its items. Each item has an amount
-// (1 unless changed) counted in copë, kg, gr or liters.
+// One group of the Note List Shop page: its name and the day it was made on top, then its items. In a normal list an item is a
+// text with a priority (the most important first), like a to-do. In a shopping list an item is a product with an amount
+// (copë, kg, gr or liters) and a price, and the list shows the total.
 export default function NoteListScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { lists, history, renameList, removeList, restoreList, addItem, updateItem, toggleItem, removeItem, restoreItem } =
@@ -34,27 +41,22 @@ export default function NoteListScreen() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteListOpen, setDeleteListOpen] = useState(false);
 
-  const items = useMemo(() => sortNoteItems(list?.items ?? []), [list?.items]);
-  // A list of products: its items have a price, and the list shows what they all cost together.
+  // A shopping list: its items have an amount and a price, and the list shows what they all cost together.
   const products = list ? isProductList(list) : false;
+  // A shopping list shows its items in the order they were added, a normal list by priority.
+  const items = sortNoteItems(list?.items ?? [], list?.kind);
   const listTotal = list ? noteListTotal(list) : 0;
   const done = items.filter((item) => item.done).length;
   // What was added before, in any group or since deleted, that this one does not have yet.
-  const suggestions = useMemo(
-    () => buildNoteSuggestions(lists ?? [], history, list?.items ?? []),
-    [lists, history, list?.items],
-  );
+  const suggestions = buildNoteSuggestions((lists ?? []).filter(isProductList), history, list?.items ?? []);
 
-  const openSheet = useCallback(
-    (item: NoteItem | null) => setSheet((prev) => ({ item, open: true, key: (prev?.key ?? 0) + 1 })),
-    [],
-  );
+  const openSheet = (item: NoteItem | null) => setSheet((prev) => ({ item, open: true, key: (prev?.key ?? 0) + 1 }));
   const closeSheet = () => setSheet((prev) => (prev ? { ...prev, open: false } : prev));
-  const toggle = useCallback((itemId: string) => id && toggleItem(id, itemId), [id, toggleItem]);
-  const askDelete = useCallback((item: NoteItem) => {
+  const toggle = (itemId: string) => id && toggleItem(id, itemId);
+  const askDelete = (item: NoteItem) => {
     setDeleteTarget(item);
     setDeleteOpen(true);
-  }, []);
+  };
 
   const save = (fields: NoteItemFields) => {
     if (!list) return;
@@ -146,10 +148,10 @@ export default function NoteListScreen() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => (
-                <NoteItemRow item={item} onToggle={toggle} onPress={openSheet} onDelete={askDelete} showPrice={products} />
+                <NoteItemRow item={item} onToggle={toggle} onPress={openSheet} onDelete={askDelete} shopping={products} />
               )}
               ListEmptyComponent={
-                <EmptyState icon="basket-outline" title="Lista është bosh" subtitle="Shtyp + për të shtuar artikullin e parë." />
+                <EmptyState icon="basket-outline" title="x" subtitle="y" />
               }
             />
           </View>
@@ -158,7 +160,7 @@ export default function NoteListScreen() {
             <Pressable
               onPress={() => openSheet(null)}
               accessibilityRole="button"
-              accessibilityLabel="Shto artikull"
+              accessibilityLabel={products ? 'Shto produkt' : 'Shto shënim'}
               style={[styles.fab, shadow]}
               hitSlop={8}
             >
@@ -172,7 +174,7 @@ export default function NoteListScreen() {
               onSave={save}
               onDelete={deleteOpened}
               suggestions={suggestions}
-              showPrice={products}
+              shopping={products}
             />}
 
           <ConfirmDialog

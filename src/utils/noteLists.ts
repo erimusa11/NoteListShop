@@ -1,4 +1,5 @@
 import type { NoteItem, NoteList, NoteListKind, QuantityUnit } from '@/types/models';
+import { normalizePriority } from '@/utils/priority';
 import { parseQuantity } from '@/utils/quantity';
 import { normalizeText } from '@/utils/suggestions';
 import { formatNumber } from '@/utils/totals';
@@ -36,6 +37,8 @@ export interface NoteItemFields {
   unit: QuantityUnit;
   /** The text of the price field, only in a list of products. Empty or invalid means no price. */
   price?: string;
+  /** The priority (1 to 5), only in a normal list. */
+  importance?: number;
 }
 
 /** The price typed in a field: a number from zero up, or undefined for nothing usable. */
@@ -59,7 +62,7 @@ export function createNoteList(name: string, kind: NoteListKind = 'work'): NoteL
   return { id: newNoteId(), name: name.trim(), createdAt: Date.now(), items: [], ...(kind === 'products' ? { kind } : {}) };
 }
 
-export function createNoteItem({ name, quantity, unit, price }: NoteItemFields): NoteItem {
+export function createNoteItem({ name, quantity, unit, price, importance }: NoteItemFields): NoteItem {
   const cost = parseNotePrice(price);
   return {
     id: newNoteId(),
@@ -69,19 +72,22 @@ export function createNoteItem({ name, quantity, unit, price }: NoteItemFields):
     done: false,
     createdAt: Date.now(),
     ...(cost !== undefined ? { price: cost } : {}),
+    ...(importance !== undefined ? { importance: normalizePriority(importance) } : {}),
   };
 }
 
-export function editNoteItem(item: NoteItem, { name, quantity, unit, price }: NoteItemFields): NoteItem {
-  const { price: _before, ...rest } = item;
-  // The price field is only there in a list of products; where it is not, the item keeps the price it has.
+export function editNoteItem(item: NoteItem, { name, quantity, unit, price, importance }: NoteItemFields): NoteItem {
+  const { price: _before, importance: _level, ...rest } = item;
+  // The price field is only there in a list of products and the priority only in a normal list; where one is not, the item keeps what it has.
   const cost = price === undefined ? _before : parseNotePrice(price);
+  const level = importance === undefined ? _level : normalizePriority(importance);
   return {
     ...rest,
     name: name.trim(),
     quantity: parseQuantity(quantity),
     unit: isUnit(unit) ? unit : DEFAULT_UNIT,
     ...(cost !== undefined ? { price: cost } : {}),
+    ...(level !== undefined ? { importance: level } : {}),
   };
 }
 
@@ -115,6 +121,7 @@ export function normalizeNoteLists(raw: unknown): NoteList[] {
               done: item.done === true,
               createdAt: Number.isFinite(item.createdAt) ? Number(item.createdAt) : 0,
               ...(Number.isFinite(item.price) && Number(item.price) >= 0 ? { price: Number(item.price) } : {}),
+              ...(Number.isFinite(item.importance) ? { importance: normalizePriority(Number(item.importance)) } : {}),
             },
           ];
         }),
@@ -220,7 +227,14 @@ export function newestFirst(lists: NoteList[]): NoteList[] {
   return [...lists].sort((a, b) => b.createdAt - a.createdAt);
 }
 
-/** Still to do first, in the order they were added; the checked ones go last. */
-export function sortNoteItems(items: NoteItem[]): NoteItem[] {
-  return [...items.filter((item) => !item.done), ...items.filter((item) => item.done)];
+/**
+ * Still to do first, the checked ones last. In a shopping list the open ones keep the order they were added in; in a normal
+ * list (no `kind`) the most important is on top and among equals the one added first.
+ */
+export function sortNoteItems(items: NoteItem[], kind?: NoteListKind): NoteItem[] {
+  const open = items.filter((item) => !item.done);
+  if (kind !== 'products') {
+    open.sort((a, b) => normalizePriority(b.importance) - normalizePriority(a.importance) || a.createdAt - b.createdAt);
+  }
+  return [...open, ...items.filter((item) => item.done)];
 }

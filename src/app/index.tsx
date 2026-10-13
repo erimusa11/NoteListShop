@@ -153,7 +153,7 @@ export default function ListsOverviewScreen() {
                   {demoMode
                     ? 'Modalitet demo · ndryshimet nuk ruhen'
                     : tab === 'notes'
-                      ? 'Lista jote e detyrave'
+                      ? 'Listat dhe blerjet e tua'
                       : `Mirë se erdhe, ${firstName}`}
                 </Text>
               </View>
