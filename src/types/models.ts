@@ -100,6 +100,7 @@ export type ItemListKey =
   | 'kitchen'
   | 'playstation'
   | 'health'
+  | 'children'
   | 'bathroom'
   | 'home'
   | 'daily'
