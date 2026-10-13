@@ -31,12 +31,6 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 220
         }
-      ],
-      [
-        "@react-native-google-signin/google-signin",
-        {
-          "iosUrlScheme": "com.googleusercontent.apps.note-shop-list"
-        }
       ]
     ],
     "experiments": {

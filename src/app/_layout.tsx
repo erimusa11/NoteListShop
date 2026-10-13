@@ -6,7 +6,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { CloudSyncGate } from '@/components/CloudSyncGate';
 import { AppLockProvider } from '@/context/AppLockContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
-import { BackupProvider } from '@/context/BackupContext';
 import { ProfileProvider } from '@/context/ProfileContext';
 import { TripsProvider } from '@/context/TripsContext';
 import { UndoProvider } from '@/context/UndoContext';
@@ -51,9 +50,7 @@ export default function RootLayout() {
             <CloudSyncGate>
               <AppLockProvider>
                 <UndoProvider>
-                  <BackupProvider>
-                    <RootNavigator />
-                  </BackupProvider>
+                  <RootNavigator />
                 </UndoProvider>
               </AppLockProvider>
             </CloudSyncGate>
