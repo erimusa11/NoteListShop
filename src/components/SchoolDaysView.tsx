@@ -13,6 +13,7 @@ import {
   attendanceKids,
   attendancePlaces,
   clearDays,
+  calendarItemsOf,
   countMarks,
   dayKey,
   fillDays,
@@ -132,13 +133,13 @@ export function SchoolDaysView({ trip, trips, category, header, inset = spacing.
   const showNotice = (text: string, undoable: boolean) => {
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     // `trip` is the list as it is now, before the change that is being announced.
-    setNotice({ text, undo: undoable ? { attendance: trip.attendance, items: trip[category.key] ?? [] } : undefined });
+    setNotice({ text, undo: undoable ? { attendance: trip.attendance, items: calendarItemsOf(trip) } : undefined });
     noticeTimer.current = setTimeout(() => setNotice(null), NOTICE_MS);
   };
   const undo = () => {
     const snapshot = notice?.undo;
     if (!snapshot) return;
-    changeTrip(trip.id, (current) => ({ ...current, attendance: snapshot.attendance ?? {}, [category.key]: snapshot.items }));
+    changeTrip(trip.id, (current) => ({ ...current, attendance: snapshot.attendance ?? {}, calendarItems: snapshot.items }));
     dismissNotice();
   };
 

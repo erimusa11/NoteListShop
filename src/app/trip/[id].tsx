@@ -6,7 +6,7 @@ import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AddItemButton } from '@/components/AddItemButton';
+import { AddItemButton, type CalendarChoice } from '@/components/AddItemButton';
 import { BillsSummaryBar } from '@/components/BillsSummaryBar';
 import { OptionTotalsBar } from '@/components/OptionTotalsBar';
 import { OverBudgetCard } from '@/components/OverBudgetCard';
@@ -23,7 +23,9 @@ import { useUndo } from '@/context/UndoContext';
 import { useTabSwipe } from '@/hooks/useTabSwipe';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { IncomeEntry, ItemListKey, ShoppingItem } from '@/types/models';
+import { calendarMonths, monthAmount, type PaidPlace } from '@/utils/attendance';
 import { CATEGORIES, type Category, INCOME_COLOR } from '@/utils/categories';
+import { formatMonthYearAlbanian } from '@/utils/dates';
 import { type ImportantEntry, IMPORTANT_COLOR, IMPORTANT_SECTION, importantItems } from '@/utils/important';
 import {
   buildIncomeKindTotals,
@@ -264,6 +266,24 @@ export default function TripDetailScreen() {
 
   const activeCategory = CATEGORIES.find((category) => category.section === section);
 
+  // The months filled in on the calendar, for adding one to the category that counts days from its add form.
+  const calendarChoice = useMemo<CalendarChoice | undefined>(() => {
+    if (!trip || !activeCategory?.attendancePlaces) return undefined;
+    const category = activeCategory;
+    const months = calendarMonths(trip, category).map((entry) => ({
+      key: entry.key,
+      label: formatMonthYearAlbanian(entry.year, entry.month),
+      days: entry.days,
+    }));
+    if (months.length === 0) return undefined;
+    return {
+      months,
+      amountFor: (monthKey, level, person) =>
+        category.attendancePlaces?.includes(level as PaidPlace)
+          ? monthAmount(trips, trip, category, monthKey, person, level as PaidPlace)
+          : null,
+    };
+  }, [trips, trip, activeCategory]);
   const suggestions = useMemo(
     () => (activeCategory ? buildListSuggestions(trips, trip, activeCategory.key, suggestionGroups(activeCategory)) : []),
     [trips, trip, activeCategory],
@@ -540,6 +560,7 @@ export default function TripDetailScreen() {
                   secondOptions={activeCategory.personOptions}
                   secondLabel={activeCategory.personLabel}
                   suggestions={suggestions}
+                  calendar={calendarChoice}
                 />
               )}
             </View>

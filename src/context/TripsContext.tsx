@@ -4,6 +4,7 @@ import { mockBills, mockItems, mockWishlist } from '@/mocks/mockItems';
 import type { IncomeEntry, IncomeKind, ItemListKey, ShoppingItem, ShoppingTrip } from '@/types/models';
 import { CATEGORIES } from '@/utils/categories';
 import { formatDateAlbanian } from '@/utils/dates';
+import { moveCalendarItems } from '@/utils/attendance';
 import { isTrashExpired } from '@/utils/trash';
 import { copyToTrip, deleteItem, moveToCategory, patchItem, starredItems, toggleStar } from '@/utils/tripLists';
 
@@ -197,7 +198,7 @@ export function TripsProvider({ children }: { children: ReactNode }) {
   // Lists that have waited in the trash for the full time are dropped when the saved lists are loaded.
   const hydrate = (next: ShoppingTrip[]) => {
     const now = Date.now();
-    setTrips(next.filter((trip) => trip.deletedAt === undefined || !isTrashExpired(trip.deletedAt, now)));
+    setTrips(moveCalendarItems(next.filter((trip) => trip.deletedAt === undefined || !isTrashExpired(trip.deletedAt, now))));
   };
 
   const value = useMemo<TripsContextValue>(

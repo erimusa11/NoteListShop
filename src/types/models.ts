@@ -110,6 +110,8 @@ export interface ShoppingTrip extends Partial<Record<Exclude<ItemListKey, 'items
   incomes?: IncomeEntry[];
   /** The calendar of the category that counts days (Kopesht & Shkolle): what the children did on each day. */
   attendance?: Attendance;
+  /** What the calendar counts: the days of each child at each place (with the price of a day) and its fixed amounts. Not part of the category's own list. */
+  calendarItems?: ShoppingItem[];
   /** Items deleted from this list, one per name and category. Only used for suggestions; they are not shown anywhere else. */
   removed?: RemovedItem[];
   /** Set when the list is deleted: it waits in the trash, and can be brought back, until `TRASH_DAYS` have passed. */

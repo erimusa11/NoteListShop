@@ -1,5 +1,5 @@
 import type { Attendance, AttendancePlace, ShoppingItem, ShoppingTrip } from '@/types/models';
-import type { Category } from '@/utils/categories';
+import { CATEGORIES, type Category } from '@/utils/categories';
 import { formatDayMonthInline } from '@/utils/dates';
 import { optionColor, personColor } from '@/utils/options';
 import { DEFAULT_PRIORITY } from '@/utils/priority';
@@ -9,8 +9,8 @@ import { itemTotal } from '@/utils/totals';
 
 // The calendar of a category that is paid by the day (Kopesht & Shkolle). Every day each child went to a place (Cerdhe,
 // Kopesht, Shkolle) or was sick is marked on `trip.attendance`. The days at a paid place also live as one item per child
-// and place (`perDay`): its quantity is the number of days and its price what one day costs, so the totals, the reports
-// and the list all see the money without knowing about the calendar. Marking a day moves that quantity by one; typing the
+// and place (`perDay`) in `trip.calendarItems`: its quantity is the number of days and its price what one day costs. They
+// are not in the lists of the category until a month of the calendar is added to one from the add form. Marking a day moves that quantity by one; typing the
 // days directly sets it, and the marks are then only the diary. Sick days cost nothing.
 
 export type PaidPlace = Exclude<AttendancePlace, 'sick'>;
@@ -55,6 +55,14 @@ export function attendanceKids(category: Category): KidInfo[] {
 
 const KNOWN_PLACES = new Set<string>(['Cerdhe', 'Kopesht', 'Shkolle', SICK]);
 const NO_MARKS: Attendance = {};
+const NO_ITEMS: ShoppingItem[] = [];
+
+/**
+ * What the calendar counts: the days of each child at each place (with what a day costs) and the fixed amounts. They live
+ * apart from the lists of the category, which only hold what is added to them by hand (a month of the calendar can be
+ * added from the add form).
+ */
+export const calendarItemsOf = (trip: ShoppingTrip | undefined): ShoppingItem[] => trip?.calendarItems ?? NO_ITEMS;
 
 /** The calendar of a list, with anything that is not a day, a child and a known place left out (damaged or old data). */
 export function readAttendance(trip: ShoppingTrip | undefined): Attendance {
@@ -221,7 +229,7 @@ export function summarize(
   show: Partial<Record<string, AttendancePlace | null>> = {},
 ): KidDays[] {
   const attendance = readAttendance(trip);
-  const items = trip?.[category.key] ?? [];
+  const items = calendarItemsOf(trip);
   const paid = category.attendancePlaces ?? [];
   return (category.personOptions ?? []).map((kid, index): KidDays => {
     const places = paid.flatMap((place): PlaceDays[] => {
@@ -299,15 +307,15 @@ function newDayItem(kid: string, place: PaidPlace, days: number, price: number |
   };
 }
 
-const begin = (trip: ShoppingTrip, category: Category): Draft => ({
+const begin = (trip: ShoppingTrip, _category: Category): Draft => ({
   attendance: readAttendance(trip),
-  items: trip[category.key] ?? [],
+  items: calendarItemsOf(trip),
 });
 
-const finish = (trip: ShoppingTrip, category: Category, draft: Draft): ShoppingTrip => ({
+const finish = (trip: ShoppingTrip, _category: Category, draft: Draft): ShoppingTrip => ({
   ...trip,
   attendance: draft.attendance,
-  [category.key]: draft.items,
+  calendarItems: draft.items,
 });
 
 // Moves the days of one child at one place by `delta`. The item is made with the first day, and goes with the last one.
@@ -409,7 +417,7 @@ export function setDays(
   days: number,
   priceFor: PriceFor,
 ): ShoppingTrip {
-  const items = trip[category.key] ?? [];
+  const items = calendarItemsOf(trip);
   const count = Math.max(0, Math.floor(days));
   const index = items.findIndex((item) => isDayItem(item, kid, place));
   let next = items;
@@ -420,7 +428,7 @@ export function setDays(
   } else {
     next = items.filter((_, i) => i !== index);
   }
-  return { ...trip, [category.key]: next };
+  return { ...trip, calendarItems: next };
 }
 
 /** Sets what one day costs for a child at a place. Nothing to change while there is no item for it yet. */
@@ -431,9 +439,9 @@ export function setDayPrice(
   place: PaidPlace,
   price: number | null,
 ): ShoppingTrip {
-  const items = trip[category.key] ?? [];
+  const items = calendarItemsOf(trip);
   if (!items.some((item) => isDayItem(item, kid, place))) return trip;
-  return { ...trip, [category.key]: items.map((item) => (isDayItem(item, kid, place) ? { ...item, price } : item)) };
+  return { ...trip, calendarItems: items.map((item) => (isDayItem(item, kid, place) ? { ...item, price } : item)) };
 }
 
 /** Adds an amount that does not depend on the days (a monthly fee…) for a child at a level, with an optional label. */
@@ -457,22 +465,22 @@ export function addFixed(
     person: kid,
     ...(text ? { note: text } : {}),
   };
-  return { ...trip, [category.key]: [...(trip[category.key] ?? []), item] };
+  return { ...trip, calendarItems: [...calendarItemsOf(trip), item] };
 }
 
 /** Changes the amount of a fixed line (never of one that counts days). */
 export function setFixedPrice(trip: ShoppingTrip, category: Category, itemId: string, price: number | null): ShoppingTrip {
-  const items = trip[category.key] ?? [];
+  const items = calendarItemsOf(trip);
   return {
     ...trip,
-    [category.key]: items.map((item) => (item.id === itemId && item.perDay !== true ? { ...item, price } : item)),
+    calendarItems: items.map((item) => (item.id === itemId && item.perDay !== true ? { ...item, price } : item)),
   };
 }
 
 /** Takes a fixed line away (never one that counts days). */
 export function removeFixed(trip: ShoppingTrip, category: Category, itemId: string): ShoppingTrip {
-  const items = trip[category.key] ?? [];
-  return { ...trip, [category.key]: items.filter((item) => !(item.id === itemId && item.perDay !== true)) };
+  const items = calendarItemsOf(trip);
+  return { ...trip, calendarItems: items.filter((item) => !(item.id === itemId && item.perDay !== true)) };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -492,7 +500,7 @@ export function lastDayPrice(
   const ordered = [current, ...newestFirst(trips.filter((trip) => trip.id !== current.id))];
   for (const sameKid of [true, false]) {
     for (const trip of ordered) {
-      const found = (trip[category.key] ?? []).find(
+      const found = [...calendarItemsOf(trip), ...(trip[category.key] ?? [])].find(
         (item) => item.perDay === true && item.price != null && sameText(item.name, place) && (!sameKid || sameText(item.person, kid)),
       );
       if (found) return found.price;
@@ -528,7 +536,7 @@ export function usualPlaces(
       // A day item says it best; any other line of the child at a level is the next best thing.
       for (const dayItemsOnly of [true, false]) {
         for (const trip of [current, ...newestFirst(trips.filter((entry) => entry.id !== current.id))]) {
-          const item = (trip[category.key] ?? []).find(
+          const item = [...calendarItemsOf(trip), ...(trip[category.key] ?? [])].find(
             (entry) =>
               (!dayItemsOnly || entry.perDay === true) &&
               sameText(entry.person, kid) &&
@@ -543,4 +551,82 @@ export function usualPlaces(
     result[kid] = best;
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Between the calendar and the list
+// ---------------------------------------------------------------------------------------------------------------------
+
+/**
+ * Lists made while the calendar still put its days in the category's own list: those day items move to the calendar, so the
+ * list only holds what is added to it. Lists that have none are returned as they are.
+ */
+export function moveCalendarItems(trips: ShoppingTrip[]): ShoppingTrip[] {
+  const category = CATEGORIES.find((entry) => entry.attendancePlaces);
+  if (!category) return trips;
+  return trips.map((trip) => {
+    const listed = trip[category.key] ?? [];
+    if (!listed.some((item) => item.perDay === true)) return trip;
+    const known = new Set(calendarItemsOf(trip).map((item) => item.id));
+    const moved = listed.filter((item) => item.perDay === true && !known.has(item.id));
+    return {
+      ...trip,
+      [category.key]: listed.filter((item) => item.perDay !== true),
+      calendarItems: [...calendarItemsOf(trip), ...moved],
+    };
+  });
+}
+
+/** A month the calendar has paid days in. */
+export interface CalendarMonth {
+  /** "2026-10". */
+  key: string;
+  year: number;
+  /** From 0. */
+  month: number;
+  /** Paid days marked in the month, of every child. */
+  days: number;
+}
+
+/** The months with paid days marked in the calendar of the list, newest first. */
+export function calendarMonths(trip: ShoppingTrip | undefined, category: Category): CalendarMonth[] {
+  const paid = new Set<string>(category.attendancePlaces ?? []);
+  const found = new Map<string, CalendarMonth>();
+  for (const [day, marks] of Object.entries(readAttendance(trip))) {
+    const count = Object.values(marks).filter((place) => paid.has(place)).length;
+    if (count === 0) continue;
+    const { year, month } = monthOfDay(day);
+    const key = `${year}-${pad(month + 1)}`;
+    const known = found.get(key);
+    if (known) known.days += count;
+    else found.set(key, { key, year, month, days: count });
+  }
+  return [...found.values()].sort((a, b) => b.key.localeCompare(a.key));
+}
+
+export interface MonthAmount {
+  /** Days marked in the month for the child at the place. */
+  days: number;
+  /** What one day costs; null while no price is known for it. */
+  price: number | null;
+  /** Days times the price; null when there is no price or no day. */
+  amount: number | null;
+}
+
+/** What the calendar says a child's days at a place come to in one month ("2026-10"). */
+export function monthAmount(
+  trips: ShoppingTrip[],
+  trip: ShoppingTrip,
+  category: Category,
+  monthKey: string,
+  kid: string,
+  place: PaidPlace,
+): MonthAmount {
+  let days = 0;
+  for (const [day, marks] of Object.entries(readAttendance(trip))) {
+    if (day.startsWith(`${monthKey}-`) && marks[kid] === place) days += 1;
+  }
+  const own = calendarItemsOf(trip).find((item) => isDayItem(item, kid, place))?.price ?? null;
+  const price = own ?? lastDayPrice(trips, trip, category, kid, place);
+  return { days, price, amount: price != null && days > 0 ? days * price : null };
 }

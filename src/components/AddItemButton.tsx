@@ -9,6 +9,12 @@ import { DEFAULT_QUANTITY, normalizeQuantity, parseQuantity, sanitizeQuantityInp
 import { pickSuggestions, type Suggestion } from '@/utils/suggestions';
 import { formatNumber } from '@/utils/totals';
 
+/** A month of a calendar (Kopesht & Shkolle) that can be added from the form, and what the calendar says for a level and a person in it. */
+export interface CalendarChoice {
+  months: { key: string; label: string; days: number }[];
+  amountFor: (monthKey: string, level: string, person: string) => { days: number; price: number | null; amount: number | null } | null;
+}
+
 interface AddItemButtonProps {
   onAdd: (name: string, quantity: string, price: number | null, priority: number, note?: string, second?: string) => void;
   showPriority?: boolean;
@@ -31,6 +37,8 @@ interface AddItemButtonProps {
   priceLabel?: string;
   submitLabel?: string;
   requirePrice?: boolean;
+  /** Months that were filled in on a calendar: picking one (with a level and a person) fills in the amount from it. */
+  calendar?: CalendarChoice;
 }
 
 export function AddItemButton({
@@ -49,6 +57,7 @@ export function AddItemButton({
   submitLabel = 'Shto në listë',
   requirePrice = false,
   showPriority = true,
+  calendar,
 }: AddItemButtonProps) {
   const [visible, setVisible] = useState(false);
   const [name, setName] = useState('');
@@ -59,8 +68,22 @@ export function AddItemButton({
   const [other, setOther] = useState(false);
   const [note, setNote] = useState('');
   const [second, setSecond] = useState('');
+  // The month of the calendar the amount is taken from, if one is picked.
+  const [monthKey, setMonthKey] = useState<string | null>(null);
+
+  // With a month picked and a level and a person chosen, the amount and what it is for come from the calendar. The fields stay
+  // editable, so anything can still be changed by hand.
+  const fillFromCalendar = (month: string | null, level: string, who: string) => {
+    if (!calendar || !month || !level || !who) return;
+    const result = calendar.amountFor(month, level, who);
+    if (!result || result.days === 0) return;
+    const label = calendar.months.find((entry) => entry.key === month)?.label ?? '';
+    setPrice(result.amount != null ? String(result.amount) : '');
+    setNote(`${label} · ${result.days} ditë${result.price != null ? ` × ${formatNumber(result.price)}` : ''}`);
+  };
 
   const close = () => {
+    setMonthKey(null);
     setVisible(false);
     setName('');
     setOther(false);
@@ -132,7 +155,10 @@ export function AddItemButton({
           return (
             <Pressable
               key={option}
-              onPress={() => setSecond(option)}
+              onPress={() => {
+                setSecond(option);
+                fillFromCalendar(monthKey, other ? '' : name, option);
+              }}
               accessibilityRole="radio"
               accessibilityState={{ checked: selected }}
               style={[styles.option, selected && styles.optionSelected]}
@@ -144,6 +170,48 @@ export function AddItemButton({
       </View>
     </>
   ) : null;
+
+  // What the calendar says for the picked month, level and person, shown under the months.
+  const calendarResult =
+    calendar && monthKey && choiceMade && second ? calendar.amountFor(monthKey, name, second) : null;
+  const calendarSection =
+    calendar && calendar.months.length > 0 && nameOptions && !other ? (
+      <>
+        <Text style={[styles.label, styles.otherLabel]}>Muaji nga kalendari (opsionale)</Text>
+        <View style={styles.options} accessibilityRole="radiogroup">
+          {calendar.months.map((entry) => {
+            const selected = monthKey === entry.key;
+            return (
+              <Pressable
+                key={entry.key}
+                onPress={() => {
+                  const next = selected ? null : entry.key;
+                  setMonthKey(next);
+                  fillFromCalendar(next, name, second);
+                }}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selected }}
+                style={[styles.option, selected && styles.optionSelected]}
+              >
+                <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{entry.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {monthKey && !(choiceMade && second) && (
+          <Text style={styles.calendarHint}>Zgjidh nivelin dhe fëmijën për të marrë shumën nga kalendari.</Text>
+        )}
+        {calendarResult && (
+          <Text style={styles.calendarHint}>
+            {calendarResult.days === 0
+              ? `Nuk ka ditë të shënuara për ${name} / ${second} në këtë muaj.`
+              : calendarResult.amount != null
+                ? `${calendarResult.days} ditë × ${formatNumber(calendarResult.price ?? 0)} = ${formatNumber(calendarResult.amount)} Lekë`
+                : `${calendarResult.days} ditë të shënuara, por çmimi i ditës nuk është vendosur në kalendar.`}
+          </Text>
+        )}
+      </>
+    ) : null;
 
   return (
     <>
@@ -165,6 +233,7 @@ export function AddItemButton({
                     onPress={() => {
                       setOther(isOther);
                       setName(isOther ? '' : option);
+                      fillFromCalendar(monthKey, isOther ? '' : option, second);
                     }}
                     accessibilityRole="radio"
                     accessibilityState={{ checked: selected }}
@@ -176,6 +245,7 @@ export function AddItemButton({
               })}
             </View>
             {secondSelect}
+            {calendarSection}
             {other && (
               <>
                 <Text style={[styles.label, styles.otherLabel]}>Emri</Text>
@@ -360,6 +430,7 @@ const styles = StyleSheet.create({
   chipPrice: { fontSize: 12, color: colors.textMuted },
   row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   rowItem: { flex: 1 },
+  calendarHint: { fontSize: 13, color: colors.textMuted, marginTop: spacing.xs },
   total: { fontSize: 14, fontWeight: '700', color: colors.primaryDark, marginTop: spacing.sm },
   priority: { marginTop: spacing.sm },
   submitButton: {
