@@ -26,6 +26,8 @@ function RootNavigator() {
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="index" />
         <Stack.Screen name="trip/[id]" />
+        <Stack.Screen name="note/[id]" />
+        <Stack.Screen name="school/[id]" />
         <Stack.Screen name="profile" />
       </Stack.Protected>
       <Stack.Protected guard={user === null && !demoMode}>

@@ -13,21 +13,25 @@ import { HomeChooser } from '@/components/HomeChooser';
 import { LatestListPie } from '@/components/LatestListPie';
 import { NotesView } from '@/components/NotesView';
 import { ReportsView } from '@/components/ReportsView';
+import { SchoolDaysTab } from '@/components/SchoolDaysTab';
+import { SavingsCard } from '@/components/SavingsCard';
 import { TripCard } from '@/components/TripCard';
 import { useAuth } from '@/context/AuthContext';
 import { useProfile } from '@/context/ProfileContext';
 import { useTrips } from '@/context/TripsContext';
 import { colors, spacing } from '@/theme/theme';
-import { buildListSpend, buildSectionSpend } from '@/utils/reports';
+import { buildListSpend, buildSavings, buildSectionSpend } from '@/utils/reports';
+import { SPENT_SECTION } from '@/utils/spent';
 import { tripIncomeTotal } from '@/utils/totals';
 
 // The lists screen shows this many lists at first and this many more each time "load more" is pressed.
 const PAGE_SIZE = 5;
 
-type Tab = 'home' | 'lists' | 'reports' | 'qokat' | 'notes';
+type Tab = 'home' | 'lists' | 'reports' | 'qokat' | 'school' | 'notes';
 // The pages of Note Shop List, the ones with the tabs at the bottom.
-type ShopTab = 'lists' | 'reports' | 'qokat';
-const isShopTab = (value: Tab): value is ShopTab => value === 'lists' || value === 'reports' || value === 'qokat';
+type ShopTab = 'lists' | 'reports' | 'qokat' | 'school';
+const isShopTab = (value: Tab): value is ShopTab =>
+  value === 'lists' || value === 'reports' || value === 'qokat' || value === 'school';
 
 // Lower-case and strip accents so "shtator" finds "Shtator" and "mire" finds "Mirë".
 function normalizeText(value: string): string {
@@ -48,6 +52,8 @@ export default function ListsOverviewScreen() {
   const [tab, setTab] = useState<Tab>('home');
   // The shopping page that was open last, so the way back to Note Shop List leads there.
   const [returnTab, setReturnTab] = useState<ShopTab>('lists');
+  // The list whose days the Kopesht & Shkolle page shows; the newest one until another is picked there.
+  const [schoolTripId, setSchoolTripId] = useState<string | null>(null);
   const goTo = (next: Tab) => {
     if (isShopTab(tab)) setReturnTab(tab);
     setTab(next);
@@ -81,6 +87,8 @@ export default function ListsOverviewScreen() {
     changeQuery('');
   };
   const latestSections = buildSectionSpend(sorted.slice(0, 1));
+  // Newest list first, so the breakdown of the bank reads like the lists below.
+  const savings = buildSavings(sorted);
   const recent = buildListSpend(trips)
     .slice(-12)
     .map((list) => ({
@@ -91,6 +99,9 @@ export default function ListsOverviewScreen() {
     }));
 
   const openTrip = (id: string) => router.push({ pathname: '/trip/[id]', params: { id } });
+  // A category of the pie opens that list on Të shpenzuarat, at the part of that category.
+  const openSpent = (id: string, category: string) =>
+    router.push({ pathname: '/trip/[id]', params: { id, tab: SPENT_SECTION, category } });
 
   const handleCreate = (name: string) => {
     const id = createList(name);
@@ -215,11 +226,13 @@ export default function ListsOverviewScreen() {
             ListHeaderComponent={
               recent.length > 0 && !needle ? (
                 <>
+                  {savings.lists > 0 && <SavingsCard savings={savings} onOpenList={openTrip} />}
                   <MiniColumns data={recent} onPressColumn={openTrip} />
                   <LatestListPie
                     listName={`${sorted[0].name} · sipas kategorisë`}
                     sections={latestSections}
                     income={tripIncomeTotal(sorted[0])}
+                    onPressSection={(section) => openSpent(sorted[0].id, section)}
                   />
                 </>
               ) : null
@@ -263,6 +276,9 @@ export default function ListsOverviewScreen() {
         ) : tab === 'qokat' ? (
           // Only built once its tab is opened, so it costs nothing until then.
           <QokatView onOpenTrip={openTrip} />
+        ) : tab === 'school' ? (
+          // Same: the days calendar is only built once its tab is opened.
+          <SchoolDaysTab tripId={schoolTripId} onPickTrip={setSchoolTripId} onGoToLists={() => setTab('lists')} />
         ) : (
           // Same here: nothing of the Note List Shop page runs, or is read from the phone, until its tab is opened.
           <NotesView />
@@ -284,6 +300,7 @@ export default function ListsOverviewScreen() {
             { value: 'lists', label: 'Listat', icon: 'list-outline', activeIcon: 'list' },
             { value: 'reports', label: 'Raportet', icon: 'stats-chart-outline', activeIcon: 'stats-chart' },
             { value: 'qokat', label: 'Qokat', icon: 'cafe-outline', activeIcon: 'cafe' },
+            { value: 'school', label: 'Kopesht &\nShkolle', icon: 'school-outline', activeIcon: 'school' },
           ]}
         />
       )}

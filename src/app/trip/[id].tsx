@@ -14,13 +14,16 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { InlineEditableField } from '@/components/InlineEditableField';
 import { IncomeRow } from '@/components/IncomeRow';
 import { ImportantList } from '@/components/ImportantList';
+import { AttendanceCard } from '@/components/AttendanceCard';
 import { ItemList } from '@/components/ItemList';
+import { SpentList } from '@/components/SpentList';
 import { TagGridSheet } from '@/components/TagGridSheet';
 import { TagString, type TagOption } from '@/components/TagString';
 import { useTrips } from '@/context/TripsContext';
 import { useTabSwipe } from '@/hooks/useTabSwipe';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { IncomeEntry, ItemListKey, ShoppingItem } from '@/types/models';
+import { attendanceKids, type KidDays, summarize } from '@/utils/attendance';
 import { CATEGORIES, type Category, INCOME_COLOR } from '@/utils/categories';
 import { type ImportantEntry, IMPORTANT_COLOR, IMPORTANT_SECTION, importantItems } from '@/utils/important';
 import {
@@ -32,6 +35,7 @@ import {
 } from '@/utils/incomes';
 import { goBackOrHome } from '@/utils/navigation';
 import { buildOptionTotals, buildPersonTotals, itemOption, itemsForOption, itemsForPerson } from '@/utils/options';
+import { SPENT_COLOR, SPENT_SECTION, type SpentGroup, spentItems } from '@/utils/spent';
 import { buildListSuggestions, buildSuggestions, suggestionGroups } from '@/utils/suggestions';
 import { categoriesByOpenItems, computeSpentTotal, computeTotal, tripAllItems } from '@/utils/totals';
 
@@ -41,6 +45,11 @@ type Section = string;
 const NO_ITEMS: ShoppingItem[] = [];
 const NO_INCOMES: IncomeEntry[] = [];
 const NO_ENTRIES: ImportantEntry[] = [];
+const NO_GROUPS: SpentGroup[] = [];
+
+// The category that counts days (Kopesht & Shkolle), whose list opens with a card into the days calendar.
+const DAYS_CATEGORY = CATEGORIES.find((category) => category.attendancePlaces);
+const DAYS_KIDS = DAYS_CATEGORY ? attendanceKids(DAYS_CATEGORY) : [];
 
 const PREPARE_AFTER_MS = 600;
 const PREPARE_STEP_MS = 400;
@@ -77,6 +86,9 @@ interface CategoryPaneProps {
   /** The person (Drion, Alois) of a category that asks who it is for the list is narrowed to, or null for everyone. */
   personFilter: string | null;
   onPersonFilter: (section: Section, person: string | null) => void;
+  /** For the category that counts days: how many days each child went. The card on top of its list opens the calendar. */
+  attendance?: KidDays[];
+  onOpenAttendance: () => void;
 }
 
 // One tab. It is redrawn only when its own data changes, so opening another tab does not touch the others.
@@ -93,6 +105,8 @@ const CategoryPane = memo(function CategoryPane({
   onOptionFilter,
   personFilter,
   onPersonFilter,
+  attendance,
+  onOpenAttendance,
 }: CategoryPaneProps) {
   const optionTotals = useMemo(() => buildOptionTotals(items, category), [items, category]);
   const personTotals = useMemo(() => buildPersonTotals(items, category), [items, category]);
@@ -129,6 +143,7 @@ const CategoryPane = memo(function CategoryPane({
         showQuantity={category.showQuantity}
         limit={preview ? PREVIEW_ROWS : undefined}
         personOptions={category.personOptions}
+        header={attendance ? <AttendanceCard kids={DAYS_KIDS} summary={attendance} onPress={onOpenAttendance} /> : null}
       />
     </Pane>
   );
@@ -140,19 +155,22 @@ const count = (list: { bought: boolean }[]) => ({
 });
 
 export default function TripDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // `tab` and `category` come from the pie on the home page: open on Të shpenzuarat, at the part of that category.
+  const { id, tab, category: focusCategory } = useLocalSearchParams<{ id: string; tab?: string; category?: string }>();
+  const startSection: Section = tab === SPENT_SECTION ? SPENT_SECTION : IMPORTANT_SECTION;
   const { trips, addItem, addIncome, updateIncome, removeIncome, renameTrip, deleteTrip } = useTrips();
   const trip = trips.find((t) => t.id === id);
   // The category tabs are sorted by the number on them (most items left to buy first, empty ones last) when the list is
   // opened and then kept as they are, so no tab jumps around while you add or check off items; the next time the list
   // is opened they are sorted again.
   const [categoryOrder] = useState(() => categoriesByOpenItems(trip));
-  // The list opens on Më të rëndësishmet, so the strip starts at the left, where that tab is, right after Të ardhurat.
-  const [section, setSection] = useState<Section>(IMPORTANT_SECTION);
+  // The list opens on Më të rëndësishmet (or Të shpenzuarat, from the pie), so the strip starts at the left, where those
+  // tabs are, right after Të ardhurat.
+  const [section, setSection] = useState<Section>(startSection);
   // A tab is built the first time it is opened and then kept, so going back to it is instant.
-  const [mounted, setMounted] = useState<Section[]>([IMPORTANT_SECTION]);
+  const [mounted, setMounted] = useState<Section[]>([startSection]);
   // The tabs that were really opened; they keep all their rows.
-  const [opened, setOpened] = useState<Section[]>([IMPORTANT_SECTION]);
+  const [opened, setOpened] = useState<Section[]>([startSection]);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [gridOpen, setGridOpen] = useState(false);
 
@@ -164,7 +182,7 @@ export default function TripDetailScreen() {
 
   // Swipe left for the next tab in the strip, right for the previous one (see useTabSwipe).
   const tabOrder = useMemo<Section[]>(
-    () => ['income', IMPORTANT_SECTION, ...categoryOrder.map((category) => category.section)],
+    () => ['income', IMPORTANT_SECTION, SPENT_SECTION, ...categoryOrder.map((category) => category.section)],
     [categoryOrder],
   );
   const { gesture: swipeTabs, slideStyle } = useTabSwipe(tabOrder, section, selectSection);
@@ -185,7 +203,7 @@ export default function TripDetailScreen() {
   // Build the other tabs one by one shortly after the list opens, so they are already there when tapped.
   useEffect(() => {
     // In the order of the strip, so the tabs closest to the open one are ready first.
-    const prepareOrder: Section[] = [...categoryOrder.map((category) => category.section), 'income'];
+    const prepareOrder: Section[] = [SPENT_SECTION, ...categoryOrder.map((category) => category.section), 'income'];
     const timers = prepareOrder.map((next, i) =>
       setTimeout(
         () => setMounted((prev) => (prev.includes(next) ? prev : [...prev, next])),
@@ -231,16 +249,35 @@ export default function TripDetailScreen() {
       >,
     [trip],
   );
+  // What is checked off in each category, for the "Shpenzuar" on its own tab.
+  const spentTotals = useMemo(
+    () =>
+      Object.fromEntries(
+        CATEGORIES.map(({ key }) => [key, computeSpentTotal(trip?.[key] ?? NO_ITEMS)]),
+      ) as Record<ItemListKey, number>,
+    [trip],
+  );
   const combinedSpent = useMemo(() => (trip ? computeSpentTotal(tripAllItems(trip)) : 0), [trip]);
   // Only meaningful once some income was added; otherwise every purchase would count as "over".
   const overBy = incomeTotal > 0 ? combinedSpent - incomeTotal : 0;
+  // What is left of the income after everything spent; nothing to show when there is no income or it is used up.
+  const incomeLeft = incomeTotal > 0 && combinedSpent < incomeTotal ? incomeTotal - combinedSpent : undefined;
 
   // The items of every category marked more important than normal, for the tab that gathers them.
   const important = useMemo(() => importantItems(trip, categoryOrder), [trip, categoryOrder]);
   const importantTotal = useMemo(() => computeTotal(important.all), [important]);
   const importantSpent = useMemo(() => computeSpentTotal(important.all), [important]);
+  // Everything already checked off, split by category, for the tab that gathers it.
+  const spent = useMemo(() => spentItems(trip, categoryOrder), [trip, categoryOrder]);
 
   const activeCategory = CATEGORIES.find((category) => category.section === section);
+
+  // How many days each child went, for the card on top of Kopesht & Shkolle, and the way into the calendar.
+  const daysSummary = useMemo(() => (trip && DAYS_CATEGORY ? summarize(trip, DAYS_CATEGORY) : undefined), [trip]);
+  const tripId = trip?.id;
+  const openAttendance = useCallback(() => {
+    if (tripId) router.push({ pathname: '/school/[id]', params: { id: tripId } });
+  }, [tripId]);
   const suggestions = useMemo(
     () => (activeCategory ? buildListSuggestions(trips, trip, activeCategory.key, suggestionGroups(activeCategory)) : []),
     [trips, trip, activeCategory],
@@ -259,6 +296,18 @@ export default function TripDetailScreen() {
         remaining: important.open.length,
         total: important.all.length,
       },
+      {
+        value: SPENT_SECTION,
+        label: 'Të shpenzuarat',
+        tabLabel: 'Të\nshpenzuarat',
+        icon: 'checkmark-done-circle-outline',
+        activeIcon: 'checkmark-done-circle',
+        accent: SPENT_COLOR,
+        // The number on the tab is how many items are checked off; there is nothing "left" to do here.
+        remaining: spent.count,
+        total: spent.count,
+        status: `${spent.count} artikuj të blerë`,
+      },
       ...categoryOrder.map((category) => ({
         value: category.section,
         label: category.label,
@@ -269,7 +318,7 @@ export default function TripDetailScreen() {
         ...count(trip?.[category.key] ?? NO_ITEMS),
       })),
     ],
-    [categoryOrder, trip, important],
+    [categoryOrder, trip, important, spent],
   );
 
   const deleteDetails = trip
@@ -357,6 +406,7 @@ export default function TripDetailScreen() {
                         totalAmount={incomeTotal}
                         paidAmount={combinedSpent}
                         totalLabel="Të ardhurat gjithsej"
+                        remainingAmount={incomeLeft}
                       />
                       <OptionTotalsBar
                         options={incomeKindTotals}
@@ -404,6 +454,23 @@ export default function TripDetailScreen() {
                     </Pane>
                   )}
 
+                  {mounted.includes(SPENT_SECTION) && (
+                    <Pane active={section === SPENT_SECTION}>
+                      <BillsSummaryBar
+                        totalAmount={incomeTotal}
+                        paidAmount={combinedSpent}
+                        totalLabel="Të ardhurat gjithsej"
+                        remainingAmount={incomeLeft}
+                      />
+                      <SpentList
+                        tripId={trip.id}
+                        groups={opened.includes(SPENT_SECTION) ? spent.groups : NO_GROUPS}
+                        focusSection={startSection === SPENT_SECTION ? focusCategory : undefined}
+                        emptyText="Ende nuk ke shënuar asnjë artikull si të blerë."
+                      />
+                    </Pane>
+                  )}
+
                   {CATEGORIES.map(
                     (category) =>
                       mounted.includes(category.section) && (
@@ -415,12 +482,14 @@ export default function TripDetailScreen() {
                           items={trip[category.key] ?? NO_ITEMS}
                           preview={!opened.includes(category.section)}
                           total={totals[category.key]}
-                          spent={combinedSpent}
+                          spent={spentTotals[category.key]}
                           overBy={overBy}
                           optionFilter={optionFilters[category.section] ?? null}
                           onOptionFilter={setOptionFilter}
                           personFilter={personFilters[category.section] ?? null}
                           onPersonFilter={setPersonFilter}
+                          attendance={category.attendancePlaces ? daysSummary : undefined}
+                          onOpenAttendance={openAttendance}
                         />
                       ),
                   )}
@@ -436,6 +505,17 @@ export default function TripDetailScreen() {
               >
                 <Ionicons name="trash-outline" size={22} color={colors.danger} />
               </Pressable>
+              {activeCategory?.attendancePlaces && (
+                <Pressable
+                  onPress={openAttendance}
+                  accessibilityRole="button"
+                  accessibilityLabel="Hap kalendarin e ditëve"
+                  style={({ pressed }) => [styles.calendarButton, shadow, pressed && styles.calendarButtonPressed]}
+                >
+                  <Ionicons name="calendar" size={18} color={colors.primaryDark} />
+                  <Text style={styles.calendarButtonText}>Kalendari</Text>
+                </Pressable>
+              )}
               {section === 'income' && (
                 <AddItemButton
                   onAdd={(name, _quantity, amount, _priority, _note, kindLabel) => {
@@ -526,6 +606,18 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   // At the far left, the add button at the far right, and a plain white circle, so the two are not mixed up.
+  // Beside the add button, in the category that counts days: the way into the days calendar.
+  calendarButton: {
+    height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.md,
+  },
+  calendarButtonPressed: { opacity: 0.8 },
+  calendarButtonText: { fontSize: 14, fontWeight: '800', color: colors.primaryDark },
   deleteListButton: {
     width: 44,
     height: 44,

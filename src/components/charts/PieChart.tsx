@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -22,13 +22,17 @@ interface PieChartProps {
   slices: PieSlice[];
   size?: number;
   showLabels?: boolean;
+  /** Makes every slice tappable; called with the key of the slice that was tapped. Not on the web, where the shapes cannot take touches (the legend is the way there). */
+  onPressSlice?: (key: string) => void;
 }
 
 function polar(cx: number, cy: number, r: number, angle: number) {
   return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
 }
 
-export function PieChart({ slices, size = 180, showLabels = true }: PieChartProps) {
+export function PieChart({ slices, size = 180, showLabels = true, onPressSlice }: PieChartProps) {
+  // On the web the shapes would be handed touch props the page does not know, which only fills the console with errors.
+  const pressSlice = Platform.OS === 'web' ? undefined : onPressSlice;
   const reduced = useReducedMotion();
   const enter = useSharedValue(reduced ? 1 : 0);
 
@@ -65,9 +69,23 @@ export function PieChart({ slices, size = 180, showLabels = true }: PieChartProp
           {total === 0 && <Circle cx={c} cy={c} r={r} fill={colors.border} />}
           {paths.map(({ slice, d, full }) =>
             full ? (
-              <Circle key={slice.key} cx={c} cy={c} r={r} fill={slice.color} />
+              <Circle
+                key={slice.key}
+                cx={c}
+                cy={c}
+                r={r}
+                fill={slice.color}
+                onPress={pressSlice && (() => pressSlice(slice.key))}
+              />
             ) : (
-              <Path key={slice.key} d={d} fill={slice.color} stroke={colors.card} strokeWidth={2} />
+              <Path
+                key={slice.key}
+                d={d}
+                fill={slice.color}
+                stroke={colors.card}
+                strokeWidth={2}
+                onPress={pressSlice && (() => pressSlice(slice.key))}
+              />
             ),
           )}
           {paths.map(({ slice, mid, percent }) =>

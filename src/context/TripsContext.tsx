@@ -58,6 +58,8 @@ interface TripsContextValue extends TripActions {
   addIncome: (tripId: string, name: string, amount: number, kind?: IncomeKind) => void;
   updateIncome: (tripId: string, incomeId: string, patch: Partial<IncomeEntry>) => void;
   removeIncome: (tripId: string, incomeId: string) => void;
+  /** Replaces a list by what `change` makes of it, for edits that touch several parts of it at once (the days calendar). */
+  changeTrip: (tripId: string, change: (trip: ShoppingTrip) => ShoppingTrip) => void;
   hydrate: (trips: ShoppingTrip[]) => void;
 }
 
@@ -148,6 +150,10 @@ export function TripsProvider({ children }: { children: ReactNode }) {
     updateTripIncomes(tripId, (incomes) => incomes.filter((i) => i.id !== incomeId));
   };
 
+  const changeTrip = (tripId: string, change: (trip: ShoppingTrip) => ShoppingTrip) => {
+    setTrips((prev) => prev.map((trip) => (trip.id === tripId ? change(trip) : trip)));
+  };
+
   const hydrate = (next: ShoppingTrip[]) => setTrips(next);
 
   const value = useMemo<TripsContextValue>(
@@ -159,6 +165,7 @@ export function TripsProvider({ children }: { children: ReactNode }) {
       addIncome,
       updateIncome,
       removeIncome,
+      changeTrip,
       ...itemActions,
       hydrate,
     }),

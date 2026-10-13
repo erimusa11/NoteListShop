@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, type ReactElement, useMemo } from 'react';
 import { FlatList, StyleSheet, Text } from 'react-native';
 
 import { ItemRow } from '@/components/ItemRow';
@@ -17,6 +17,8 @@ interface ItemListProps {
   limit?: number;
   /** The people an item can be for (Drion, Alois), when the category asks. */
   personOptions?: string[];
+  /** Above the rows; it scrolls away with them. */
+  header?: ReactElement | null;
 }
 
 // Every row is heavy (animations, hold gesture), so draw only what is on screen first and fill in the rest in small batches.
@@ -32,6 +34,7 @@ export const ItemList = memo(function ItemList({
   showQuantity = true,
   limit,
   personOptions,
+  header,
 }: ItemListProps) {
   const { toggleItem, updateItem, removeItem, moveItem, toggleStar } = useTripActions();
   const data = useMemo(() => {
@@ -58,6 +61,7 @@ export const ItemList = memo(function ItemList({
           personOptions={personOptions}
         />
       )}
+      ListHeaderComponent={header}
       ListEmptyComponent={<Text style={styles.empty}>{emptyText}</Text>}
       contentContainerStyle={styles.listContent}
       showsVerticalScrollIndicator={false}
