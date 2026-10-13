@@ -13,10 +13,13 @@ interface NoteListsPanelProps {
   empty: ReactElement;
   onOpen: (list: NoteList) => void;
   onDelete: (list: NoteList) => void;
+  /** How many deleted groups wait in the trash; the link to it is only shown when there are some. */
+  trashCount: number;
+  onOpenTrash: () => void;
 }
 
 // The groups of the Note List Shop page: the name, the day it was made, and how much of it is done. A tap opens the group.
-export function NoteListsPanel({ lists, empty, onOpen, onDelete }: NoteListsPanelProps) {
+export function NoteListsPanel({ lists, empty, onOpen, onDelete, trashCount, onOpenTrash }: NoteListsPanelProps) {
   return (
     <FlatList
       data={lists}
@@ -25,6 +28,19 @@ export function NoteListsPanel({ lists, empty, onOpen, onDelete }: NoteListsPane
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
       ListEmptyComponent={empty}
+      ListFooterComponent={
+        trashCount > 0 ? (
+          <Pressable
+            onPress={onOpenTrash}
+            accessibilityRole="button"
+            accessibilityLabel={`Koshi, ${trashCount} lista të fshira`}
+            style={({ pressed }) => [styles.trashLink, pressed && styles.pressed]}
+          >
+            <Ionicons name="trash-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.trashLinkText}>Koshi · {trashCount}</Text>
+          </Pressable>
+        ) : null
+      }
       renderItem={({ item: list }) => {
         const done = list.items.filter((item) => item.done).length;
         const total = list.items.length;
@@ -96,6 +112,17 @@ const styles = StyleSheet.create({
   track: { height: 4, borderRadius: radii.pill, backgroundColor: colors.border, overflow: 'hidden', marginVertical: 2 },
   fill: { height: '100%', borderRadius: radii.pill, backgroundColor: colors.success },
   date: { fontSize: 11, color: colors.textMuted },
+  trashLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs + 2,
+    alignSelf: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.xs,
+  },
+  trashLinkText: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
   trash: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   trashPressed: { backgroundColor: '#FDE6E3' },
 });

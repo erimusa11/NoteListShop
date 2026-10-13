@@ -3,6 +3,7 @@ import { FlatList, StyleSheet, Text } from 'react-native';
 
 import { ItemRow } from '@/components/ItemRow';
 import { useTripActions } from '@/context/TripsContext';
+import { useRemoveItem } from '@/hooks/useRemoveItem';
 import { colors, spacing } from '@/theme/theme';
 import type { ItemListKey, ShoppingItem } from '@/types/models';
 import { sortBoughtLast } from '@/utils/totals';
@@ -36,7 +37,8 @@ export const ItemList = memo(function ItemList({
   personOptions,
   header,
 }: ItemListProps) {
-  const { toggleItem, updateItem, removeItem, moveItem, toggleStar } = useTripActions();
+  const { toggleItem, updateItem, moveItem, toggleStar } = useTripActions();
+  const removeItem = useRemoveItem();
   const data = useMemo(() => {
     const sorted = sortBoughtLast(items);
     return limit === undefined ? sorted : sorted.slice(0, limit);
@@ -53,7 +55,7 @@ export const ItemList = memo(function ItemList({
           item={item}
           onToggle={() => toggleItem(tripId, list, item.id)}
           onUpdate={(patch) => updateItem(tripId, list, item.id, patch)}
-          onRemove={() => removeItem(tripId, list, item.id)}
+          onRemove={() => removeItem(tripId, list, item)}
           onToggleStar={() => toggleStar(tripId, list, item.id)}
           moveFrom={list}
           onMove={(to, group) => moveItem(tripId, list, item.id, to, group)}

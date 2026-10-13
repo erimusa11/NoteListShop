@@ -62,6 +62,13 @@ export function useTasks() {
         commit((list) => list.map((task) => (task.id === id ? editTask(task, fields) : task))),
       toggle: (id: string) => commit((list) => list.map((task) => (task.id === id ? toggleTask(task) : task))),
       remove: (id: string) => commit((list) => list.filter((task) => task.id !== id)),
+      /** Puts a deleted task back, at the place its creation date gives it. */
+      restore: (task: Task) =>
+        commit((list) => {
+          if (list.some((entry) => entry.id === task.id)) return list;
+          const at = list.findIndex((entry) => entry.createdAt > task.createdAt);
+          return at === -1 ? [...list, task] : [...list.slice(0, at), task, ...list.slice(at)];
+        }),
       clearDone: () => commit((list) => list.filter((task) => !task.done)),
     }),
     [commit],

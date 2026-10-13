@@ -6,8 +6,10 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { CloudSyncGate } from '@/components/CloudSyncGate';
 import { AppLockProvider } from '@/context/AppLockContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { BackupProvider } from '@/context/BackupContext';
 import { ProfileProvider } from '@/context/ProfileContext';
 import { TripsProvider } from '@/context/TripsContext';
+import { UndoProvider } from '@/context/UndoContext';
 import { colors } from '@/theme/theme';
 
 function RootNavigator() {
@@ -49,7 +51,11 @@ export default function RootLayout() {
             <StatusBar style="dark" />
             <CloudSyncGate>
               <AppLockProvider>
-                <RootNavigator />
+                <UndoProvider>
+                  <BackupProvider>
+                    <RootNavigator />
+                  </BackupProvider>
+                </UndoProvider>
               </AppLockProvider>
             </CloudSyncGate>
           </ProfileProvider>

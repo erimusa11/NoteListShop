@@ -4,6 +4,7 @@ import { FlatList, StyleSheet, Text } from 'react-native';
 import { LIST_TUNING } from '@/components/ItemList';
 import { ItemRow } from '@/components/ItemRow';
 import { useTripActions } from '@/context/TripsContext';
+import { useRemoveItem } from '@/hooks/useRemoveItem';
 import { colors, spacing } from '@/theme/theme';
 import type { ImportantEntry } from '@/utils/important';
 
@@ -16,7 +17,8 @@ interface ImportantListProps {
 // The items marked more important than normal, from every category together. Each row works on its own category's
 // item, so checking one here checks it there (and it leaves this list, which only shows what is still to buy).
 export const ImportantList = memo(function ImportantList({ tripId, entries, emptyText }: ImportantListProps) {
-  const { toggleItem, updateItem, removeItem, moveItem, toggleStar } = useTripActions();
+  const { toggleItem, updateItem, moveItem, toggleStar } = useTripActions();
+  const removeItem = useRemoveItem();
 
   return (
     <FlatList
@@ -30,7 +32,7 @@ export const ImportantList = memo(function ImportantList({ tripId, entries, empt
           tag={{ label: category.label, color: category.color }}
           onToggle={() => toggleItem(tripId, category.key, item.id)}
           onUpdate={(patch) => updateItem(tripId, category.key, item.id, patch)}
-          onRemove={() => removeItem(tripId, category.key, item.id)}
+          onRemove={() => removeItem(tripId, category.key, item)}
           onToggleStar={() => toggleStar(tripId, category.key, item.id)}
           moveFrom={category.key}
           onMove={(to, group) => moveItem(tripId, category.key, item.id, to, group)}

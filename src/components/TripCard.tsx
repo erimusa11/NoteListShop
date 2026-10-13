@@ -45,7 +45,7 @@ export function TripCard({ trip, onPress, index = 0 }: TripCardProps) {
     fill.value = reduced
       ? progress
       : withDelay(ms(120 + Math.min(index, 4) * 25), withSpring(progress, spring({ damping: 20, stiffness: 170 })));
-  }, [progress]);
+  }, [progress, index, reduced, fill]);
 
   const pressStyle = useAnimatedStyle(() => ({
     transform: [

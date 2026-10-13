@@ -57,6 +57,8 @@ export interface NoteList {
   name: string;
   createdAt: number;
   items: NoteItem[];
+  /** Set when the group is deleted: it waits in the trash, and can be brought back, until `TRASH_DAYS` have passed. */
+  deletedAt?: number;
 }
 
 /** What an income is: a salary, a qokë given to us, or any other extra income. */
@@ -110,4 +112,6 @@ export interface ShoppingTrip extends Partial<Record<Exclude<ItemListKey, 'items
   attendance?: Attendance;
   /** Items deleted from this list, one per name and category. Only used for suggestions; they are not shown anywhere else. */
   removed?: RemovedItem[];
+  /** Set when the list is deleted: it waits in the trash, and can be brought back, until `TRASH_DAYS` have passed. */
+  deletedAt?: number;
 }

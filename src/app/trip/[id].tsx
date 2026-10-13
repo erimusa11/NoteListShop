@@ -20,6 +20,7 @@ import { SpentList } from '@/components/SpentList';
 import { TagGridSheet } from '@/components/TagGridSheet';
 import { TagString, type TagOption } from '@/components/TagString';
 import { useTrips } from '@/context/TripsContext';
+import { useUndo } from '@/context/UndoContext';
 import { useTabSwipe } from '@/hooks/useTabSwipe';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { IncomeEntry, ItemListKey, ShoppingItem } from '@/types/models';
@@ -37,6 +38,7 @@ import { goBackOrHome } from '@/utils/navigation';
 import { buildOptionTotals, buildPersonTotals, itemOption, itemsForOption, itemsForPerson } from '@/utils/options';
 import { SPENT_COLOR, SPENT_SECTION, type SpentGroup, spentItems } from '@/utils/spent';
 import { buildListSuggestions, buildSuggestions, suggestionGroups } from '@/utils/suggestions';
+import { TRASH_DAYS } from '@/utils/trash';
 import { categoriesByOpenItems, computeSpentTotal, computeTotal, tripAllItems } from '@/utils/totals';
 
 // 'income' or the `section` of a category.
@@ -158,7 +160,8 @@ export default function TripDetailScreen() {
   // `tab` and `category` come from the pie on the home page: open on Të shpenzuarat, at the part of that category.
   const { id, tab, category: focusCategory } = useLocalSearchParams<{ id: string; tab?: string; category?: string }>();
   const startSection: Section = tab === SPENT_SECTION ? SPENT_SECTION : IMPORTANT_SECTION;
-  const { trips, addItem, addIncome, updateIncome, removeIncome, renameTrip, deleteTrip } = useTrips();
+  const { trips, addItem, addIncome, updateIncome, removeIncome, renameTrip, deleteTrip, restoreTrip } = useTrips();
+  const { showUndo } = useUndo();
   const trip = trips.find((t) => t.id === id);
   // The category tabs are sorted by the number on them (most items left to buy first, empty ones last) when the list is
   // opened and then kept as they are, so no tab jumps around while you add or check off items; the next time the list
@@ -323,16 +326,18 @@ export default function TripDetailScreen() {
 
   const deleteDetails = trip
     ? [
-        `${tripAllItems(trip).length} ${tripAllItems(trip).length === 1 ? 'artikull' : 'artikuj'} në këtë listë do të fshihen.`,
-        'Ky veprim nuk kthehet mbrapsht.',
+        `${tripAllItems(trip).length} ${tripAllItems(trip).length === 1 ? 'artikull' : 'artikuj'} në këtë listë.`,
+        `Lista shkon në Koshin dhe ruhet ${TRASH_DAYS} ditë; në Listat mund ta kthesh.`,
       ]
     : [];
 
   const performDelete = () => {
     if (!trip) return;
+    const { id: tripId, name } = trip;
     setConfirmOpen(false);
-    deleteTrip(trip.id);
+    deleteTrip(tripId);
     router.replace('/');
+    showUndo(`"${name}" u fshi`, () => restoreTrip(tripId));
   };
 
   return (

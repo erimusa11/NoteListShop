@@ -73,6 +73,7 @@ export function normalizeNoteLists(raw: unknown): NoteList[] {
         id: list.id,
         name,
         createdAt: Number.isFinite(list.createdAt) ? Number(list.createdAt) : 0,
+        ...(Number.isFinite(list.deletedAt) ? { deletedAt: Number(list.deletedAt) } : {}),
         items: items.flatMap((value): NoteItem[] => {
           if (value === null || typeof value !== 'object') return [];
           const item = value as Partial<Record<keyof NoteItem, unknown>>;

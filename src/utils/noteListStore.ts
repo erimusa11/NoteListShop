@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { NoteList } from '@/types/models';
-import { type NoteHistoryEntry, normalizeNoteHistory, normalizeNoteLists } from '@/utils/noteLists';
+import { type NoteHistoryEntry, normalizeNoteHistory, normalizeNoteLists, rememberNoteItems } from '@/utils/noteLists';
+import { isTrashExpired } from '@/utils/trash';
 
 /** Lists made in demo mode: kept in memory only, like the rest of the demo. */
 export const DEMO_NOTE_SCOPE = 'demo';
@@ -57,6 +58,17 @@ export async function loadNoteLists(scope: string): Promise<NoteList[]> {
   // Something was saved while reading: that is newer.
   const newer = cache.get(scope);
   if (newer) return newer;
+
+  // Groups that waited in the trash for the full time go now; what they held is only kept as suggestions.
+  const now = Date.now();
+  const gone = lists.filter((list) => list.deletedAt !== undefined && isTrashExpired(list.deletedAt, now));
+  if (gone.length > 0) {
+    lists = lists.filter((list) => !gone.includes(list));
+    history = rememberNoteItems(history, gone.flatMap((list) => list.items));
+    AsyncStorage.setItem(storageKey(scope), JSON.stringify(lists)).catch(() => {});
+    AsyncStorage.setItem(historyKey(scope), JSON.stringify(history)).catch(() => {});
+  }
+
   cache.set(scope, lists);
   historyCache.set(scope, history);
   emit();

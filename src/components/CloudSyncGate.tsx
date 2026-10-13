@@ -76,13 +76,15 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export function CloudSyncGate({ children }: { children: ReactNode }) {
   const { user, hasPassword, loading, demoMode, signOut } = useAuth();
-  const { trips, hydrate: hydrateTrips } = useTrips();
+  const { allTrips, hydrate: hydrateTrips } = useTrips();
 
   const uid = user && hasPassword && db ? user.uid : null;
   const [loadedUid, setLoadedUid] = useState<string | null>(null);
+  if (uid === null && loadedUid !== null) setLoadedUid(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  if (uid === null && loadError !== null) setLoadError(null);
   const [unsynced, setUnsynced] = useState(false);
   const [pendingShown, setPendingShown] = useState(false);
   const insets = useSafeAreaInsets();
@@ -121,13 +123,11 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
         lastSaved.current = '';
       }
       previousUid.current = null;
-      setLoadedUid(null);
       return;
     }
 
     previousUid.current = uid;
     let cancelled = false;
-    setLoadError(null);
 
     (async () => {
       const copy = await readCopy(uid);
@@ -178,7 +178,7 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!uid || !db || loadedUid !== uid) return;
     // bills, supplies and wishlist now live inside each trip; the empty lists stay because the Firestore rules still require them.
-    const payload = { trips, bills: [], supplies: [], wishlist: [] };
+    const payload = { trips: allTrips, bills: [], supplies: [], wishlist: [] };
     const json = JSON.stringify(payload);
     latestJson.current = json;
     if (json === lastSaved.current) return;
@@ -201,7 +201,7 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
     }, SAVE_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [uid, loadedUid, trips]);
+  }, [uid, loadedUid, allTrips]);
 
   // While this panel stands in for the app no navigator exists, and the splash screen is only hidden once one does;
   // without this the retry and sign-out buttons would sit behind a splash that never leaves.
@@ -232,7 +232,14 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
         {loadError ? (
           <View style={styles.errorPanel}>
             <Text style={styles.errorText}>{loadError}</Text>
-            <Pressable onPress={() => setAttempt((n) => n + 1)} accessibilityRole="button" style={styles.button}>
+            <Pressable
+              onPress={() => {
+                setLoadError(null);
+                setAttempt((n) => n + 1);
+              }}
+              accessibilityRole="button"
+              style={styles.button}
+            >
               <Text style={styles.buttonText}>Provo përsëri</Text>
             </Pressable>
             <Pressable onPress={signOut} accessibilityRole="button" hitSlop={8}>

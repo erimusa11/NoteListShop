@@ -5,6 +5,7 @@ import { Keyboard, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Swit
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AuthField } from '@/components/AuthField';
+import { DriveBackupCard } from '@/components/DriveBackupCard';
 import { useAppLock } from '@/context/AppLockContext';
 import { useAuth } from '@/context/AuthContext';
 import { useProfile } from '@/context/ProfileContext';
@@ -197,6 +198,8 @@ export default function ProfileScreen() {
               {lockError && <Text style={styles.error}>{lockError}</Text>}
             </View>
           )}
+
+          {!demoMode && <DriveBackupCard />}
 
           <Pressable onPress={signOut} accessibilityRole="button" style={styles.signOutButton}>
             <Ionicons name="log-out-outline" size={20} color={colors.danger} />

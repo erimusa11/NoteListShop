@@ -4,6 +4,7 @@ import { mockBills, mockItems, mockWishlist } from '@/mocks/mockItems';
 import type { IncomeEntry, IncomeKind, ItemListKey, ShoppingItem, ShoppingTrip } from '@/types/models';
 import { CATEGORIES } from '@/utils/categories';
 import { formatDateAlbanian } from '@/utils/dates';
+import { isTrashExpired } from '@/utils/trash';
 import { copyToTrip, deleteItem, moveToCategory, patchItem, starredItems, toggleStar } from '@/utils/tripLists';
 
 // Only the starred items of the existing lists come along, unchecked and at normal priority.
@@ -45,16 +46,27 @@ interface TripActions {
   toggleItem: (tripId: string, list: ItemListKey, itemId: string) => void;
   updateItem: (tripId: string, list: ItemListKey, itemId: string, patch: Partial<ShoppingItem>) => void;
   removeItem: (tripId: string, list: ItemListKey, itemId: string) => void;
+  /** Puts a deleted item back in its list, at the place its creation date gives it. */
+  restoreItem: (tripId: string, list: ItemListKey, item: ShoppingItem) => void;
   /** Moves the item to another category (and into one of its groups, if it has them); a starred item takes its copies in every list with it. */
   moveItem: (tripId: string, list: ItemListKey, itemId: string, to: ItemListKey, group?: string) => void;
   toggleStar: (tripId: string, list: ItemListKey, itemId: string) => void;
 }
 
 interface TripsContextValue extends TripActions {
+  /** The lists that are in use; deleted ones wait in `trashedTrips`. */
   trips: ShoppingTrip[];
+  /** Deleted lists, newest deletion first. They can be restored until `TRASH_DAYS` have passed. */
+  trashedTrips: ShoppingTrip[];
+  /** Every list, the trash too: this is what is saved to the account. */
+  allTrips: ShoppingTrip[];
   createList: (name: string) => string;
   renameTrip: (tripId: string, name: string) => void;
+  /** Moves the list to the trash. */
   deleteTrip: (tripId: string) => void;
+  restoreTrip: (tripId: string) => void;
+  /** Deletes a list from the trash for good. */
+  purgeTrip: (tripId: string) => void;
   addIncome: (tripId: string, name: string, amount: number, kind?: IncomeKind) => void;
   updateIncome: (tripId: string, incomeId: string, patch: Partial<IncomeEntry>) => void;
   removeIncome: (tripId: string, incomeId: string) => void;
@@ -78,7 +90,12 @@ export function TripsProvider({ children }: { children: ReactNode }) {
       incomes: [{ id: 'i1', name: 'Rroga', amount: 2000, createdAt: trip.createdAt }],
     };
   });
-  const [trips, setTrips] = useState<ShoppingTrip[]>([initialTrip]);
+  const [allTrips, setTrips] = useState<ShoppingTrip[]>([initialTrip]);
+  const trips = useMemo(() => allTrips.filter((trip) => trip.deletedAt === undefined), [allTrips]);
+  const trashedTrips = useMemo(
+    () => allTrips.filter((trip) => trip.deletedAt !== undefined).sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0)),
+    [allTrips],
+  );
 
   const itemActions = useMemo<TripActions>(
     () => ({
@@ -107,6 +124,14 @@ export function TripsProvider({ children }: { children: ReactNode }) {
         ),
       updateItem: (tripId, list, itemId, patch) => setTrips((prev) => patchItem(prev, tripId, list, itemId, patch)),
       removeItem: (tripId, list, itemId) => setTrips((prev) => deleteItem(prev, tripId, list, itemId)),
+      restoreItem: (tripId, list, item) =>
+        setTrips((prev) =>
+          mapItems(prev, tripId, list, (items) => {
+            if (items.some((entry) => entry.id === item.id)) return items;
+            const at = items.findIndex((entry) => entry.createdAt > item.createdAt);
+            return at === -1 ? [...items, item] : [...items.slice(0, at), item, ...items.slice(at)];
+          }),
+        ),
       moveItem: (tripId, list, itemId, to, group) => setTrips((prev) => moveToCategory(prev, tripId, list, itemId, to, group)),
       toggleStar: (tripId, list, itemId) => setTrips((prev) => toggleStar(prev, tripId, list, itemId)),
     }),
@@ -115,7 +140,7 @@ export function TripsProvider({ children }: { children: ReactNode }) {
 
   const createList = (name: string): string => {
     const now = Date.now();
-    setTrips((prev) => [...prev, buildTrip(name, now, prev)]);
+    setTrips((prev) => [...prev, buildTrip(name, now, prev.filter((trip) => trip.deletedAt === undefined))]);
     return String(now);
   };
 
@@ -126,6 +151,21 @@ export function TripsProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteTrip = (tripId: string) => {
+    const now = Date.now();
+    setTrips((prev) => prev.map((trip) => (trip.id === tripId ? { ...trip, deletedAt: now } : trip)));
+  };
+
+  const restoreTrip = (tripId: string) => {
+    setTrips((prev) =>
+      prev.map((trip) => {
+        if (trip.id !== tripId) return trip;
+        const { deletedAt: _deletedAt, ...restored } = trip;
+        return restored;
+      }),
+    );
+  };
+
+  const purgeTrip = (tripId: string) => {
     setTrips((prev) => prev.filter((trip) => trip.id !== tripId));
   };
 
@@ -154,14 +194,22 @@ export function TripsProvider({ children }: { children: ReactNode }) {
     setTrips((prev) => prev.map((trip) => (trip.id === tripId ? change(trip) : trip)));
   };
 
-  const hydrate = (next: ShoppingTrip[]) => setTrips(next);
+  // Lists that have waited in the trash for the full time are dropped when the saved lists are loaded.
+  const hydrate = (next: ShoppingTrip[]) => {
+    const now = Date.now();
+    setTrips(next.filter((trip) => trip.deletedAt === undefined || !isTrashExpired(trip.deletedAt, now)));
+  };
 
   const value = useMemo<TripsContextValue>(
     () => ({
       trips,
+      trashedTrips,
+      allTrips,
       createList,
       renameTrip,
       deleteTrip,
+      restoreTrip,
+      purgeTrip,
       addIncome,
       updateIncome,
       removeIncome,
@@ -169,7 +217,8 @@ export function TripsProvider({ children }: { children: ReactNode }) {
       ...itemActions,
       hydrate,
     }),
-    [trips, itemActions],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the income helpers only call the stable setTrips
+    [allTrips, trips, trashedTrips, itemActions],
   );
 
   return (

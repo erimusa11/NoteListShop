@@ -69,9 +69,7 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!loading && user === null) setLocked(false);
-  }, [loading, user]);
+  if (!loading && user === null && locked) setLocked(false);
 
   useEffect(() => {
     if (IS_WEB) return;
@@ -94,8 +92,15 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
   const overlayVisible = locked && enabled && signedIn;
 
   useEffect(() => {
-    if (overlayVisible) void unlock();
-  }, [overlayVisible, unlock]);
+    if (!overlayVisible) return;
+    let cancelled = false;
+    authenticate('Shkyç Note Shop List').then((ok) => {
+      if (ok && !cancelled) setLocked(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [overlayVisible]);
 
   const setEnabled = useCallback(
     async (next: boolean): Promise<string | null> => {

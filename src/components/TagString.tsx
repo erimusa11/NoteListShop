@@ -110,7 +110,7 @@ function Tag<T extends string>({
       );
       prevIdx.current = selIdx;
     }
-  }, [selIdx, reduced]);
+  }, [selIdx, reduced, active, index, sel, swing]);
 
   useEffect(() => {
     if (firstPop.current) {
@@ -119,11 +119,11 @@ function Tag<T extends string>({
     }
     if (reduced) return;
     pop.value = withSequence(withTiming(1, { duration: ms(55) }), withSpring(0, spring({ damping: 8, stiffness: 440 })));
-  }, [remaining]);
+  }, [remaining, reduced, pop]);
 
   useEffect(() => {
     rail.value = reduced ? ratio : withTiming(ratio, { duration: ms(160) });
-  }, [ratio, reduced]);
+  }, [ratio, reduced, rail]);
 
   const groupStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -G / 2 }, { rotate: `${swing.value}deg` }, { translateY: G / 2 }],
