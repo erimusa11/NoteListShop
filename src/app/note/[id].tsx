@@ -15,7 +15,8 @@ import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { NoteItem } from '@/types/models';
 import { formatDateAlbanian } from '@/utils/dates';
 import { goBackOrHome } from '@/utils/navigation';
-import { buildNoteSuggestions, type NoteItemFields, sortNoteItems } from '@/utils/noteLists';
+import { buildNoteSuggestions, isProductList, type NoteItemFields, noteListTotal, sortNoteItems } from '@/utils/noteLists';
+import { formatNumber } from '@/utils/totals';
 import { TRASH_DAYS } from '@/utils/trash';
 
 // One group of the Note List Shop page: its name and the day it was made on top, then its items. Each item has an amount
@@ -34,6 +35,9 @@ export default function NoteListScreen() {
   const [deleteListOpen, setDeleteListOpen] = useState(false);
 
   const items = useMemo(() => sortNoteItems(list?.items ?? []), [list?.items]);
+  // A list of products: its items have a price, and the list shows what they all cost together.
+  const products = list ? isProductList(list) : false;
+  const listTotal = list ? noteListTotal(list) : 0;
   const done = items.filter((item) => item.done).length;
   // What was added before, in any group or since deleted, that this one does not have yet.
   const suggestions = useMemo(
@@ -123,6 +127,15 @@ export default function NoteListScreen() {
                   {done} nga {items.length}
                 </Text>
               </View>
+              {products && (
+                <>
+                  <View style={styles.divider} />
+                  <View style={styles.summaryHalf}>
+                    <Text style={styles.summaryLabel}>Gjithsej</Text>
+                    <Text style={styles.summaryCount}>{formatNumber(listTotal)} Lekë</Text>
+                  </View>
+                </>
+              )}
             </View>
 
             <FlatList
@@ -133,7 +146,7 @@ export default function NoteListScreen() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => (
-                <NoteItemRow item={item} onToggle={toggle} onPress={openSheet} onDelete={askDelete} />
+                <NoteItemRow item={item} onToggle={toggle} onPress={openSheet} onDelete={askDelete} showPrice={products} />
               )}
               ListEmptyComponent={
                 <EmptyState icon="basket-outline" title="Lista është bosh" subtitle="Shtyp + për të shtuar artikullin e parë." />
@@ -159,6 +172,7 @@ export default function NoteListScreen() {
               onSave={save}
               onDelete={deleteOpened}
               suggestions={suggestions}
+              showPrice={products}
             />}
 
           <ConfirmDialog

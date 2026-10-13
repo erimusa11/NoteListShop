@@ -5,6 +5,8 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { NoteList } from '@/types/models';
 import { formatDateAlbanian } from '@/utils/dates';
+import { isProductList, noteListTotal } from '@/utils/noteLists';
+import { formatNumber } from '@/utils/totals';
 
 interface NoteListsPanelProps {
   /** Newest first. */
@@ -53,7 +55,7 @@ export function NoteListsPanel({ lists, empty, onOpen, onDelete, trashCount, onO
             style={({ pressed }) => [styles.card, shadow, pressed && styles.pressed]}
           >
             <View style={styles.iconBadge}>
-              <Ionicons name="list" size={22} color={colors.primaryDark} />
+              <Ionicons name={isProductList(list) ? 'pricetag' : 'list'} size={22} color={colors.primaryDark} />
             </View>
             <View style={styles.text}>
               <Text style={styles.name} numberOfLines={2}>
@@ -61,6 +63,7 @@ export function NoteListsPanel({ lists, empty, onOpen, onDelete, trashCount, onO
               </Text>
               <Text style={styles.meta}>
                 {total === 0 ? 'Asnjë artikull ende' : `${done} nga ${total} artikuj të kryer`}
+                {isProductList(list) && noteListTotal(list) > 0 ? ` · ${formatNumber(noteListTotal(list))} Lekë` : ''}
               </Text>
               {total > 0 && (
                 <View style={styles.track}>

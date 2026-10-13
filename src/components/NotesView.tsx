@@ -17,7 +17,7 @@ import { useNoteLists } from '@/hooks/useNoteLists';
 import { useTabSwipe } from '@/hooks/useTabSwipe';
 import { useTasks } from '@/hooks/useTasks';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
-import type { NoteList, Task } from '@/types/models';
+import type { NoteList, NoteListKind, Task } from '@/types/models';
 import { newestFirst } from '@/utils/noteLists';
 import { doneTasks, filterTasks, openTasks, type TaskFields } from '@/utils/tasks';
 import { TRASH_DAYS } from '@/utils/trash';
@@ -118,8 +118,8 @@ function NotesContent({ tasks, onAdd, onUpdate, onToggle, onRemove, onRestore, o
   const closeListSheet = () => setListSheet((prev) => (prev ? { ...prev, open: false } : prev));
   const openGroup = (id: string) => router.push({ pathname: '/note/[id]', params: { id } });
   // A new group is opened right away, so its first item can be added.
-  const createGroup = (name: string) => {
-    const id = addList(name);
+  const createGroup = (name: string, kind: NoteListKind) => {
+    const id = addList(name, kind);
     closeListSheet();
     openGroup(id);
   };

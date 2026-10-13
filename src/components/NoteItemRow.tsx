@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { NoteItem } from '@/types/models';
 import { formatQuantity } from '@/utils/noteLists';
+import { formatNumber } from '@/utils/totals';
 
 interface NoteItemRowProps {
   item: NoteItem;
@@ -13,10 +14,12 @@ interface NoteItemRowProps {
   onPress: (item: NoteItem) => void;
   /** Asks to delete the item. */
   onDelete: (item: NoteItem) => void;
+  /** In a list of products: the price is shown under the name. */
+  showPrice?: boolean;
 }
 
 // One item of a group: the check, the name, the amount with its unit ("2 kg") and the trash. A tap on the row opens it.
-export const NoteItemRow = memo(function NoteItemRow({ item, onToggle, onPress, onDelete }: NoteItemRowProps) {
+export const NoteItemRow = memo(function NoteItemRow({ item, onToggle, onPress, onDelete, showPrice }: NoteItemRowProps) {
   return (
     // No button role on the row itself: on the web that makes a <button>, which cannot hold the check, a button of its own.
     <Pressable
@@ -42,6 +45,7 @@ export const NoteItemRow = memo(function NoteItemRow({ item, onToggle, onPress, 
         <Text style={[styles.name, item.done && styles.nameDone]} numberOfLines={2}>
           {item.name}
         </Text>
+        {showPrice && item.price != null && <Text style={styles.price}>{formatNumber(item.price)} Lekë</Text>}
       </View>
       <View style={[styles.quantity, item.done && styles.quantityDone]}>
         <Text style={[styles.quantityText, item.done && styles.quantityTextDone]} numberOfLines={1}>
@@ -77,6 +81,7 @@ const styles = StyleSheet.create({
   check: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   text: { flex: 1 },
   name: { fontSize: 16, lineHeight: 21, fontWeight: '600', color: colors.text },
+  price: { fontSize: 13, fontWeight: '700', color: colors.primaryDark, marginTop: 2 },
   nameDone: { color: colors.textMuted, textDecorationLine: 'line-through' },
   quantity: {
     backgroundColor: colors.primaryLight,

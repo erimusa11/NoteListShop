@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 
 import { useAuth } from '@/context/AuthContext';
-import type { NoteItem, NoteList } from '@/types/models';
+import type { NoteItem, NoteList, NoteListKind } from '@/types/models';
 import {
   createNoteItem,
   createNoteList,
@@ -85,9 +85,9 @@ export function useNoteLists() {
 
   const actions = useMemo(
     () => ({
-      /** Makes a new group and returns its id. */
-      addList: (name: string): string => {
-        const list = createNoteList(name);
+      /** Makes a new group (a work list, or a list of products) and returns its id. */
+      addList: (name: string, kind?: NoteListKind): string => {
+        const list = createNoteList(name, kind);
         commit((all) => [...all, list]);
         return list.id;
       },
