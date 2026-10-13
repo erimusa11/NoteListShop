@@ -14,7 +14,6 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { InlineEditableField } from '@/components/InlineEditableField';
 import { IncomeRow } from '@/components/IncomeRow';
 import { ImportantList } from '@/components/ImportantList';
-import { AttendanceCard } from '@/components/AttendanceCard';
 import { ItemList } from '@/components/ItemList';
 import { SpentList } from '@/components/SpentList';
 import { TagGridSheet } from '@/components/TagGridSheet';
@@ -24,7 +23,6 @@ import { useUndo } from '@/context/UndoContext';
 import { useTabSwipe } from '@/hooks/useTabSwipe';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { IncomeEntry, ItemListKey, ShoppingItem } from '@/types/models';
-import { attendanceKids, type KidDays, summarize } from '@/utils/attendance';
 import { CATEGORIES, type Category, INCOME_COLOR } from '@/utils/categories';
 import { type ImportantEntry, IMPORTANT_COLOR, IMPORTANT_SECTION, importantItems } from '@/utils/important';
 import {
@@ -49,9 +47,6 @@ const NO_INCOMES: IncomeEntry[] = [];
 const NO_ENTRIES: ImportantEntry[] = [];
 const NO_GROUPS: SpentGroup[] = [];
 
-// The category that counts days (Kopesht & Shkolle), whose list opens with a card into the days calendar.
-const DAYS_CATEGORY = CATEGORIES.find((category) => category.attendancePlaces);
-const DAYS_KIDS = DAYS_CATEGORY ? attendanceKids(DAYS_CATEGORY) : [];
 
 const PREPARE_AFTER_MS = 600;
 const PREPARE_STEP_MS = 400;
@@ -88,9 +83,6 @@ interface CategoryPaneProps {
   /** The person (Drion, Alois) of a category that asks who it is for the list is narrowed to, or null for everyone. */
   personFilter: string | null;
   onPersonFilter: (section: Section, person: string | null) => void;
-  /** For the category that counts days: how many days each child went. The card on top of its list opens the calendar. */
-  attendance?: KidDays[];
-  onOpenAttendance: () => void;
 }
 
 // One tab. It is redrawn only when its own data changes, so opening another tab does not touch the others.
@@ -107,8 +99,6 @@ const CategoryPane = memo(function CategoryPane({
   onOptionFilter,
   personFilter,
   onPersonFilter,
-  attendance,
-  onOpenAttendance,
 }: CategoryPaneProps) {
   const optionTotals = useMemo(() => buildOptionTotals(items, category), [items, category]);
   const personTotals = useMemo(() => buildPersonTotals(items, category), [items, category]);
@@ -145,7 +135,6 @@ const CategoryPane = memo(function CategoryPane({
         showQuantity={category.showQuantity}
         limit={preview ? PREVIEW_ROWS : undefined}
         personOptions={category.personOptions}
-        header={attendance ? <AttendanceCard kids={DAYS_KIDS} summary={attendance} onPress={onOpenAttendance} /> : null}
       />
     </Pane>
   );
@@ -275,12 +264,6 @@ export default function TripDetailScreen() {
 
   const activeCategory = CATEGORIES.find((category) => category.section === section);
 
-  // How many days each child went, for the card on top of Kopesht & Shkolle, and the way into the calendar.
-  const daysSummary = useMemo(() => (trip && DAYS_CATEGORY ? summarize(trip, DAYS_CATEGORY) : undefined), [trip]);
-  const tripId = trip?.id;
-  const openAttendance = useCallback(() => {
-    if (tripId) router.push({ pathname: '/school/[id]', params: { id: tripId } });
-  }, [tripId]);
   const suggestions = useMemo(
     () => (activeCategory ? buildListSuggestions(trips, trip, activeCategory.key, suggestionGroups(activeCategory)) : []),
     [trips, trip, activeCategory],
@@ -493,8 +476,6 @@ export default function TripDetailScreen() {
                           onOptionFilter={setOptionFilter}
                           personFilter={personFilters[category.section] ?? null}
                           onPersonFilter={setPersonFilter}
-                          attendance={category.attendancePlaces ? daysSummary : undefined}
-                          onOpenAttendance={openAttendance}
                         />
                       ),
                   )}
@@ -510,17 +491,6 @@ export default function TripDetailScreen() {
               >
                 <Ionicons name="trash-outline" size={22} color={colors.danger} />
               </Pressable>
-              {activeCategory?.attendancePlaces && (
-                <Pressable
-                  onPress={openAttendance}
-                  accessibilityRole="button"
-                  accessibilityLabel="Hap kalendarin e ditëve"
-                  style={({ pressed }) => [styles.calendarButton, shadow, pressed && styles.calendarButtonPressed]}
-                >
-                  <Ionicons name="calendar" size={18} color={colors.primaryDark} />
-                  <Text style={styles.calendarButtonText}>Kalendari</Text>
-                </Pressable>
-              )}
               {section === 'income' && (
                 <AddItemButton
                   onAdd={(name, _quantity, amount, _priority, _note, kindLabel) => {
@@ -611,18 +581,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
   },
   // At the far left, the add button at the far right, and a plain white circle, so the two are not mixed up.
-  // Beside the add button, in the category that counts days: the way into the days calendar.
-  calendarButton: {
-    height: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: radii.pill,
-    backgroundColor: colors.primaryLight,
-    paddingHorizontal: spacing.md,
-  },
-  calendarButtonPressed: { opacity: 0.8 },
-  calendarButtonText: { fontSize: 14, fontWeight: '800', color: colors.primaryDark },
   deleteListButton: {
     width: 44,
     height: 44,
