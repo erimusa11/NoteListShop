@@ -90,6 +90,23 @@ export const CATEGORIES: Category[] = [
     addTitle: 'Shto faturë',
     emptyText: 'Nuk ka ende asnjë faturë.',
   },
+  // Light, firewood and water: each is one of the choices, so the report splits the spending between them.
+  {
+    key: 'utilities',
+    section: 'utilities',
+    label: 'Dritat & Druri i zjarrit',
+    tabLabel: 'Dritat &\nDruri i zjarrit',
+    icon: 'bulb-outline',
+    activeIcon: 'bulb',
+    color: '#C28E0E',
+    showQuantity: false,
+    totalLabel: 'Gjithsej dritat & druri i zjarrit',
+    addTitle: 'Shto shpenzim',
+    nameOptions: ['Energjia elektrike', 'Druri i zjarrit', 'Uji'],
+    optionsLabel: 'Lloji',
+    optionsReportTitle: 'Dritat & druri i zjarrit sipas llojit',
+    emptyText: 'Nuk ka ende asnjë shpenzim.',
+  },
   {
     key: 'wishlist',
     section: 'wishlist',

@@ -83,6 +83,7 @@ export type ItemListKey =
   | 'items'
   | 'supplies'
   | 'bills'
+  | 'utilities'
   | 'wishlist'
   | 'clothes'
   | 'fuel'
