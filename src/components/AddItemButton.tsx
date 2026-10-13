@@ -9,10 +9,22 @@ import { DEFAULT_QUANTITY, normalizeQuantity, parseQuantity, sanitizeQuantityInp
 import { pickSuggestions, type Suggestion } from '@/utils/suggestions';
 import { formatNumber } from '@/utils/totals';
 
-/** A month of a calendar (Kopesht & Shkolle) that can be added from the form, and what the calendar says for a level and a person in it. */
+/** What a calendar has for a child at a place in one month. */
+export interface CalendarLine {
+  level: string;
+  person: string;
+  days: number;
+  /** What one day costs; null while it is not known. */
+  price: number | null;
+  /** Days times the price; null without a price. */
+  amount: number | null;
+}
+
+/** The months filled in on a calendar (Kopesht & Shkolle); one of them can be added to the list in a single step. */
 export interface CalendarChoice {
   months: { key: string; label: string; days: number }[];
-  amountFor: (monthKey: string, level: string, person: string) => { days: number; price: number | null; amount: number | null } | null;
+  /** Everything the calendar has in the month: one line per child and place. */
+  linesFor: (monthKey: string) => CalendarLine[];
 }
 
 interface AddItemButtonProps {
@@ -68,19 +80,10 @@ export function AddItemButton({
   const [other, setOther] = useState(false);
   const [note, setNote] = useState('');
   const [second, setSecond] = useState('');
-  // The month of the calendar the amount is taken from, if one is picked.
+  // The month of the calendar that is added as a whole, if one is picked: the rest of the form is then not needed.
   const [monthKey, setMonthKey] = useState<string | null>(null);
-
-  // With a month picked and a level and a person chosen, the amount and what it is for come from the calendar. The fields stay
-  // editable, so anything can still be changed by hand.
-  const fillFromCalendar = (month: string | null, level: string, who: string) => {
-    if (!calendar || !month || !level || !who) return;
-    const result = calendar.amountFor(month, level, who);
-    if (!result || result.days === 0) return;
-    const label = calendar.months.find((entry) => entry.key === month)?.label ?? '';
-    setPrice(result.amount != null ? String(result.amount) : '');
-    setNote(`${label} · ${result.days} ditë${result.price != null ? ` × ${formatNumber(result.price)}` : ''}`);
-  };
+  const monthLines = useMemo(() => (calendar && monthKey ? calendar.linesFor(monthKey) : []), [calendar, monthKey]);
+  const monthLabel = calendar?.months.find((entry) => entry.key === monthKey)?.label ?? '';
 
   const close = () => {
     setMonthKey(null);
@@ -99,6 +102,7 @@ export function AddItemButton({
     name.trim().length > 0 &&
     (!secondOptions || second !== '') &&
     (!requirePrice || (Number.isFinite(priceValue) && priceValue > 0));
+  const canAdd = monthKey ? monthLines.length > 0 : canSubmit;
   // With choices (Drion, Kia Morning…), `name` is the choice picked and what is typed is the description (`note`), or, with
   // the "other" choice, the name itself. What is suggested follows: before a choice is picked, everything used before;
   // after one, the descriptions used under it; with "other", the names used without a choice.
@@ -131,7 +135,20 @@ export function AddItemButton({
     close();
   };
 
+  // Each child's days at each place of the month become one line, with the amount the calendar comes to.
+  const addMonth = () => {
+    for (const line of monthLines) {
+      const perDay = line.price != null ? ` × ${formatNumber(line.price)}` : '';
+      onAdd(line.level, '1', line.amount, 1, `${monthLabel} · ${line.days} ditë${perDay}`, line.person);
+    }
+    close();
+  };
+
   const submit = () => {
+    if (monthKey) {
+      addMonth();
+      return;
+    }
     if (!canSubmit) return;
     const parsedPrice = parseFloat(price.replace(',', '.'));
     onAdd(
@@ -155,10 +172,7 @@ export function AddItemButton({
           return (
             <Pressable
               key={option}
-              onPress={() => {
-                setSecond(option);
-                fillFromCalendar(monthKey, other ? '' : name, option);
-              }}
+              onPress={() => setSecond(option)}
               accessibilityRole="radio"
               accessibilityState={{ checked: selected }}
               style={[styles.option, selected && styles.optionSelected]}
@@ -171,24 +185,18 @@ export function AddItemButton({
     </>
   ) : null;
 
-  // What the calendar says for the picked month, level and person, shown under the months.
-  const calendarResult =
-    calendar && monthKey && choiceMade && second ? calendar.amountFor(monthKey, name, second) : null;
+  // First thing in the form: a month filled in on the calendar. With one picked, Shto adds everything the calendar has in it.
   const calendarSection =
-    calendar && calendar.months.length > 0 && nameOptions && !other ? (
+    calendar && calendar.months.length > 0 ? (
       <>
-        <Text style={[styles.label, styles.otherLabel]}>Muaji nga kalendari (opsionale)</Text>
+        <Text style={styles.label}>Shto një muaj nga kalendari</Text>
         <View style={styles.options} accessibilityRole="radiogroup">
           {calendar.months.map((entry) => {
             const selected = monthKey === entry.key;
             return (
               <Pressable
                 key={entry.key}
-                onPress={() => {
-                  const next = selected ? null : entry.key;
-                  setMonthKey(next);
-                  fillFromCalendar(next, name, second);
-                }}
+                onPress={() => setMonthKey(selected ? null : entry.key)}
                 accessibilityRole="radio"
                 accessibilityState={{ checked: selected }}
                 style={[styles.option, selected && styles.optionSelected]}
@@ -198,18 +206,26 @@ export function AddItemButton({
             );
           })}
         </View>
-        {monthKey && !(choiceMade && second) && (
-          <Text style={styles.calendarHint}>Zgjidh nivelin dhe fëmijën për të marrë shumën nga kalendari.</Text>
+        {monthKey && (
+          <View style={styles.monthLines}>
+            {monthLines.map((line) => (
+              <View key={`${line.level}-${line.person}`} style={styles.monthLine}>
+                <View style={styles.monthLineText}>
+                  <Text style={styles.monthLineName}>
+                    {line.level} · {line.person}
+                  </Text>
+                  <Text style={styles.calendarHint}>
+                    {line.days} ditë
+                    {line.price != null ? ` × ${formatNumber(line.price)} Lekë` : ' · çmimi i ditës nuk është vendosur në kalendar'}
+                  </Text>
+                </View>
+                <Text style={styles.monthLineAmount}>{line.amount != null ? `${formatNumber(line.amount)} Lekë` : '—'}</Text>
+              </View>
+            ))}
+            {monthLines.length === 0 && <Text style={styles.calendarHint}>Nuk ka ditë të shënuara në këtë muaj.</Text>}
+          </View>
         )}
-        {calendarResult && (
-          <Text style={styles.calendarHint}>
-            {calendarResult.days === 0
-              ? `Nuk ka ditë të shënuara për ${name} / ${second} në këtë muaj.`
-              : calendarResult.amount != null
-                ? `${calendarResult.days} ditë × ${formatNumber(calendarResult.price ?? 0)} = ${formatNumber(calendarResult.amount)} Lekë`
-                : `${calendarResult.days} ditë të shënuara, por çmimi i ditës nuk është vendosur në kalendar.`}
-          </Text>
-        )}
+        {!monthKey && <Text style={styles.calendarHint}>ose plotëso formularin më poshtë</Text>}
       </>
     ) : null;
 
@@ -220,7 +236,8 @@ export function AddItemButton({
       </Pressable>
 
       <BottomSheet visible={visible} onClose={close} title={title}>
-        {nameOptions ? (
+        {calendarSection}
+        {monthKey ? null : nameOptions ? (
           <>
             <Text style={styles.label}>{optionsLabel}</Text>
             <View style={styles.options} accessibilityRole="radiogroup">
@@ -233,7 +250,6 @@ export function AddItemButton({
                     onPress={() => {
                       setOther(isOther);
                       setName(isOther ? '' : option);
-                      fillFromCalendar(monthKey, isOther ? '' : option, second);
                     }}
                     accessibilityRole="radio"
                     accessibilityState={{ checked: selected }}
@@ -290,7 +306,7 @@ export function AddItemButton({
           </>
         )}
 
-        {shown.length > 0 && (
+        {!monthKey && shown.length > 0 && (
           <View style={styles.suggestions}>
             <Text style={styles.suggestionsLabel}>{query.trim() ? 'Sugjerime' : 'Më të përdorurat'}</Text>
             <View style={styles.chips}>
@@ -313,7 +329,7 @@ export function AddItemButton({
           </View>
         )}
 
-        {showQuantity ? (
+        {monthKey ? null : showQuantity ? (
           <View style={styles.row}>
             <View style={styles.rowItem}>
               <Text style={styles.label}>Sasia</Text>
@@ -354,11 +370,11 @@ export function AddItemButton({
           </>
         )}
 
-        {showQuantity && Number.isFinite(priceValue) && parseQuantity(quantity) !== 1 && (
+        {!monthKey && showQuantity && Number.isFinite(priceValue) && parseQuantity(quantity) !== 1 && (
           <Text style={styles.total}>Gjithsej: {formatNumber(priceValue * parseQuantity(quantity))} Lekë</Text>
         )}
 
-        {showPriority && (
+        {!monthKey && showPriority && (
           <View style={styles.priority}>
             <Text style={styles.label}>Rëndësia</Text>
             <PrioritySelector value={priority} onChange={setPriority} />
@@ -367,10 +383,10 @@ export function AddItemButton({
 
         <Pressable
           onPress={submit}
-          disabled={!canSubmit}
-          style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
+          disabled={!canAdd}
+          style={[styles.submitButton, !canAdd && styles.submitButtonDisabled]}
         >
-          <Text style={styles.submitText}>{submitLabel}</Text>
+          <Text style={styles.submitText}>{monthKey ? `Shto ${monthLabel} në listë` : submitLabel}</Text>
         </Pressable>
       </BottomSheet>
     </>
@@ -430,7 +446,19 @@ const styles = StyleSheet.create({
   chipPrice: { fontSize: 12, color: colors.textMuted },
   row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   rowItem: { flex: 1 },
-  calendarHint: { fontSize: 13, color: colors.textMuted, marginTop: spacing.xs },
+  calendarHint: { fontSize: 13, color: colors.textMuted },
+  monthLines: { gap: spacing.sm, marginTop: spacing.xs },
+  monthLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.background,
+    borderRadius: radii.sm,
+    padding: spacing.sm + 2,
+  },
+  monthLineText: { flex: 1 },
+  monthLineName: { fontSize: 15, fontWeight: '700', color: colors.text },
+  monthLineAmount: { fontSize: 15, fontWeight: '800', color: colors.primaryDark },
   total: { fontSize: 14, fontWeight: '700', color: colors.primaryDark, marginTop: spacing.sm },
   priority: { marginTop: spacing.sm },
   submitButton: {

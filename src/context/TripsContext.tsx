@@ -24,6 +24,13 @@ function buildTrip(name: string, now: number, existing: ShoppingTrip[] = []): Sh
   };
 }
 
+// Items added together (a month of the calendar) are made in the same millisecond, so the id never repeats the last one.
+let lastId = 0;
+function newItemId(): string {
+  lastId = Math.max(Date.now(), lastId + 1);
+  return String(lastId);
+}
+
 function mapItems(
   trips: ShoppingTrip[],
   tripId: string,
@@ -105,7 +112,7 @@ export function TripsProvider({ children }: { children: ReactNode }) {
           mapItems(prev, tripId, list, (items) => [
             ...items,
             {
-              id: String(Date.now()),
+              id: newItemId(),
               name,
               quantity,
               price,

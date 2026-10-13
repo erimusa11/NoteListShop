@@ -23,7 +23,7 @@ import { useUndo } from '@/context/UndoContext';
 import { useTabSwipe } from '@/hooks/useTabSwipe';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { IncomeEntry, ItemListKey, ShoppingItem } from '@/types/models';
-import { calendarMonths, monthAmount, type PaidPlace } from '@/utils/attendance';
+import { calendarMonths, monthAmount } from '@/utils/attendance';
 import { CATEGORIES, type Category, INCOME_COLOR } from '@/utils/categories';
 import { formatMonthYearAlbanian } from '@/utils/dates';
 import { type ImportantEntry, IMPORTANT_COLOR, IMPORTANT_SECTION, importantItems } from '@/utils/important';
@@ -278,10 +278,13 @@ export default function TripDetailScreen() {
     if (months.length === 0) return undefined;
     return {
       months,
-      amountFor: (monthKey, level, person) =>
-        category.attendancePlaces?.includes(level as PaidPlace)
-          ? monthAmount(trips, trip, category, monthKey, person, level as PaidPlace)
-          : null,
+      linesFor: (monthKey) =>
+        (category.personOptions ?? []).flatMap((person) =>
+          (category.attendancePlaces ?? []).flatMap((place) => {
+            const found = monthAmount(trips, trip, category, monthKey, person, place);
+            return found.days > 0 ? [{ level: place, person, ...found }] : [];
+          }),
+        ),
     };
   }, [trips, trip, activeCategory]);
   const suggestions = useMemo(
