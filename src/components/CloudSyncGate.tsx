@@ -10,7 +10,6 @@ import { useTrips } from '@/context/TripsContext';
 import { db } from '@/lib/firebase';
 import { colors, radii, spacing } from '@/theme/theme';
 import { clearDemoNoteLists } from '@/utils/noteListStore';
-import { clearDemoTasks } from '@/utils/taskStore';
 import { upgradeLegacyTrips, type StoredData } from '@/utils/tripLists';
 
 const SAVE_DELAY_MS = 700;
@@ -107,7 +106,6 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
     if (!wasDemo.current) return;
     wasDemo.current = false;
     hydrators.current.hydrateTrips([]);
-    clearDemoTasks();
     clearDemoNoteLists();
   }, [demoMode]);
 

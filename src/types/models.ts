@@ -23,20 +23,6 @@ export type AttendancePlace = 'Cerdhe' | 'Kopesht' | 'Shkolle' | 'Kurse' | 'sick
 /** The days each child went to a place, or was sick: day ('YYYY-MM-DD') → child → place. */
 export type Attendance = Record<string, Record<string, AttendancePlace>>;
 
-/** A to-do on the Note List Shop page. They are not part of any shopping list. */
-export interface Task {
-  id: string;
-  title: string;
-  /** Optional text under the title. */
-  description?: string;
-  /** 1 = normal … 5 = urgent, the same scale as an item's priority. */
-  importance: number;
-  done: boolean;
-  createdAt: number;
-  /** When it was checked off; the done tab lists the latest first. */
-  doneAt?: number;
-}
-
 /** How an amount on the Note List Shop page is counted: by number (copë), kilograms, grams or liters. */
 export type QuantityUnit = 'pcs' | 'kg' | 'gr' | 'l';
 
