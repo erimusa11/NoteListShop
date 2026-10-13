@@ -217,6 +217,7 @@ export const CATEGORIES: Category[] = [
     nameOptions: ['Drion', 'Alois', 'Alma', 'Eri'],
     optionsLabel: 'Për kë',
     otherOption: 'Tjetër',
+    showNote: true,
     optionsReportTitle: 'Shendeti sipas personit',
     emptyText: 'Nuk ka ende asnjë shpenzim.',
   },
