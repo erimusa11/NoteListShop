@@ -16,7 +16,7 @@ import { itemTotal } from '@/utils/totals';
 export type PaidPlace = Exclude<AttendancePlace, 'sick'>;
 
 export const SICK = 'sick' as const;
-export const SICK_COLOR = '#E03131';
+export const SICK_COLOR = '#22A559';
 
 export interface PlaceInfo {
   value: AttendancePlace;
@@ -53,7 +53,7 @@ export function attendanceKids(category: Category): KidInfo[] {
   }));
 }
 
-const KNOWN_PLACES = new Set<string>(['Cerdhe', 'Kopesht', 'Shkolle', SICK]);
+const KNOWN_PLACES = new Set<string>(['Cerdhe', 'Kopesht', 'Shkolle', 'Kurse', SICK]);
 const NO_MARKS: Attendance = {};
 const NO_ITEMS: ShoppingItem[] = [];
 

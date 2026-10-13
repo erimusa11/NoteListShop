@@ -14,7 +14,7 @@ interface AttendanceBrushProps {
 
 const NAME_WIDTH = 80;
 const DOT = 34;
-// Below this width the place names (Kopesht…) get a smaller type so all four fit over their circles.
+// Below this width the place names (Kopesht…) get a smaller type so all five fit over their circles.
 const COMPACT_BELOW = 350;
 
 // A small table: a row per child, a column per place, one circle to pick in each row. The circle looks like the mark that

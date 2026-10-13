@@ -18,7 +18,7 @@ export interface ShoppingItem {
 }
 
 /** Where a child spent a day: one of the places that are paid by the day, or at home sick. */
-export type AttendancePlace = 'Cerdhe' | 'Kopesht' | 'Shkolle' | 'sick';
+export type AttendancePlace = 'Cerdhe' | 'Kopesht' | 'Shkolle' | 'Kurse' | 'sick';
 
 /** The days each child went to a place, or was sick: day ('YYYY-MM-DD') → child → place. */
 export type Attendance = Record<string, Record<string, AttendancePlace>>;

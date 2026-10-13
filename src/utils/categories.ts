@@ -297,7 +297,7 @@ export const CATEGORIES: Category[] = [
     personLabel: 'Për kë',
     personReportTitle: 'Kopesht & Shkolle sipas fëmijës',
     emptyText: 'Nuk ka ende asnjë shpenzim.',
-    attendancePlaces: ['Cerdhe', 'Kopesht', 'Shkolle'],
+    attendancePlaces: ['Cerdhe', 'Kopesht', 'Shkolle', 'Kurse'],
   },
   // A "qokë": the coffee and the money left for a family after a birth, a recovery… Checked ones also show in the Qokat menu.
   {

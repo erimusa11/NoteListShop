@@ -75,7 +75,7 @@ export function TotalPill({ amount }: { amount: number }) {
   );
 }
 
-// The days calendar of Kopesht & Shkolle. Pick where each child goes (Cerdhe, Kopesht, Shkolle, or sick), then tap the
+// The days calendar of Kopesht & Shkolle. Pick where each child goes (Cerdhe, Kopesht, Shkolle, Kurse, or sick), then tap the
 // days: the days at a paid place become one line per child and place in the list, times what a day costs. Everything is
 // saved as it is changed. It is a screen of its own (from the list) and a page of the bottom menu; both are this.
 export function SchoolDaysView({ trip, trips, category, header, inset = spacing.md }: SchoolDaysViewProps) {
