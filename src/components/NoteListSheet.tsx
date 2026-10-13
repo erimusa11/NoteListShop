@@ -7,9 +7,9 @@ import { colors, radii, spacing } from '@/theme/theme';
 import type { NoteListKind } from '@/types/models';
 import { formatDateAlbanian } from '@/utils/dates';
 
-const KINDS: { value: NoteListKind; title: string; hint: string; icon: 'briefcase-outline' | 'pricetag-outline' }[] = [
-  { value: 'work', title: 'Listë pune', hint: 'Detyra dhe artikuj me sasi', icon: 'briefcase-outline' },
-  { value: 'products', title: 'Listë produktesh', hint: 'Me çmim dhe shumën gjithsej', icon: 'pricetag-outline' },
+const KINDS: { value: NoteListKind; title: string; hint: string; icon: 'list-outline' | 'cart-outline' }[] = [
+  { value: 'work', title: 'Listë normale', hint: 'Shënime me rëndësi, si detyra', icon: 'list-outline' },
+  { value: 'products', title: 'Listë blerjesh', hint: 'Produkt, sasi, çmim dhe shuma', icon: 'cart-outline' },
 ];
 
 /** `key` changes with every opening, so the form starts fresh. */
@@ -24,7 +24,8 @@ interface NoteListSheetProps {
   onSave: (name: string, kind: NoteListKind) => void;
 }
 
-// Naming a new group. The day it is made is put on it by itself; it is only shown here so it is clear it is kept.
+// Naming a new group and choosing its category: a normal list or a shopping list. The day it is made is put on it by itself;
+// it is only shown here so it is clear it is kept.
 export function NoteListSheet({ sheet, onClose, onSave }: NoteListSheetProps) {
   return (
     <BottomSheet visible={sheet.open} onClose={onClose} title="Listë e re">
@@ -49,7 +50,7 @@ function NoteListForm({ onSave }: Pick<NoteListSheetProps, 'onSave'>) {
       <TextInput
         value={name}
         onChangeText={setName}
-        placeholder="P.sh. Pazari i javës"
+        placeholder={kind === 'products' ? 'P.sh. Pazari i javës' : 'P.sh. Punët e shtëpisë'}
         placeholderTextColor={colors.textMuted}
         style={styles.input}
         autoFocus
@@ -57,7 +58,7 @@ function NoteListForm({ onSave }: Pick<NoteListSheetProps, 'onSave'>) {
         onSubmitEditing={save}
         maxLength={60}
       />
-      <Text style={[styles.label, styles.kindLabel]}>Lloji i listës</Text>
+      <Text style={[styles.label, styles.kindLabel]}>Kategoria</Text>
       <View style={styles.kinds} accessibilityRole="radiogroup">
         {KINDS.map((entry) => {
           const selected = kind === entry.value;
@@ -118,7 +119,7 @@ const styles = StyleSheet.create({
   kindTitle: { fontSize: 14, fontWeight: '700', color: colors.textMuted, textAlign: 'center' },
   kindTitleSelected: { color: colors.primaryDark },
   kindHint: { fontSize: 11, color: colors.textMuted, textAlign: 'center' },
-  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.xs },
+  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm },
   dateLabel: { fontSize: 13, color: colors.textMuted },
   dateValue: { fontSize: 13, fontWeight: '700', color: colors.text },
   save: {

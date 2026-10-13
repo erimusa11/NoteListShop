@@ -1,15 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { ReactElement } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { NoteList } from '@/types/models';
 import { formatDateAlbanian } from '@/utils/dates';
-import { isProductList, noteListTotal } from '@/utils/noteLists';
+import { formatQuantity, isProductList, noteListTotal, sortNoteItems } from '@/utils/noteLists';
+import { normalizePriority, priorityInfo } from '@/utils/priority';
 import { formatNumber } from '@/utils/totals';
 
 interface NoteListsPanelProps {
-  /** Newest first. */
+  /** Newest first; the normal lists and the shopping lists are shown apart, in two groups. */
   lists: NoteList[];
   /** Shown when there is no group yet. */
   empty: ReactElement;
@@ -20,15 +21,47 @@ interface NoteListsPanelProps {
   onOpenTrash: () => void;
 }
 
-// The groups of the Note List Shop page: the name, the day it was made, and how much of it is done. A tap opens the group.
+interface ListGroup {
+  key: string;
+  title: string;
+  /** Said under the title while the group has no list. */
+  none: string;
+  data: NoteList[];
+}
+
+// How many open items the latest list of each kind shows on the page.
+const PREVIEW_COUNT = 3;
+
+// The groups of the Note List Shop page, in two parts: the normal lists and the shopping lists. Each shows the name, the day
+// it was made, and how much of it is done (and the total of a shopping list). The latest of each part also shows its most
+// important open items (the highest priority in a normal list, the first ones in a shopping list). A tap opens the group.
 export function NoteListsPanel({ lists, empty, onOpen, onDelete, trashCount, onOpenTrash }: NoteListsPanelProps) {
+  // With no list at all the welcome is shown instead of two empty parts.
+  const sections: ListGroup[] =
+    lists.length === 0
+      ? []
+      : [
+          { key: 'work', title: 'Listat normale', none: 'Asnjë listë normale ende', data: lists.filter((list) => !isProductList(list)) },
+          { key: 'products', title: 'Listat e blerjeve', none: 'Asnjë listë blerjesh ende', data: lists.filter(isProductList) },
+        ];
   return (
-    <FlatList
-      data={lists}
+    <SectionList
+      sections={sections}
       keyExtractor={(list) => list.id}
       style={styles.flex}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      stickySectionHeadersEnabled={false}
+      renderSectionHeader={({ section }) => (
+        <View style={styles.sectionHeader}>
+          <Ionicons name={section.key === 'products' ? 'cart' : 'list'} size={16} color={colors.primaryDark} />
+          <Text style={styles.sectionTitle}>{section.title}</Text>
+          <Text style={styles.sectionCount}>{section.data.length}</Text>
+        </View>
+      )}
+      renderSectionFooter={({ section }) =>
+        section.data.length === 0 ? <Text style={styles.sectionNone}>{section.none}</Text> : null
+      }
       ListEmptyComponent={empty}
       ListFooterComponent={
         trashCount > 0 ? (
@@ -43,7 +76,8 @@ export function NoteListsPanel({ lists, empty, onOpen, onDelete, trashCount, onO
           </Pressable>
         ) : null
       }
-      renderItem={({ item: list }) => {
+      renderItem={({ item: list, index }) => {
+        const preview = index === 0 ? sortNoteItems(list.items, list.kind).filter((item) => !item.done).slice(0, PREVIEW_COUNT) : [];
         const done = list.items.filter((item) => item.done).length;
         const total = list.items.length;
         const ratio = total > 0 ? done / total : 0;
@@ -71,6 +105,28 @@ export function NoteListsPanel({ lists, empty, onOpen, onDelete, trashCount, onO
                 </View>
               )}
               <Text style={styles.date}>Krijuar më {formatDateAlbanian(list.createdAt)}</Text>
+              {preview.length > 0 && (
+                <View style={styles.preview}>
+                  {preview.map((item) => {
+                    const level = priorityInfo(item.importance);
+                    return (
+                      <View key={item.id} style={styles.previewRow}>
+                        {isProductList(list) ? (
+                          <Ionicons name="ellipse-outline" size={12} color={colors.primary} />
+                        ) : (
+                          <Ionicons name="flag" size={12} color={level.color} />
+                        )}
+                        <Text style={styles.previewName} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <Text style={styles.previewMeta}>
+                          {isProductList(list) ? formatQuantity(item.quantity, item.unit) : normalizePriority(item.importance)}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
             </View>
             <Pressable
               onPress={() => onDelete(list)}
@@ -101,6 +157,17 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   pressed: { opacity: 0.85 },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs + 2,
+    paddingHorizontal: spacing.xs,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
+  },
+  sectionTitle: { fontSize: 14, fontWeight: '800', color: colors.primaryDark },
+  sectionCount: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
+  sectionNone: { fontSize: 13, color: colors.textMuted, paddingHorizontal: spacing.xs, marginBottom: spacing.md },
   iconBadge: {
     width: 44,
     height: 44,
@@ -115,6 +182,10 @@ const styles = StyleSheet.create({
   track: { height: 4, borderRadius: radii.pill, backgroundColor: colors.border, overflow: 'hidden', marginVertical: 2 },
   fill: { height: '100%', borderRadius: radii.pill, backgroundColor: colors.success },
   date: { fontSize: 11, color: colors.textMuted },
+  preview: { gap: 4, marginTop: spacing.xs, paddingTop: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  previewRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2 },
+  previewName: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.text },
+  previewMeta: { fontSize: 12, fontWeight: '700', color: colors.textMuted },
   trashLink: {
     flexDirection: 'row',
     alignItems: 'center',

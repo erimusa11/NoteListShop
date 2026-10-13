@@ -51,9 +51,11 @@ export interface NoteItem {
   createdAt: number;
   /** What the item costs (for the whole line), in a list of products. Missing when none was given. */
   price?: number;
+  /** 1 to 5, in a normal list, where an item is a to-do with a priority. Missing means the lowest. */
+  importance?: number;
 }
 
-/** What a group is for: a work list (to-dos with amounts) or a list of products, whose items have a price that adds up. */
+/** What a group is for: a normal list (text items with a priority, like to-dos) or a shopping list of products, whose items have an amount and a price that adds up. */
 export type NoteListKind = 'work' | 'products';
 
 /** A group on the Note List Shop page: a named list, with the day it was made, that holds its own items. */
@@ -62,7 +64,7 @@ export interface NoteList {
   name: string;
   createdAt: number;
   items: NoteItem[];
-  /** Missing means a work list: that is what every group was before the kinds existed. */
+  /** Missing means a normal list: that is what every group was before the kinds existed. */
   kind?: NoteListKind;
   /** Set when the group is deleted: it waits in the trash, and can be brought back, until `TRASH_DAYS` have passed. */
   deletedAt?: number;
