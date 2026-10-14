@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { BottomSheet } from '@/components/BottomSheet';
 import { PrioritySelector } from '@/components/PrioritySelector';
+import { useFamilyLabels } from '@/context/FamilyLabelsContext';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import { DEFAULT_QUANTITY, normalizeQuantity, parseQuantity, sanitizeQuantityInput } from '@/utils/quantity';
 import { pickSuggestions, type Suggestion } from '@/utils/suggestions';
@@ -71,6 +72,7 @@ export function AddItemButton({
   showPriority = true,
   calendar,
 }: AddItemButtonProps) {
+  const { label, nameFrom } = useFamilyLabels();
   const [visible, setVisible] = useState(false);
   const [name, setName] = useState('');
   const [quantity, setQuantity] = useState(DEFAULT_QUANTITY);
@@ -152,7 +154,7 @@ export function AddItemButton({
     if (!canSubmit) return;
     const parsedPrice = parseFloat(price.replace(',', '.'));
     onAdd(
-      name.trim(),
+      other ? nameFrom(name.trim()) : name.trim(),
       showQuantity ? normalizeQuantity(quantity) : '',
       Number.isFinite(parsedPrice) ? parsedPrice : null,
       priority,
@@ -177,7 +179,7 @@ export function AddItemButton({
               accessibilityState={{ checked: selected }}
               style={[styles.option, selected && styles.optionSelected]}
             >
-              <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{option}</Text>
+              <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{label(option)}</Text>
             </Pressable>
           );
         })}
@@ -212,7 +214,7 @@ export function AddItemButton({
               <View key={`${line.level}-${line.person}`} style={styles.monthLine}>
                 <View style={styles.monthLineText}>
                   <Text style={styles.monthLineName}>
-                    {line.level} · {line.person}
+                    {line.level} · {label(line.person)}
                   </Text>
                   <Text style={styles.calendarHint}>
                     {line.days} ditë
@@ -255,7 +257,7 @@ export function AddItemButton({
                     accessibilityState={{ checked: selected }}
                     style={[styles.option, selected && styles.optionSelected]}
                   >
-                    <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{option}</Text>
+                    <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{label(option)}</Text>
                   </Pressable>
                 );
               })}
@@ -315,13 +317,13 @@ export function AddItemButton({
                   key={s.key}
                   onPress={() => pick(s)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Shto ${s.name}`}
+                  accessibilityLabel={`Shto ${nameOptions ? label(s.name) : s.name}`}
                   style={styles.chip}
                 >
                   <Ionicons name="add-circle" size={16} color={colors.primary} />
-                  <Text style={styles.chipText}>{s.name}</Text>
+                  <Text style={styles.chipText}>{nameOptions ? label(s.name) : s.name}</Text>
                   {/* Before a choice is picked, say which one the description belongs to. */}
-                  {!choiceMade && s.group && s.group !== s.name && <Text style={styles.chipPrice}>{s.group}</Text>}
+                  {!choiceMade && s.group && s.group !== s.name && <Text style={styles.chipPrice}>{label(s.group)}</Text>}
                   {s.price != null && <Text style={styles.chipPrice}>{formatNumber(s.price)}</Text>}
                 </Pressable>
               ))}

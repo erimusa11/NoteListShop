@@ -14,7 +14,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { dealIn, ms, spring } from '@/theme/motion';
-import { colors, shadow, spacing } from '@/theme/theme';
+import { coloredShadow, colors, shadow, spacing } from '@/theme/theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -182,12 +182,11 @@ function Tag<T extends string>({
     >
       <Animated.View
         entering={entering}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
         importantForAccessibility="no-hide-descendants"
         accessibilityElementsHidden
       >
-        <Animated.View style={[styles.group, { zIndex: active ? 2 : 1 }, groupStyle]} pointerEvents="none">
+        <Animated.View style={[styles.group, { zIndex: active ? 2 : 1 }, groupStyle]}>
           <View style={[styles.pin, { backgroundColor: active ? accent : THREAD }]} />
           <View style={styles.thread} />
           <Animated.View style={[styles.tag, shadow, tagStyle]}>
@@ -197,12 +196,8 @@ function Tag<T extends string>({
                 TAG_RADII,
                 {
                   backgroundColor: colors.card,
-                  shadowColor: accent,
-                  shadowOpacity: 0.25,
-                  shadowRadius: 12,
-                  shadowOffset: { width: 0, height: 6 },
-                  elevation: 6,
                 },
+                coloredShadow(accent, 0.25, 12, 6, 6),
                 liftStyle,
               ]}
             />
@@ -330,7 +325,7 @@ export function TagString<T extends string>({
           style={styles.scroll}
           contentContainerStyle={[styles.scrollContent, { columnGap: gap, paddingHorizontal: SCROLL_PAD }]}
         >
-          <View style={styles.twine} pointerEvents="none">
+          <View style={styles.twine}>
             <View style={[styles.knot, { left: -3 }]} />
             <View style={[styles.knot, { right: -3 }]} />
           </View>
@@ -338,7 +333,7 @@ export function TagString<T extends string>({
         </ScrollView>
       ) : (
         <>
-          <View style={styles.twine} pointerEvents="none">
+          <View style={styles.twine}>
             <View style={[styles.knot, { left: -3 }]} />
             <View style={[styles.knot, { right: -3 }]} />
           </View>
@@ -359,13 +354,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     columnGap: GAP,
   },
-  twine: { position: 'absolute', top: 4, left: 0, right: 0, height: 2, borderRadius: 1, backgroundColor: TWINE },
+  twine: { pointerEvents: 'none', position: 'absolute', top: 4, left: 0, right: 0, height: 2, borderRadius: 1, backgroundColor: TWINE },
   knot: { position: 'absolute', top: -2, width: 6, height: 6, borderRadius: 3, backgroundColor: TWINE },
   slot: { flex: 1, height: ROW_H },
   scroll: { flex: 1, height: ROW_H + SHADOW_ROOM },
   scrollContent: { height: ROW_H + SHADOW_ROOM },
   reducedPressed: { opacity: 0.85 },
-  group: { position: 'absolute', top: PIVOT_Y, left: 1, right: 1, height: G },
+  group: { pointerEvents: 'none', position: 'absolute', top: PIVOT_Y, left: 1, right: 1, height: G },
   pin: { position: 'absolute', top: -3, alignSelf: 'center', width: 6, height: 6, borderRadius: 3, zIndex: 3 },
   thread: {
     position: 'absolute',

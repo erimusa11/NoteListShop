@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { ReactElement } from 'react';
 import { Pressable, SectionList, StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
+import { HOLD_LIST_TO_DELETE_MS, useHoldToDelete } from '@/hooks/useHoldToDelete';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { NoteList } from '@/types/models';
 import { formatDateAlbanian } from '@/utils/dates';
-import { formatQuantity, isProductList, noteListTotal, sortNoteItems } from '@/utils/noteLists';
-import { normalizePriority, priorityInfo } from '@/utils/priority';
+import { isProductList, noteListTotal } from '@/utils/noteLists';
 import { formatNumber } from '@/utils/totals';
 
 interface NoteListsPanelProps {
@@ -29,12 +30,9 @@ interface ListGroup {
   data: NoteList[];
 }
 
-// How many open items the latest list of each kind shows on the page.
-const PREVIEW_COUNT = 3;
-
-// The groups of the Note List Shop page, in two parts: the normal lists and the shopping lists. Each shows the name, the day
-// it was made, and how much of it is done (and the total of a shopping list). The latest of each part also shows its most
-// important open items (the highest priority in a normal list, the first ones in a shopping list). A tap opens the group.
+// The groups of the Note List Shop page, in two parts: the normal lists and the shopping lists. Each is a small, quiet card:
+// the name and the day it was made on one line, then how much of it is done (and the total of a shopping list) with a thin
+// bar under it. A tap opens the group.
 export function NoteListsPanel({ lists, empty, onOpen, onDelete, trashCount, onOpenTrash }: NoteListsPanelProps) {
   // With no list at all the welcome is shown instead of two empty parts.
   const sections: ListGroup[] =
@@ -76,71 +74,60 @@ export function NoteListsPanel({ lists, empty, onOpen, onDelete, trashCount, onO
           </Pressable>
         ) : null
       }
-      renderItem={({ item: list, index }) => {
-        const preview = index === 0 ? sortNoteItems(list.items, list.kind).filter((item) => !item.done).slice(0, PREVIEW_COUNT) : [];
-        const done = list.items.filter((item) => item.done).length;
-        const total = list.items.length;
-        const ratio = total > 0 ? done / total : 0;
-        return (
-          // No button role on the card itself: on the web that makes a <button>, which cannot hold the trash, a button of its own.
-          <Pressable
-            onPress={() => onOpen(list)}
-            accessibilityLabel={`${list.name}. ${done} nga ${total} të kryera. Hap`}
-            style={({ pressed }) => [styles.card, shadow, pressed && styles.pressed]}
-          >
-            <View style={styles.iconBadge}>
-              <Ionicons name={isProductList(list) ? 'pricetag' : 'list'} size={22} color={colors.primaryDark} />
-            </View>
-            <View style={styles.text}>
-              <Text style={styles.name} numberOfLines={2}>
-                {list.name}
-              </Text>
-              <Text style={styles.meta}>
-                {total === 0 ? 'Asnjë artikull ende' : `${done} nga ${total} artikuj të kryer`}
-                {isProductList(list) && noteListTotal(list) > 0 ? ` · ${formatNumber(noteListTotal(list))} Lekë` : ''}
-              </Text>
-              {total > 0 && (
-                <View style={styles.track}>
-                  <View style={[styles.fill, { width: `${ratio * 100}%` }]} />
-                </View>
-              )}
-              <Text style={styles.date}>Krijuar më {formatDateAlbanian(list.createdAt)}</Text>
-              {preview.length > 0 && (
-                <View style={styles.preview}>
-                  {preview.map((item) => {
-                    const level = priorityInfo(item.importance);
-                    return (
-                      <View key={item.id} style={styles.previewRow}>
-                        {isProductList(list) ? (
-                          <Ionicons name="ellipse-outline" size={12} color={colors.primary} />
-                        ) : (
-                          <Ionicons name="flag" size={12} color={level.color} />
-                        )}
-                        <Text style={styles.previewName} numberOfLines={1}>
-                          {item.name}
-                        </Text>
-                        <Text style={styles.previewMeta}>
-                          {isProductList(list) ? formatQuantity(item.quantity, item.unit) : normalizePriority(item.importance)}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-            <Pressable
-              onPress={() => onDelete(list)}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel={`Fshi listën ${list.name}`}
-              style={({ pressed }) => [styles.trash, pressed && styles.trashPressed]}
-            >
-              <Ionicons name="trash-outline" size={19} color={colors.textMuted} />
-            </Pressable>
-          </Pressable>
-        );
-      }}
+      renderItem={({ item: list }) => <NoteListCard list={list} onOpen={onOpen} onDelete={onDelete} />}
     />
+  );
+}
+
+interface NoteListCardProps {
+  list: NoteList;
+  onOpen: (list: NoteList) => void;
+  onDelete: (list: NoteList) => void;
+}
+
+// A tap opens the list; holding it (a little longer than an item) asks whether to delete it, with a thin red line filling
+// along the bottom of the card while it is held.
+function NoteListCard({ list, onOpen, onDelete }: NoteListCardProps) {
+  const { holdStyle, begin, end } = useHoldToDelete();
+  const done = list.items.filter((item) => item.done).length;
+  const total = list.items.length;
+  const ratio = total > 0 ? done / total : 0;
+  const cost = isProductList(list) ? noteListTotal(list) : 0;
+  return (
+    <Pressable
+      onPress={() => onOpen(list)}
+      onLongPress={() => onDelete(list)}
+      delayLongPress={HOLD_LIST_TO_DELETE_MS}
+      onPressIn={begin}
+      onPressOut={end}
+      accessibilityLabel={`${list.name}. ${done} nga ${total} të kryera. Hap`}
+      accessibilityHint="Mbaje të shtypur për ta fshirë listën"
+      style={({ pressed }) => [styles.card, shadow, pressed && styles.pressed]}
+    >
+      <View style={styles.iconBadge}>
+        <Ionicons name={isProductList(list) ? 'pricetag' : 'list'} size={17} color={colors.primaryDark} />
+      </View>
+      <View style={styles.text}>
+        <View style={styles.titleRow}>
+          <Text style={styles.name} numberOfLines={1}>
+            {list.name}
+          </Text>
+          <Text style={styles.date}>{formatDateAlbanian(list.createdAt)}</Text>
+        </View>
+        <Text style={styles.meta} numberOfLines={1}>
+          {total === 0 ? 'Asnjë artikull ende' : `${done} nga ${total} të kryera`}
+          {cost > 0 ? ` · ${formatNumber(cost)} Lekë` : ''}
+        </Text>
+        {total > 0 && (
+          <View style={styles.track}>
+            <View style={[styles.fill, { width: `${ratio * 100}%` }]} />
+          </View>
+        )}
+      </View>
+      <View style={styles.holdTrack}>
+        <Animated.View style={[styles.holdLine, holdStyle]} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -153,8 +140,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm + 2,
     backgroundColor: colors.card,
     borderRadius: radii.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.xs + 2,
   },
   pressed: { opacity: 0.85 },
   sectionHeader: {
@@ -169,23 +157,20 @@ const styles = StyleSheet.create({
   sectionCount: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
   sectionNone: { fontSize: 13, color: colors.textMuted, paddingHorizontal: spacing.xs, marginBottom: spacing.md },
   iconBadge: {
-    width: 44,
-    height: 44,
+    width: 34,
+    height: 34,
     borderRadius: radii.pill,
     backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  text: { flex: 1, gap: 2 },
-  name: { fontSize: 16, fontWeight: '700', color: colors.text },
-  meta: { fontSize: 13, color: colors.textMuted },
-  track: { height: 4, borderRadius: radii.pill, backgroundColor: colors.border, overflow: 'hidden', marginVertical: 2 },
-  fill: { height: '100%', borderRadius: radii.pill, backgroundColor: colors.success },
+  text: { flex: 1, gap: 1 },
+  titleRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
+  name: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.text },
   date: { fontSize: 11, color: colors.textMuted },
-  preview: { gap: 4, marginTop: spacing.xs, paddingTop: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  previewRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2 },
-  previewName: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.text },
-  previewMeta: { fontSize: 12, fontWeight: '700', color: colors.textMuted },
+  meta: { fontSize: 12, color: colors.textMuted },
+  track: { height: 3, borderRadius: radii.pill, backgroundColor: colors.border, overflow: 'hidden', marginTop: 4 },
+  fill: { height: '100%', borderRadius: radii.pill, backgroundColor: colors.success },
   trashLink: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -197,6 +182,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   trashLinkText: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
-  trash: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  trashPressed: { backgroundColor: '#FDE6E3' },
+  holdTrack: { pointerEvents: 'none', position: 'absolute', left: radii.md, right: radii.md, bottom: 0, height: 3 },
+  holdLine: { height: 3, borderRadius: 2, backgroundColor: colors.danger },
 });

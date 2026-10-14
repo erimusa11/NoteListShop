@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
@@ -10,7 +10,6 @@ import { AddItemButton, type CalendarChoice } from '@/components/AddItemButton';
 import { BillsSummaryBar } from '@/components/BillsSummaryBar';
 import { OptionTotalsBar } from '@/components/OptionTotalsBar';
 import { OverBudgetCard } from '@/components/OverBudgetCard';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { InlineEditableField } from '@/components/InlineEditableField';
 import { IncomeRow } from '@/components/IncomeRow';
 import { ImportantList } from '@/components/ImportantList';
@@ -18,10 +17,10 @@ import { ItemList } from '@/components/ItemList';
 import { SpentList } from '@/components/SpentList';
 import { TagGridSheet } from '@/components/TagGridSheet';
 import { TagString, type TagOption } from '@/components/TagString';
+import { useFamilyLabels } from '@/context/FamilyLabelsContext';
 import { useTrips } from '@/context/TripsContext';
-import { useUndo } from '@/context/UndoContext';
 import { useTabSwipe } from '@/hooks/useTabSwipe';
-import { colors, radii, shadow, spacing } from '@/theme/theme';
+import { colors, spacing } from '@/theme/theme';
 import type { IncomeEntry, ItemListKey, ShoppingItem } from '@/types/models';
 import { calendarMonths, monthAmount } from '@/utils/attendance';
 import { CATEGORIES, type Category, INCOME_COLOR } from '@/utils/categories';
@@ -38,7 +37,6 @@ import { goBackOrHome } from '@/utils/navigation';
 import { buildOptionTotals, buildPersonTotals, itemOption, itemsForOption, itemsForPerson } from '@/utils/options';
 import { SPENT_COLOR, SPENT_SECTION, type SpentGroup, spentItems } from '@/utils/spent';
 import { buildListSuggestions, buildSuggestions, suggestionGroups } from '@/utils/suggestions';
-import { TRASH_DAYS } from '@/utils/trash';
 import { categoriesAlphabetically, computeSpentTotal, computeTotal, tripAllItems } from '@/utils/totals';
 
 // 'income' or the `section` of a category.
@@ -109,7 +107,11 @@ const CategoryPane = memo(function CategoryPane({
     const byGroup = optionFilter ? itemsForOption(items, category, optionFilter) : items;
     return personFilter ? itemsForPerson(byGroup, category, personFilter) : byGroup;
   }, [items, category, optionFilter, personFilter]);
-  const filterText = [optionFilter, personFilter].filter(Boolean).join(' · ');
+  const { label } = useFamilyLabels();
+  const filterText = [optionFilter, personFilter]
+    .filter((name): name is string => Boolean(name))
+    .map((name) => label(name))
+    .join(' · ');
 
   return (
     <Pane active={active}>
@@ -137,6 +139,7 @@ const CategoryPane = memo(function CategoryPane({
         showQuantity={category.showQuantity}
         limit={preview ? PREVIEW_ROWS : undefined}
         personOptions={category.personOptions}
+        hasChoices={!!category.nameOptions}
       />
     </Pane>
   );
@@ -151,11 +154,15 @@ export default function TripDetailScreen() {
   // `tab` and `category` come from the pie on the home page: open on Të shpenzuarat, at the part of that category.
   const { id, tab, category: focusCategory } = useLocalSearchParams<{ id: string; tab?: string; category?: string }>();
   const startSection: Section = tab === SPENT_SECTION ? SPENT_SECTION : IMPORTANT_SECTION;
-  const { trips, addItem, addIncome, updateIncome, removeIncome, renameTrip, deleteTrip, restoreTrip } = useTrips();
-  const { showUndo } = useUndo();
+  const { trips, addItem, addIncome, updateIncome, removeIncome, renameTrip } = useTrips();
   const trip = trips.find((t) => t.id === id);
-  // The category tabs and the category menu are in alphabetical order, so a category is always in the same place.
+  // The category menu is in alphabetical order, so a category is always in the same place there.
   const categoryOrder = categoriesAlphabetically();
+  // The strip puts the categories with the most items left first (the number on their tab); equal ones stay alphabetical.
+  const stripOrder = useMemo(() => {
+    const left = (category: Category) => count(trip?.[category.key] ?? NO_ITEMS).remaining;
+    return [...categoryOrder].sort((a, b) => left(b) - left(a));
+  }, [categoryOrder, trip]);
   // The list opens on Më të rëndësishmet (or Të shpenzuarat, from the pie), so the strip starts at the left, where those
   // tabs are, right after Të ardhurat.
   const [section, setSection] = useState<Section>(startSection);
@@ -163,7 +170,6 @@ export default function TripDetailScreen() {
   const [mounted, setMounted] = useState<Section[]>([startSection]);
   // The tabs that were really opened; they keep all their rows.
   const [opened, setOpened] = useState<Section[]>([startSection]);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [gridOpen, setGridOpen] = useState(false);
 
   const selectSection = useCallback((next: Section) => {
@@ -174,8 +180,8 @@ export default function TripDetailScreen() {
 
   // Swipe left for the next tab in the strip, right for the previous one (see useTabSwipe).
   const tabOrder = useMemo<Section[]>(
-    () => ['income', IMPORTANT_SECTION, SPENT_SECTION, ...categoryOrder.map((category) => category.section)],
-    [categoryOrder],
+    () => ['income', IMPORTANT_SECTION, SPENT_SECTION, ...stripOrder.map((category) => category.section)],
+    [stripOrder],
   );
   const { gesture: swipeTabs, slideStyle } = useTabSwipe(tabOrder, section, selectSection);
 
@@ -290,6 +296,7 @@ export default function TripDetailScreen() {
     [trips, trip, activeCategory],
   );
 
+  // The tabs in the order of the category menu; `stripOptions` below is the same tabs in the order of the strip.
   const tagOptions = useMemo<TagOption<Section>[]>(
     () => [
       { value: 'income', label: 'Të ardhurat', icon: 'cash-outline', activeIcon: 'cash', accent: INCOME_COLOR, remaining: 0, total: 0 },
@@ -327,22 +334,11 @@ export default function TripDetailScreen() {
     ],
     [categoryOrder, trip, important, spent],
   );
-
-  const deleteDetails = trip
-    ? [
-        `${tripAllItems(trip).length} ${tripAllItems(trip).length === 1 ? 'artikull' : 'artikuj'} në këtë listë.`,
-        `Lista shkon në Koshin dhe ruhet ${TRASH_DAYS} ditë; në Listat mund ta kthesh.`,
-      ]
-    : [];
-
-  const performDelete = () => {
-    if (!trip) return;
-    const { id: tripId, name } = trip;
-    setConfirmOpen(false);
-    deleteTrip(tripId);
-    router.replace('/');
-    showUndo(`"${name}" u fshi`, () => restoreTrip(tripId));
-  };
+  const stripOptions = useMemo(() => {
+    const head = tagOptions.slice(0, 3);
+    const byTab = new Map(tagOptions.slice(3).map((option) => [option.value, option]));
+    return [...head, ...stripOrder.flatMap((category) => byTab.get(category.section) ?? [])];
+  }, [tagOptions, stripOrder]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom', 'left', 'right']}>
@@ -381,16 +377,6 @@ export default function TripDetailScreen() {
           )}
         </View>
 
-        <ConfirmDialog
-          visible={confirmOpen && trip !== undefined}
-          title="Fshi listën?"
-          message={trip ? `A je i sigurt që do të fshish "${trip.name}"?` : ''}
-          details={deleteDetails}
-          confirmLabel="Fshi"
-          onConfirm={performDelete}
-          onCancel={() => setConfirmOpen(false)}
-        />
-
         <TagGridSheet
           visible={gridOpen}
           onClose={() => setGridOpen(false)}
@@ -405,7 +391,7 @@ export default function TripDetailScreen() {
         {trip ? (
           <>
             <View style={styles.content}>
-              <TagString value={section} onChange={selectSection} options={tagOptions} />
+              <TagString value={section} onChange={selectSection} options={stripOptions} />
 
               <GestureDetector gesture={swipeTabs}>
                 <Animated.View style={[styles.panes, slideStyle]}>
@@ -504,14 +490,6 @@ export default function TripDetailScreen() {
               </GestureDetector>
             </View>
             <View style={styles.footer}>
-              <Pressable
-                onPress={() => setConfirmOpen(true)}
-                accessibilityRole="button"
-                accessibilityLabel="Fshi listën"
-                style={[styles.deleteListButton, shadow]}
-              >
-                <Ionicons name="trash-outline" size={22} color={colors.danger} />
-              </Pressable>
               {section === 'income' && (
                 <AddItemButton
                   onAdd={(name, _quantity, amount, _priority, _note, kindLabel) => {
@@ -521,7 +499,7 @@ export default function TripDetailScreen() {
                   }}
                   showQuantity={false}
                   title="Shto të ardhura"
-                  namePlaceholder="P.sh. Rroga Alma, Bonus…"
+                  namePlaceholder="P.sh. Rroga, Bonus…"
                   secondOptions={INCOME_KIND_LABELS}
                   secondLabel="Lloji"
                   priceLabel="Shuma"
@@ -597,21 +575,10 @@ const styles = StyleSheet.create({
   listContent: { paddingBottom: spacing.sm },
   footer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
-  },
-  // At the far left, the add button at the far right, and a plain white circle, so the two are not mixed up.
-  deleteListButton: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.pill,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   empty: { textAlign: 'center', color: colors.textMuted, marginTop: spacing.xl },
 });

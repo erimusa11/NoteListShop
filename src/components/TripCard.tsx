@@ -9,6 +9,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 
+import { HOLD_LIST_TO_DELETE_MS, useHoldToDelete } from '@/hooks/useHoldToDelete';
 import { ms, spring } from '@/theme/motion';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { ShoppingTrip } from '@/types/models';
@@ -20,10 +21,12 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 interface TripCardProps {
   trip: ShoppingTrip;
   onPress: () => void;
+  /** The card was held long enough to ask to delete the list. */
+  onLongPress?: () => void;
   index?: number;
 }
 
-export function TripCard({ trip, onPress, index = 0 }: TripCardProps) {
+export function TripCard({ trip, onPress, onLongPress, index = 0 }: TripCardProps) {
   const reduced = useReducedMotion();
   const allItems = tripAllItems(trip);
   const spentTotal = computeSpentTotal(allItems);
@@ -36,6 +39,7 @@ export function TripCard({ trip, onPress, index = 0 }: TripCardProps) {
   const enter = useSharedValue(reduced ? 1 : 0);
   const pressed = useSharedValue(0);
   const fill = useSharedValue(0);
+  const { holdStyle, begin: beginHold, end: endHold } = useHoldToDelete();
 
   useEffect(() => {
     if (!reduced) enter.value = withDelay(ms(Math.min(index, 4) * 25), withSpring(1, spring({ damping: 16, stiffness: 280 })));
@@ -61,11 +65,16 @@ export function TripCard({ trip, onPress, index = 0 }: TripCardProps) {
     <View style={styles.wrap}>
       <AnimatedPressable
         onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={HOLD_LIST_TO_DELETE_MS}
+        accessibilityHint={onLongPress ? 'Mbaje të shtypur për ta fshirë listën' : undefined}
         onPressIn={() => {
           pressed.value = withSpring(1, spring({ damping: 18, stiffness: 500 }));
+          if (onLongPress) beginHold();
         }}
         onPressOut={() => {
           pressed.value = withSpring(0, spring({ damping: 9, stiffness: 320, mass: 0.7 }));
+          endHold();
         }}
         style={[styles.card, shadow, pressStyle]}
       >
@@ -99,6 +108,9 @@ export function TripCard({ trip, onPress, index = 0 }: TripCardProps) {
         ) : (
           <Text style={styles.spentOnly}>{formatPrice(spentTotal)} shpenzuar</Text>
         )}
+        <View style={styles.holdTrack}>
+          <Animated.View style={[styles.holdLine, holdStyle]} />
+        </View>
       </AnimatedPressable>
     </View>
   );
@@ -112,6 +124,8 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
   },
+  holdTrack: { pointerEvents: 'none', position: 'absolute', left: radii.md, right: radii.md, bottom: 0, height: 3 },
+  holdLine: { height: 3, borderRadius: 2, backgroundColor: colors.danger },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   iconCircle: {
     width: 40,

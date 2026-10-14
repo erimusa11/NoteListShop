@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BottomTabBar } from '@/components/BottomTabBar';
 import { MiniColumns } from '@/components/charts/MiniColumns';
 import { QokatView } from '@/components/QokatView';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { CreateListButton } from '@/components/CreateListButton';
 import { EmptyState } from '@/components/EmptyState';
 import { HomeChooser } from '@/components/HomeChooser';
@@ -20,10 +21,13 @@ import { TripCard } from '@/components/TripCard';
 import { useAuth } from '@/context/AuthContext';
 import { useProfile } from '@/context/ProfileContext';
 import { useTrips } from '@/context/TripsContext';
+import { useUndo } from '@/context/UndoContext';
 import { colors, spacing } from '@/theme/theme';
+import type { ShoppingTrip } from '@/types/models';
 import { buildListSpend, buildSavings, buildSectionSpend } from '@/utils/reports';
 import { SPENT_SECTION } from '@/utils/spent';
 import { tripAllItems, tripIncomeTotal } from '@/utils/totals';
+import { TRASH_DAYS } from '@/utils/trash';
 
 // The lists screen shows this many lists at first and this many more each time "load more" is pressed.
 const PAGE_SIZE = 5;
@@ -44,7 +48,8 @@ function normalizeText(value: string): string {
 }
 
 export default function ListsOverviewScreen() {
-  const { trips, trashedTrips, createList, restoreTrip, purgeTrip } = useTrips();
+  const { trips, trashedTrips, createList, deleteTrip, restoreTrip, purgeTrip } = useTrips();
+  const { showUndo } = useUndo();
   const [trashOpen, setTrashOpen] = useState(false);
   const { demoMode } = useAuth();
   // The name from the profile page, or the account's (Google) name while the profile has none.
@@ -88,7 +93,10 @@ export default function ListsOverviewScreen() {
     setSearching(false);
     changeQuery('');
   };
-  const latestSections = buildSectionSpend(sorted.slice(0, 1));
+  // The list the pie shows: the newest until another is picked on the card (or while the picked one is gone).
+  const [pieTripId, setPieTripId] = useState<string | null>(null);
+  const pieTrip = sorted.find((trip) => trip.id === pieTripId) ?? sorted[0];
+  const latestSections = buildSectionSpend(pieTrip ? [pieTrip] : []);
   // Newest list first, so the breakdown of the bank reads like the lists below.
   const savings = buildSavings(sorted);
   const recent = buildListSpend(trips)
@@ -105,13 +113,33 @@ export default function ListsOverviewScreen() {
   const openSpent = (id: string, category: string) =>
     router.push({ pathname: '/trip/[id]', params: { id, tab: SPENT_SECTION, category } });
 
+  // A list held down on the lists page asks to be deleted (it goes to the Koshi, and the undo bar brings it back).
+  // The list that is asked about stays after the question closes, so its name does not vanish while the dialog fades out.
+  const [deletingTrip, setDeletingTrip] = useState<ShoppingTrip | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const askDelete = (trip: ShoppingTrip) => {
+    setDeletingTrip(trip);
+    setDeleteOpen(true);
+  };
+  const performDelete = () => {
+    setDeleteOpen(false);
+    if (!deletingTrip) return;
+    const { id, name } = deletingTrip;
+    deleteTrip(id);
+    showUndo(`"${name}" u fshi`, () => restoreTrip(id));
+  };
+
   const handleCreate = (name: string) => {
     const id = createList(name);
     router.push({ pathname: '/trip/[id]', params: { id } });
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom', 'left', 'right']}>
+    <SafeAreaView
+      style={styles.safeArea}
+      // The home page draws its own top (the backdrop goes up under the status bar); every other page keeps the margin.
+      edges={tab === 'home' ? ['bottom', 'left', 'right'] : ['top', 'bottom', 'left', 'right']}
+    >
       {/* The chooser has no header: the avatar is the big one in the middle of that screen. */}
       {tab !== 'home' && (
         <View style={styles.header}>
@@ -203,7 +231,7 @@ export default function ListsOverviewScreen() {
       <View style={styles.content}>
         {/* A faint cart behind the shopping pages: seen through the gaps between the cards and in the empty space. */}
         {isShopTab(tab) && (
-          <View style={styles.watermark} pointerEvents="none">
+          <View style={styles.watermark}>
             <Image
               source={require('@/assets/images/logo-watermark.png')}
               style={styles.watermarkLogo}
@@ -231,16 +259,24 @@ export default function ListsOverviewScreen() {
                   {savings.lists > 0 && <SavingsCard savings={savings} onOpenList={openTrip} />}
                   <MiniColumns data={recent} onPressColumn={openTrip} />
                   <LatestListPie
-                    listName={`${sorted[0].name} · sipas kategorisë`}
+                    listName={`${pieTrip.name} · sipas kategorisë`}
                     sections={latestSections}
-                    income={tripIncomeTotal(sorted[0])}
-                    onPressSection={(section) => openSpent(sorted[0].id, section)}
+                    income={tripIncomeTotal(pieTrip)}
+                    onPressSection={(section) => openSpent(pieTrip.id, section)}
+                    choices={sorted}
+                    selectedId={pieTrip.id}
+                    onSelect={setPieTripId}
                   />
                 </>
               ) : null
             }
             renderItem={({ item: trip, index }) => (
-              <TripCard index={index % PAGE_SIZE} trip={trip} onPress={() => openTrip(trip.id)} />
+              <TripCard
+                index={index % PAGE_SIZE}
+                trip={trip}
+                onPress={() => openTrip(trip.id)}
+                onLongPress={() => askDelete(trip)}
+              />
             )}
             ListFooterComponent={
               <>
@@ -299,6 +335,23 @@ export default function ListsOverviewScreen() {
           <NotesView />
         )}
       </View>
+
+      <ConfirmDialog
+        visible={deleteOpen}
+        title="Fshi listën?"
+        message={deletingTrip ? `A je i sigurt që do të fshish "${deletingTrip.name}"?` : ''}
+        details={
+          deletingTrip
+            ? [
+                `${tripAllItems(deletingTrip).length} ${tripAllItems(deletingTrip).length === 1 ? 'artikull' : 'artikuj'} në këtë listë.`,
+                `Lista shkon në Koshin dhe ruhet ${TRASH_DAYS} ditë; këtu në Listat mund ta kthesh.`,
+              ]
+            : []
+        }
+        confirmLabel="Fshi"
+        onConfirm={performDelete}
+        onCancel={() => setDeleteOpen(false)}
+      />
 
       <TrashSheet
         visible={trashOpen && tab === 'lists'}
@@ -411,6 +464,7 @@ const styles = StyleSheet.create({
   content: { flex: 1, paddingHorizontal: spacing.md },
   // At the bottom, where the lists leave room, and clear of the text that is centered on the empty pages.
   watermark: {
+    pointerEvents: 'none',
     position: 'absolute',
     top: 0,
     bottom: 0,

@@ -119,6 +119,28 @@ export function useNoteLists() {
           ...list,
           items: list.items.map((item) => (item.id === itemId ? { ...item, done: !item.done } : item)),
         })),
+      /** Checks off (or, with `false`, unchecks) these items of a group in one go. */
+      setItemsDone: (listId: string, itemIds: string[], done: boolean) => {
+        const ids = new Set(itemIds);
+        changeList(listId, (list) => ({
+          ...list,
+          items: list.items.map((item) => (ids.has(item.id) && item.done !== done ? { ...item, done } : item)),
+        }));
+      },
+      /**
+       * Notes which shopping list (an id) a copy of each of these items was sent to; an item mapped to `undefined` is
+       * marked as never sent. An item that is not in `sentTo` stays as it is.
+       */
+      markItemsSent: (listId: string, sentTo: Record<string, string | undefined>) =>
+        changeList(listId, (list) => ({
+          ...list,
+          items: list.items.map((item) => {
+            if (!(item.id in sentTo)) return item;
+            const { sentTo: _before, ...rest } = item;
+            const to = sentTo[item.id];
+            return to ? { ...rest, sentTo: to } : rest;
+          }),
+        })),
       /** Puts a deleted item back in its group, at the place its creation date gives it. */
       restoreItem: (listId: string, item: NoteItem) =>
         changeList(listId, (list) => {

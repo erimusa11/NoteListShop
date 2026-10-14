@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
 
+import { useFamilyLabels } from '@/context/FamilyLabelsContext';
 import { colors, radii, spacing } from '@/theme/theme';
 import type { Attendance } from '@/types/models';
 import { isWeekend, type KidInfo, keyToDate, monthWeeks, type PlaceInfo } from '@/utils/attendance';
@@ -41,6 +42,7 @@ export function AttendanceCalendar({
   onToday,
   footer,
 }: AttendanceCalendarProps) {
+  const { label, initial } = useFamilyLabels();
   const weeks = monthWeeks(year, month);
   const isCurrentMonth = today.startsWith(`${year}-${String(month + 1).padStart(2, '0')}-`);
   const placeOf = (value: string | undefined) => places.find((place) => place.value === value);
@@ -99,7 +101,7 @@ export function AttendanceCalendar({
             const isToday = day === today;
             const said = kids
               .filter((kid) => marks[kid.name])
-              .map((kid) => `${kid.name}: ${placeOf(marks[kid.name])?.label ?? ''}`)
+              .map((kid) => `${label(kid.name)}: ${placeOf(marks[kid.name])?.label ?? ''}`)
               .join(', ');
             return (
               <View key={day} style={styles.cell}>
@@ -123,7 +125,7 @@ export function AttendanceCalendar({
                           entering={ZoomIn.duration(140)}
                           style={[styles.marker, { backgroundColor: place.color }]}
                         >
-                          <Text style={styles.markerText}>{kid.initial}</Text>
+                          <Text style={styles.markerText}>{initial(kid.name)}</Text>
                         </Animated.View>
                       ) : (
                         <View key={kid.name} style={styles.marker} />

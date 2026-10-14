@@ -26,6 +26,9 @@ export type Attendance = Record<string, Record<string, AttendancePlace>>;
 /** How an amount on the Note List Shop page is counted: by number (copë), kilograms, grams or liters. */
 export type QuantityUnit = 'pcs' | 'kg' | 'gr' | 'l';
 
+/** The two parts a shopping list is divided in. */
+export type NoteSection = 'ushqime' | 'detergjente';
+
 /** One thing in a group (a note list) on the Note List Shop page. */
 export interface NoteItem {
   id: string;
@@ -39,6 +42,10 @@ export interface NoteItem {
   price?: number;
   /** 1 to 5, in a normal list, where an item is a to-do with a priority. Missing means the lowest. */
   importance?: number;
+  /** In a list of products: the part it belongs to. Missing means Ushqime: that is what every product was before the parts existed. */
+  section?: NoteSection;
+  /** In a list of products: the id of the shopping list (Note Shop List) a copy of it was sent to. Missing while it was never sent. */
+  sentTo?: string;
 }
 
 /** What a group is for: a normal list (text items with a priority, like to-dos) or a shopping list of products, whose items have an amount and a price that adds up. */
@@ -68,6 +75,22 @@ export interface IncomeEntry {
   kind?: IncomeKind;
 }
 
+/** An item to be added to a list in one go (for example a copy of a checked item of a note list). */
+export interface NewTripItem {
+  list: ItemListKey;
+  name: string;
+  quantity: string;
+  price: number | null;
+  /** Added already checked off, as the item it is a copy of was. Missing means unchecked. */
+  bought?: boolean;
+}
+
+/** Where an item is: its category and its id there, enough to find it again (to take it out). */
+export interface TripItemRef {
+  list: ItemListKey;
+  id: string;
+}
+
 /** What a deleted item leaves behind in its list: just enough to suggest it again when adding one. */
 export interface RemovedItem extends Pick<ShoppingItem, 'name' | 'quantity' | 'price' | 'createdAt' | 'note' | 'person'> {
   list: ItemListKey;
@@ -78,7 +101,6 @@ export type ItemListKey =
   | 'items'
   | 'supplies'
   | 'bills'
-  | 'utilities'
   | 'wishlist'
   | 'clothes'
   | 'fuel'

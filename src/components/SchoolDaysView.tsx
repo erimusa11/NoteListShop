@@ -6,6 +6,7 @@ import { AttendanceBrush } from '@/components/AttendanceBrush';
 import { AttendanceCalendar } from '@/components/AttendanceCalendar';
 import { AttendanceSummary } from '@/components/AttendanceSummary';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { useFamilyLabels } from '@/context/FamilyLabelsContext';
 import { useTrips } from '@/context/TripsContext';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { Attendance, AttendancePlace, ShoppingItem, ShoppingTrip } from '@/types/models';
@@ -80,6 +81,7 @@ export function TotalPill({ amount }: { amount: number }) {
 // saved as it is changed. It is a screen of its own (from the list) and a page of the bottom menu; both are this.
 export function SchoolDaysView({ trip, trips, category, header, inset = spacing.md }: SchoolDaysViewProps) {
   const { changeTrip } = useTrips();
+  const { label } = useFamilyLabels();
   const kids = attendanceKids(category);
   const places = attendancePlaces(category);
   // Read once, when the view opens; the day does not change under it.
@@ -193,7 +195,7 @@ export function SchoolDaysView({ trip, trips, category, header, inset = spacing.
     changeTrip(trip.id, (current) => removeFixed(current, category, itemId));
   };
 
-  const names = planned.join(' dhe ');
+  const names = planned.map((kid) => label(kid)).join(' dhe ');
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior="padding" keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>

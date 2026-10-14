@@ -2,13 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/context/AuthContext';
 import { colors, radii, spacing } from '@/theme/theme';
+import { protectScreen, unprotectScreen } from '@/utils/screenProtection';
 
 const STORAGE_KEY = 'appLock.enabled';
 const RELOCK_AFTER_MS = 30_000;
+const READY_TIMEOUT_MS = 4_000;
 const IS_WEB = Platform.OS === 'web';
 
 interface AppLockValue {
@@ -40,6 +42,9 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
   const [supported, setSupported] = useState(false);
   const [enabled, setEnabledState] = useState(false);
   const [locked, setLocked] = useState(false);
+  // Until the saved choice has been read the screen is covered: reading it takes a moment, and without the cover the data of a
+  // phone that has the lock on would show for that moment every time the app is opened.
+  const [ready, setReady] = useState(IS_WEB);
   const enabledRef = useRef(false);
   const leftAt = useRef<number | null>(null);
 
@@ -63,6 +68,7 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
       } catch {
         // keep the lock off if the device cannot answer
       }
+      if (!cancelled) setReady(true);
     })();
     return () => {
       cancelled = true;
@@ -90,6 +96,23 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const overlayVisible = locked && enabled && signedIn;
+
+  // The cover must never be stuck: if the device does not answer in a few seconds, the app opens without the lock this once.
+  useEffect(() => {
+    if (ready) return;
+    const timer = setTimeout(() => setReady(true), READY_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [ready]);
+
+  // While the lock is on, what is on the screen is hidden from screenshots, screen recordings and the list of recent apps.
+  const guardScreen = enabled && signedIn;
+  useEffect(() => {
+    if (!guardScreen) return;
+    protectScreen();
+    return () => {
+      unprotectScreen();
+    };
+  }, [guardScreen]);
 
   useEffect(() => {
     if (!overlayVisible) return;
@@ -121,7 +144,9 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
   return (
     <AppLockContext.Provider value={value}>
       {children}
-      {overlayVisible && (
+      {!ready && <View style={styles.cover} />}
+      {/* A window of its own, so it is above everything, sheets and dialogs that are open included (those are windows too). */}
+      <Modal visible={overlayVisible} animationType="none" statusBarTranslucent onRequestClose={() => {}}>
         <View style={styles.overlay} accessibilityViewIsModal>
           <View style={styles.iconCircle}>
             <Ionicons name="lock-closed" size={34} color={colors.primary} />
@@ -136,7 +161,7 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
             <Text style={styles.link}>Dil nga llogaria</Text>
           </Pressable>
         </View>
-      )}
+      </Modal>
     </AppLockContext.Provider>
   );
 }
@@ -148,6 +173,7 @@ export function useAppLock(): AppLockValue {
 }
 
 const styles = StyleSheet.create({
+  cover: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 3000, backgroundColor: colors.background },
   overlay: {
     position: 'absolute',
     top: 0,

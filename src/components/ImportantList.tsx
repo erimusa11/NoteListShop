@@ -38,6 +38,7 @@ export const ImportantList = memo(function ImportantList({ tripId, entries, empt
           onMove={(to, group) => moveItem(tripId, category.key, item.id, to, group)}
           showQuantity={category.showQuantity}
           personOptions={category.personOptions}
+          hasChoices={!!category.nameOptions}
         />
       )}
       ListEmptyComponent={<Text style={styles.empty}>{emptyText}</Text>}

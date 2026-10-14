@@ -10,6 +10,7 @@
     "backgroundColor": "#FFF8F2",
     "android": {
       "package": "com.eri.noteshoplist",
+      "allowBackup": false,
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

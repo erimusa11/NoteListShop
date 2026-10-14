@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
+import { HOLD_ITEM_TO_DELETE_MS, useHoldToDelete } from '@/hooks/useHoldToDelete';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { NoteItem } from '@/types/models';
 import { formatQuantity } from '@/utils/noteLists';
@@ -13,21 +15,39 @@ interface NoteItemRowProps {
   onToggle: (id: string) => void;
   /** Opens the item to change its name, amount or unit. */
   onPress: (item: NoteItem) => void;
-  /** Asks to delete the item. */
+  /** The row was held long enough to ask to delete the item. */
   onDelete: (item: NoteItem) => void;
   /** In a shopping list: the amount with its unit and the price are shown. In a normal list the item is a text with a priority. */
   shopping?: boolean;
+  /**
+   * The newest list of Note Shop List, where checked items are sent. An item shows the tag "Dërguar te lista" only when its copy
+   * went to this one, the same test the send button and its sheet use.
+   */
+  latestTripId?: string;
 }
 
-// One item of a group: the check, the name and the trash. A shopping list also shows the amount with its unit ("2 kg") and the
+// One item of a group: the check and the name; holding the row asks to delete it. A shopping list also shows the amount with its unit ("2 kg") and the
 // price; a normal list shows the priority (the stripe on the left and the flag). A tap on the row opens it.
-export const NoteItemRow = memo(function NoteItemRow({ item, onToggle, onPress, onDelete, shopping }: NoteItemRowProps) {
+export const NoteItemRow = memo(function NoteItemRow({
+  item,
+  onToggle,
+  onPress,
+  onDelete,
+  shopping,
+  latestTripId,
+}: NoteItemRowProps) {
   const level = priorityInfo(item.importance);
+  const { holdStyle, begin, end } = useHoldToDelete(HOLD_ITEM_TO_DELETE_MS);
   return (
     // No button role on the row itself: on the web that makes a <button>, which cannot hold the check, a button of its own.
     <Pressable
       onPress={() => onPress(item)}
+      onLongPress={() => onDelete(item)}
+      delayLongPress={HOLD_ITEM_TO_DELETE_MS}
+      onPressIn={begin}
+      onPressOut={end}
       accessibilityLabel={`${item.name}, ${shopping ? formatQuantity(item.quantity, item.unit) : level.label}. Ndrysho`}
+      accessibilityHint="Mbaje të shtypur për ta fshirë"
       style={({ pressed }) => [
         styles.card,
         shadow,
@@ -54,6 +74,12 @@ export const NoteItemRow = memo(function NoteItemRow({ item, onToggle, onPress, 
           {item.name}
         </Text>
         {shopping && item.price != null && <Text style={styles.price}>{formatNumber(item.price)} Lekë</Text>}
+        {shopping && item.sentTo !== undefined && item.sentTo === latestTripId && (
+          <View style={styles.sent}>
+            <Ionicons name="paper-plane" size={11} color={colors.success} />
+            <Text style={styles.sentText}>Dërguar te lista</Text>
+          </View>
+        )}
       </View>
       {shopping ? (
         <View style={[styles.quantity, item.done && styles.quantityDone]}>
@@ -69,15 +95,9 @@ export const NoteItemRow = memo(function NoteItemRow({ item, onToggle, onPress, 
           </View>
         )
       )}
-      <Pressable
-        onPress={() => onDelete(item)}
-        hitSlop={6}
-        accessibilityRole="button"
-        accessibilityLabel={`Fshi artikullin ${item.name}`}
-        style={({ pressed }) => [styles.trash, pressed && styles.trashPressed]}
-      >
-        <Ionicons name="trash-outline" size={19} color={colors.textMuted} />
-      </Pressable>
+      <View style={styles.holdTrack}>
+        <Animated.View style={[styles.holdLine, holdStyle]} />
+      </View>
     </Pressable>
   );
 });
@@ -100,6 +120,8 @@ const styles = StyleSheet.create({
   name: { fontSize: 16, lineHeight: 21, fontWeight: '600', color: colors.text },
   price: { fontSize: 13, fontWeight: '700', color: colors.primaryDark, marginTop: 2 },
   nameDone: { color: colors.textMuted, textDecorationLine: 'line-through' },
+  sent: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  sentText: { fontSize: 12, fontWeight: '600', color: colors.success },
   quantity: {
     backgroundColor: colors.primaryLight,
     borderRadius: radii.pill,
@@ -118,6 +140,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   badgeText: { fontSize: 12, fontWeight: '800' },
-  trash: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  trashPressed: { backgroundColor: '#FDE6E3' },
+  holdTrack: { pointerEvents: 'none', position: 'absolute', left: radii.md, right: radii.md, bottom: 0, height: 3 },
+  holdLine: { height: 3, borderRadius: 2, backgroundColor: colors.danger },
 });

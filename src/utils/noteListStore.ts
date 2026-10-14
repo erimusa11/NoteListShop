@@ -7,9 +7,10 @@ import { isTrashExpired } from '@/utils/trash';
 /** Lists made in demo mode: kept in memory only, like the rest of the demo. */
 export const DEMO_NOTE_SCOPE = 'demo';
 
-// The groups of the Note List Shop page live on the phone, one copy per account, like its tasks, and are only read when
-// that page is first opened. Unlike the tasks they are also shown on a screen of their own (the group that was opened),
-// so this store tells everyone who listens when something changes, and both screens always show the same lists.
+// The groups of the Note List Shop page are kept on the phone, one copy per account, and are also sent to the account
+// (see CloudSyncGate), which fills this store when the app opens. They are also shown on a screen of their own (the
+// group that was opened), so this store tells everyone who listens when something changes, and both screens always show
+// the same lists.
 // Next to them it keeps what was deleted (one entry per name), only to suggest it again when adding an item.
 const cache = new Map<string, NoteList[]>();
 const historyCache = new Map<string, NoteHistoryEntry[]>();
@@ -59,20 +60,37 @@ export async function loadNoteLists(scope: string): Promise<NoteList[]> {
   const newer = cache.get(scope);
   if (newer) return newer;
 
-  // Groups that waited in the trash for the full time go now; what they held is only kept as suggestions.
-  const now = Date.now();
-  const gone = lists.filter((list) => list.deletedAt !== undefined && isTrashExpired(list.deletedAt, now));
-  if (gone.length > 0) {
-    lists = lists.filter((list) => !gone.includes(list));
-    history = rememberNoteItems(history, gone.flatMap((list) => list.items));
-    AsyncStorage.setItem(storageKey(scope), JSON.stringify(lists)).catch(() => {});
-    AsyncStorage.setItem(historyKey(scope), JSON.stringify(history)).catch(() => {});
+  const purged = withoutExpired(lists, history);
+  if (purged.changed) {
+    AsyncStorage.setItem(storageKey(scope), JSON.stringify(purged.lists)).catch(() => {});
+    AsyncStorage.setItem(historyKey(scope), JSON.stringify(purged.history)).catch(() => {});
   }
+  lists = purged.lists;
+  history = purged.history;
 
   cache.set(scope, lists);
   historyCache.set(scope, history);
   emit();
   return lists;
+}
+
+// Groups that waited in the trash for the full time go now; what they held is only kept as suggestions.
+function withoutExpired(lists: NoteList[], history: NoteHistoryEntry[]) {
+  const now = Date.now();
+  const gone = lists.filter((list) => list.deletedAt !== undefined && isTrashExpired(list.deletedAt, now));
+  if (gone.length === 0) return { lists, history, changed: false };
+  return {
+    lists: lists.filter((list) => !gone.includes(list)),
+    history: rememberNoteItems(history, gone.flatMap((list) => list.items)),
+    changed: true,
+  };
+}
+
+/** Replaces what is shown and kept on the phone with the lists that came from the account. */
+export function hydrateNoteData(scope: string, lists: NoteList[], history: NoteHistoryEntry[]) {
+  const purged = withoutExpired(lists, history);
+  saveNoteLists(scope, purged.lists);
+  saveNoteHistory(scope, purged.history);
 }
 
 export function saveNoteLists(scope: string, lists: NoteList[]) {
@@ -85,6 +103,17 @@ export function saveNoteHistory(scope: string, history: NoteHistoryEntry[]) {
   historyCache.set(scope, history);
   emit();
   if (scope !== DEMO_NOTE_SCOPE) AsyncStorage.setItem(historyKey(scope), JSON.stringify(history)).catch(() => {});
+}
+
+/**
+ * Forgets the notes of an account on this phone, what is shown and what is saved (for when it signs out or is deleted). The
+ * account's own copy in the cloud is not touched. Nothing shows the notes of a scope that is no longer the open one, so nothing
+ * needs to be told about it.
+ */
+export function forgetNoteScope(scope: string) {
+  cache.delete(scope);
+  historyCache.delete(scope);
+  if (scope !== DEMO_NOTE_SCOPE) AsyncStorage.multiRemove([storageKey(scope), historyKey(scope)]).catch(() => {});
 }
 
 export function clearDemoNoteLists() {

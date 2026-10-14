@@ -57,7 +57,7 @@ export function BottomTabBar<T extends string>({ options, value, onChange }: Bot
           segW.set((e.nativeEvent.layout.width - PADDING * 2) / options.length);
         }}
       >
-        <Animated.View style={[styles.pill, pillStyle]} pointerEvents="none" />
+        <Animated.View style={[styles.pill, pillStyle]} />
         {options.map((option) => {
           const active = option.value === value;
           return (
@@ -98,6 +98,7 @@ const styles = StyleSheet.create({
     padding: PADDING,
   },
   pill: {
+    pointerEvents: 'none',
     position: 'absolute',
     top: PADDING,
     bottom: PADDING,

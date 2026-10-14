@@ -9,46 +9,72 @@ import { EmptyState } from '@/components/EmptyState';
 import { InlineEditableField } from '@/components/InlineEditableField';
 import { NoteItemRow } from '@/components/NoteItemRow';
 import { NoteItemSheet, type NoteItemSheetState } from '@/components/NoteItemSheet';
+import { NoteSectionTabs } from '@/components/NoteSectionTabs';
+import { NoteSendBar } from '@/components/NoteSendBar';
+import { NoteSendSheet, type NoteSendSheetState } from '@/components/NoteSendSheet';
+import { useTrips } from '@/context/TripsContext';
 import { useUndo } from '@/context/UndoContext';
 import { useNoteLists } from '@/hooks/useNoteLists';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
-import type { NoteItem } from '@/types/models';
+import type { NoteItem, NoteSection } from '@/types/models';
 import { formatDateAlbanian } from '@/utils/dates';
 import { goBackOrHome } from '@/utils/navigation';
 import {
   buildNoteSuggestions,
+  DEFAULT_SECTION,
   isProductList,
   type NoteItemFields,
   noteListTotal,
+  sectionOf,
   sortNoteItems,
 } from '@/utils/noteLists';
+import { isSentTo, sendableItems, tripEntryFor } from '@/utils/noteSend';
 import { formatNumber } from '@/utils/totals';
-import { TRASH_DAYS } from '@/utils/trash';
+import { latestTrip } from '@/utils/tripLists';
 
 // One group of the Note List Shop page: its name and the day it was made on top, then its items. In a normal list an item is a
 // text with a priority (the most important first), like a to-do. In a shopping list an item is a product with an amount
 // (copë, kg, gr or liters) and a price, and the list shows the total.
 export default function NoteListScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { lists, history, renameList, removeList, restoreList, addItem, updateItem, toggleItem, removeItem, restoreItem } =
-    useNoteLists();
+  const {
+    lists,
+    history,
+    renameList,
+    addItem,
+    updateItem,
+    toggleItem,
+    removeItem,
+    restoreItem,
+    setItemsDone,
+    markItemsSent,
+  } = useNoteLists();
+  const { trips, addItems, discardItems } = useTrips();
   const { showUndo } = useUndo();
   const list = lists?.find((entry) => entry.id === id);
-  // The sheet is only built once it is first opened.
+  // The sheets are only built once they are first opened.
   const [sheet, setSheet] = useState<NoteItemSheetState | null>(null);
+  const [sendSheet, setSendSheet] = useState<NoteSendSheetState | null>(null);
   // The item that is asked about; kept after the question closes so its name does not vanish while the dialog fades out.
   const [deleteTarget, setDeleteTarget] = useState<NoteItem | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteListOpen, setDeleteListOpen] = useState(false);
 
   // A shopping list: its items have an amount and a price, and the list shows what they all cost together.
   const products = list ? isProductList(list) : false;
+  // A shopping list is divided in two tabs (Ushqime, Detergjente); everything below is about the one that is open.
+  const [section, setSection] = useState<NoteSection>(DEFAULT_SECTION);
+  const allItems = list?.items ?? [];
+  const sectionItems = products ? allItems.filter((item) => sectionOf(item) === section) : allItems;
+  const remaining: Record<NoteSection, number> = {
+    ushqime: allItems.filter((item) => sectionOf(item) === 'ushqime' && !item.done).length,
+    detergjente: allItems.filter((item) => sectionOf(item) === 'detergjente' && !item.done).length,
+  };
   // A shopping list shows its items in the order they were added, a normal list by priority.
-  const items = sortNoteItems(list?.items ?? [], list?.kind);
-  const listTotal = list ? noteListTotal(list) : 0;
+  const items = sortNoteItems(sectionItems, list?.kind);
+  const listTotal = noteListTotal({ items: sectionItems });
   const done = items.filter((item) => item.done).length;
-  // What was added before, in any group or since deleted, that this one does not have yet.
-  const suggestions = buildNoteSuggestions((lists ?? []).filter(isProductList), history, list?.items ?? []);
+  // What was added before, in any group or since deleted, that this tab does not have yet.
+  const suggestions = buildNoteSuggestions((lists ?? []).filter(isProductList), history, sectionItems, section);
 
   const openSheet = (item: NoteItem | null) => setSheet((prev) => ({ item, open: true, key: (prev?.key ?? 0) + 1 }));
   const closeSheet = () => setSheet((prev) => (prev ? { ...prev, open: false } : prev));
@@ -61,7 +87,7 @@ export default function NoteListScreen() {
   const save = (fields: NoteItemFields) => {
     if (!list) return;
     if (sheet?.item) updateItem(list.id, sheet.item.id, fields);
-    else addItem(list.id, fields);
+    else addItem(list.id, products ? { ...fields, section } : fields);
     closeSheet();
   };
   const removeWithUndo = (listId: string, item: NoteItem) => {
@@ -72,14 +98,35 @@ export default function NoteListScreen() {
     if (list && sheet?.item) removeWithUndo(list.id, sheet.item);
     closeSheet();
   };
-  // Leaves the screen first, so the group is never seen as "not found" while it is being removed.
-  const deleteList = () => {
-    if (!list) return;
-    const { id: listId, name } = list;
-    setDeleteListOpen(false);
-    goBackOrHome();
-    removeList(listId);
-    showUndo(`"${name}" u fshi`, () => restoreList(listId));
+
+  // Checking off every item of the open tab at once (or, when they all are, taking the checks away).
+  const allChecked = sectionItems.length > 0 && sectionItems.every((item) => item.done);
+  const toggleAll = () => list && setItemsDone(list.id, sectionItems.map((item) => item.id), !allChecked);
+
+  // The checked items (the only ones that can be sent) go as copies to the newest list of Note Shop List.
+  const sendable = list ? sendableItems(list) : [];
+  const target = latestTrip(trips);
+  // With no list to send to nothing is waiting (the sheet then says so).
+  const waiting = target ? sendable.filter((item) => !isSentTo(item, target.id)).length : 0;
+  const openSend = () => setSendSheet((prev) => ({ open: true, key: (prev?.key ?? 0) + 1 }));
+  const closeSend = () => setSendSheet((prev) => (prev ? { ...prev, open: false } : prev));
+  const send = (chosen: NoteItem[]) => {
+    if (!list || !target || chosen.length === 0) return;
+    const { id: listId } = list;
+    const { id: tripId, name } = target;
+    const created = addItems(tripId, chosen.map(tripEntryFor));
+    // What each item said before (it may have gone to an older list), so taking the copies back leaves everything as it was.
+    const before = Object.fromEntries(chosen.map((item) => [item.id, item.sentTo]));
+    markItemsSent(listId, Object.fromEntries(chosen.map((item) => [item.id, tripId])));
+    closeSend();
+    showUndo(
+      `${chosen.length} ${chosen.length === 1 ? 'artikull u dërgua' : 'artikuj u dërguan'} te "${name}"`,
+      () => {
+        discardItems(tripId, created);
+        markItemsSent(listId, before);
+      },
+      { icon: 'paper-plane', label: 'Kthe dërgimin' },
+    );
   };
 
   return (
@@ -100,17 +147,6 @@ export default function NoteListScreen() {
           </View>
         ) : (
           <Text style={styles.title}>Lista</Text>
-        )}
-        {list && (
-          <Pressable
-            onPress={() => setDeleteListOpen(true)}
-            hitSlop={8}
-            style={styles.headerButton}
-            accessibilityRole="button"
-            accessibilityLabel="Fshi listën"
-          >
-            <Ionicons name="trash-outline" size={21} color={colors.danger} />
-          </Pressable>
         )}
       </View>
 
@@ -140,6 +176,17 @@ export default function NoteListScreen() {
               )}
             </View>
 
+            {products && <NoteSectionTabs value={section} onChange={setSection} remaining={remaining} />}
+            {products && (
+              <NoteSendBar
+                allChecked={allChecked}
+                hasItems={sectionItems.length > 0}
+                onToggleAll={toggleAll}
+                waiting={waiting}
+                onSend={openSend}
+              />
+            )}
+
             <FlatList
               data={items}
               keyExtractor={(item) => item.id}
@@ -148,10 +195,25 @@ export default function NoteListScreen() {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => (
-                <NoteItemRow item={item} onToggle={toggle} onPress={openSheet} onDelete={askDelete} shopping={products} />
+                <NoteItemRow
+                  item={item}
+                  onToggle={toggle}
+                  onPress={openSheet}
+                  onDelete={askDelete}
+                  shopping={products}
+                  latestTripId={target?.id}
+                />
               )}
               ListEmptyComponent={
-                <EmptyState icon="basket-outline" title="x" subtitle="y" />
+                products ? (
+                  <EmptyState
+                    icon={section === 'ushqime' ? 'nutrition-outline' : 'sparkles-outline'}
+                    title={section === 'ushqime' ? 'Asnjë ushqim ende' : 'Asnjë detergjent ende'}
+                    subtitle="Shtyp + për të shtuar produktin e parë."
+                  />
+                ) : (
+                  <EmptyState icon="basket-outline" title="x" subtitle="y" />
+                )
               }
             />
           </View>
@@ -177,33 +239,26 @@ export default function NoteListScreen() {
               shopping={products}
             />}
 
+          {sendSheet && products && (
+            <NoteSendSheet sheet={sendSheet} onClose={closeSend} items={sendable} target={target} onSend={send} />
+          )}
+
           <ConfirmDialog
             visible={deleteOpen}
             title="Fshi artikullin?"
             message={`A je i sigurt që do të fshish "${deleteTarget?.name ?? ''}"?`}
+            // A copy that was sent to a list is the list's own from then on: deleting (or unchecking) the item here leaves it alone.
+            details={
+              deleteTarget?.sentTo !== undefined
+                ? ['Kopja që u dërgua te lista nuk preket. Për ta ndryshuar ose fshirë, shko te lista.']
+                : []
+            }
             confirmLabel="Fshi"
             onConfirm={() => {
               setDeleteOpen(false);
               if (deleteTarget) removeWithUndo(list.id, deleteTarget);
             }}
             onCancel={() => setDeleteOpen(false)}
-          />
-
-          <ConfirmDialog
-            visible={deleteListOpen}
-            title="Fshi listën?"
-            message={`A je i sigurt që do të fshish "${list.name}"?`}
-            details={
-              list.items.length > 0
-                ? [
-                    `${list.items.length} ${list.items.length === 1 ? 'artikull' : 'artikuj'} në të.`,
-                    `Lista ruhet ${TRASH_DAYS} ditë në Koshin dhe mund ta kthesh.`,
-                  ]
-                : [`Lista ruhet ${TRASH_DAYS} ditë në Koshin dhe mund ta kthesh.`]
-            }
-            confirmLabel="Fshi"
-            onConfirm={deleteList}
-            onCancel={() => setDeleteListOpen(false)}
           />
         </>
       ) : (

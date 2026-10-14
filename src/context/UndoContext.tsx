@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { ComponentProps, createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,13 +8,22 @@ import { colors, radii, shadow, spacing } from '@/theme/theme';
 
 /** How long the "Kthe" button stays on screen after something is deleted. */
 const UNDO_MS = 7000;
+/** The bar sits above the round + button that most screens have at the bottom right, so it never covers it. */
+const ABOVE_ADD_BUTTON = 64;
 
-interface UndoValue {
-  /** Tells the user something was deleted and, for a few seconds, lets them take it back with `onUndo`. */
-  showUndo: (message: string, onUndo: () => void) => void;
+interface UndoOptions {
+  /** The icon at the start of the bar; the trash can, as it is for a deletion, when none is given. */
+  icon?: ComponentProps<typeof Ionicons>['name'];
+  /** What a screen reader says for the button; "Kthe fshirjen" when none is given. */
+  label?: string;
 }
 
-interface Pending {
+interface UndoValue {
+  /** Tells the user something was deleted (or done) and, for a few seconds, lets them take it back with `onUndo`. */
+  showUndo: (message: string, onUndo: () => void, options?: UndoOptions) => void;
+}
+
+interface Pending extends UndoOptions {
   key: number;
   message: string;
   onUndo: () => void;
@@ -35,10 +44,10 @@ export function UndoProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const showUndo = useCallback(
-    (message: string, onUndo: () => void) => {
+    (message: string, onUndo: () => void, options?: UndoOptions) => {
       if (timer.current) clearTimeout(timer.current);
       counter.current += 1;
-      setPending({ key: counter.current, message, onUndo });
+      setPending({ key: counter.current, message, onUndo, ...options });
       timer.current = setTimeout(dismiss, UNDO_MS);
     },
     [dismiss],
@@ -61,11 +70,10 @@ export function UndoProvider({ children }: { children: ReactNode }) {
           key={pending.key}
           entering={FadeInDown.duration(160)}
           exiting={FadeOutDown.duration(120)}
-          style={[styles.wrap, { bottom: spacing.md + insets.bottom }]}
-          pointerEvents="box-none"
+          style={[styles.wrap, { bottom: spacing.md + insets.bottom + ABOVE_ADD_BUTTON, pointerEvents: 'box-none' }]}
         >
           <View style={[styles.bar, shadow]} accessibilityLiveRegion="polite">
-            <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
+            <Ionicons name={pending.icon ?? 'trash-outline'} size={18} color="#FFFFFF" />
             <Text style={styles.message} numberOfLines={2}>
               {pending.message}
             </Text>
@@ -77,7 +85,7 @@ export function UndoProvider({ children }: { children: ReactNode }) {
               }}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel="Kthe fshirjen"
+              accessibilityLabel={pending.label ?? 'Kthe fshirjen'}
               style={styles.button}
             >
               <Text style={styles.buttonText}>Kthe</Text>

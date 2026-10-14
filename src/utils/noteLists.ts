@@ -1,4 +1,4 @@
-import type { NoteItem, NoteList, NoteListKind, QuantityUnit } from '@/types/models';
+import type { NoteItem, NoteList, NoteListKind, NoteSection, QuantityUnit } from '@/types/models';
 import { normalizePriority } from '@/utils/priority';
 import { parseQuantity } from '@/utils/quantity';
 import { normalizeText } from '@/utils/suggestions';
@@ -22,6 +22,21 @@ export const UNITS: UnitInfo[] = [
 
 export const DEFAULT_UNIT: QuantityUnit = 'pcs';
 
+/** The parts of a shopping list, in the order of its tabs; the first is where everything without a part belongs. */
+export const NOTE_SECTIONS: { value: NoteSection; label: string; icon: 'nutrition-outline' | 'sparkles-outline' }[] = [
+  { value: 'ushqime', label: 'Ushqime', icon: 'nutrition-outline' },
+  { value: 'detergjente', label: 'Detergjente', icon: 'sparkles-outline' },
+];
+
+export const DEFAULT_SECTION: NoteSection = NOTE_SECTIONS[0].value;
+
+/** The part an item (or a suggestion) belongs to: Ushqime unless it says otherwise. */
+export const sectionOf = (entry: { section?: NoteSection }): NoteSection =>
+  entry.section === 'detergjente' ? 'detergjente' : DEFAULT_SECTION;
+
+/** Only what is stored for the second part: Ushqime is the default and stays unwritten, like the kind of a list. */
+const sectionField = (section: NoteSection | undefined) => (section === 'detergjente' ? { section } : {});
+
 const isUnit = (value: unknown): value is QuantityUnit => UNITS.some((unit) => unit.value === value);
 
 /** "2 kg", "500 gr", "1,5 l", "3 copë". */
@@ -39,6 +54,8 @@ export interface NoteItemFields {
   price?: string;
   /** The priority (1 to 5), only in a normal list. */
   importance?: number;
+  /** The part of a shopping list the item goes in (new items only; an item keeps its part when edited). */
+  section?: NoteSection;
 }
 
 /** The price typed in a field: a number from zero up, or undefined for nothing usable. */
@@ -50,7 +67,7 @@ export function parseNotePrice(text: string | undefined): number | undefined {
 export const isProductList = (list: Pick<NoteList, 'kind'>): boolean => list.kind === 'products';
 
 /** What every item of the list costs together; items without a price add nothing. */
-export function noteListTotal(list: NoteList): number {
+export function noteListTotal(list: Pick<NoteList, 'items'>): number {
   return list.items.reduce((sum, item) => sum + (item.price ?? 0), 0);
 }
 
@@ -62,7 +79,7 @@ export function createNoteList(name: string, kind: NoteListKind = 'work'): NoteL
   return { id: newNoteId(), name: name.trim(), createdAt: Date.now(), items: [], ...(kind === 'products' ? { kind } : {}) };
 }
 
-export function createNoteItem({ name, quantity, unit, price, importance }: NoteItemFields): NoteItem {
+export function createNoteItem({ name, quantity, unit, price, importance, section }: NoteItemFields): NoteItem {
   const cost = parseNotePrice(price);
   return {
     id: newNoteId(),
@@ -73,6 +90,7 @@ export function createNoteItem({ name, quantity, unit, price, importance }: Note
     createdAt: Date.now(),
     ...(cost !== undefined ? { price: cost } : {}),
     ...(importance !== undefined ? { importance: normalizePriority(importance) } : {}),
+    ...sectionField(section),
   };
 }
 
@@ -122,6 +140,8 @@ export function normalizeNoteLists(raw: unknown): NoteList[] {
               createdAt: Number.isFinite(item.createdAt) ? Number(item.createdAt) : 0,
               ...(Number.isFinite(item.price) && Number(item.price) >= 0 ? { price: Number(item.price) } : {}),
               ...(Number.isFinite(item.importance) ? { importance: normalizePriority(Number(item.importance)) } : {}),
+              ...sectionField(item.section as NoteSection | undefined),
+              ...(typeof item.sentTo === 'string' && item.sentTo ? { sentTo: item.sentTo } : {}),
             },
           ];
         }),
@@ -136,6 +156,8 @@ export interface NoteHistoryEntry {
   quantity: number;
   unit: QuantityUnit;
   createdAt: number;
+  /** The part of a shopping list it was in; missing means Ushqime. */
+  section?: NoteSection;
 }
 
 // Plenty for a lifetime of shopping notes, and keeps the copy on the phone small.
@@ -154,6 +176,7 @@ export function normalizeNoteHistory(raw: unknown): NoteHistoryEntry[] {
         quantity: parseQuantity(String(value.quantity ?? '')),
         unit: isUnit(value.unit) ? value.unit : DEFAULT_UNIT,
         createdAt: Number.isFinite(value.createdAt) ? Number(value.createdAt) : 0,
+        ...sectionField(value.section as NoteSection | undefined),
       },
     ];
   });
@@ -161,11 +184,42 @@ export function normalizeNoteHistory(raw: unknown): NoteHistoryEntry[] {
 
 /** The history with these items added: one entry per name, the latest amount and unit it was used with, the newest first. */
 export function rememberNoteItems(history: NoteHistoryEntry[], items: NoteItem[]): NoteHistoryEntry[] {
-  const byName = new Map(history.map((entry) => [normalizeText(entry.name), entry]));
-  for (const { name, quantity, unit, createdAt } of items) {
-    const key = normalizeText(name);
+  // The same name in the other part (a "Sapun" in Ushqime and in Detergjente) is a separate suggestion.
+  const keyOf = (name: string, section: NoteSection | undefined) => `${sectionOf({ section })}:${normalizeText(name)}`;
+  const byName = new Map(history.map((entry) => [keyOf(entry.name, entry.section), entry]));
+  for (const { name, quantity, unit, createdAt, section } of items) {
+    const key = keyOf(name, section);
     const known = byName.get(key);
-    if (key && (!known || createdAt >= known.createdAt)) byName.set(key, { name, quantity, unit, createdAt });
+    if (normalizeText(name) && (!known || createdAt >= known.createdAt)) {
+      byName.set(key, { name, quantity, unit, createdAt, ...sectionField(section) });
+    }
+  }
+  return [...byName.values()].sort((a, b) => b.createdAt - a.createdAt).slice(0, HISTORY_LIMIT);
+}
+
+/**
+ * Both sets of groups together, for the first time a phone meets the account's lists: nothing from either side is lost.
+ * A group (or an item) that is on both sides is taken as the account has it.
+ */
+export function mergeNoteLists(account: NoteList[], phone: NoteList[]): NoteList[] {
+  const known = new Map(account.map((list) => [list.id, list]));
+  const merged = account.map((list) => {
+    const other = phone.find((entry) => entry.id === list.id);
+    if (!other) return list;
+    const ids = new Set(list.items.map((item) => item.id));
+    return { ...list, items: [...list.items, ...other.items.filter((item) => !ids.has(item.id))] };
+  });
+  return [...merged, ...phone.filter((list) => !known.has(list.id))];
+}
+
+/** Both histories together: one entry per name, the newest use of it. */
+export function mergeNoteHistory(account: NoteHistoryEntry[], phone: NoteHistoryEntry[]): NoteHistoryEntry[] {
+  const byName = new Map<string, NoteHistoryEntry>();
+  for (const entry of [...account, ...phone]) {
+    const name = normalizeText(entry.name);
+    const key = `${sectionOf(entry)}:${name}`;
+    const known = byName.get(key);
+    if (name && (!known || entry.createdAt > known.createdAt)) byName.set(key, entry);
   }
   return [...byName.values()].sort((a, b) => b.createdAt - a.createdAt).slice(0, HISTORY_LIMIT);
 }
@@ -183,16 +237,18 @@ export interface NoteSuggestion {
 }
 
 // What was added before, in any group (and what was deleted from them), leaving out what the open group already has.
+// Only what was in the same part (Ushqime or Detergjente) is offered, so a detergent is not suggested in the food tab.
 export function buildNoteSuggestions(
   lists: NoteList[],
   history: NoteHistoryEntry[],
   current: NoteItem[],
+  section: NoteSection = DEFAULT_SECTION,
 ): NoteSuggestion[] {
   const present = new Set(current.map((item) => normalizeText(item.name)));
   const byKey = new Map<string, NoteSuggestion>();
-  const add = ({ name, quantity, unit, createdAt }: NoteHistoryEntry) => {
+  const add = ({ name, quantity, unit, createdAt, section: entrySection }: NoteHistoryEntry) => {
     const key = normalizeText(name);
-    if (!key || present.has(key)) return;
+    if (!key || present.has(key) || sectionOf({ section: entrySection }) !== section) return;
     const known = byKey.get(key);
     if (!known) {
       byKey.set(key, { key, name, quantity, unit, count: 1, lastUsed: createdAt });

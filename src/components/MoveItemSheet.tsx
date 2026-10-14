@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BottomSheet } from '@/components/BottomSheet';
 import { TagGrid } from '@/components/TagGridSheet';
 import type { TagOption } from '@/components/TagString';
+import { useFamilyLabels } from '@/context/FamilyLabelsContext';
 import { colors, radii, spacing } from '@/theme/theme';
 import type { ItemListKey } from '@/types/models';
 import { CATEGORIES, type Category } from '@/utils/categories';
@@ -38,6 +39,7 @@ interface MoveItemSheetProps {
 // Two steps in one sheet: pick the category; if it has groups (Karburant, Shendeti & Vizita…), pick the group too.
 // Picking the category the item is already in opens its groups, to move the item from one to another.
 export function MoveItemSheet({ visible, onClose, current, itemName, starred, onPick }: MoveItemSheetProps) {
+  const { label } = useFamilyLabels();
   const [target, setTarget] = useState<Category | null>(null);
   const currentCategory = CATEGORIES.find((category) => category.key === current);
   const currentGroup = currentCategory ? itemOption(currentCategory, itemName) : null;
@@ -84,7 +86,7 @@ export function MoveItemSheet({ visible, onClose, current, itemName, starred, on
                   style={[styles.option, selected && styles.optionSelected]}
                 >
                   <View style={[styles.dot, { backgroundColor: optionColor(index) }]} />
-                  <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{group}</Text>
+                  <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{label(group)}</Text>
                 </Pressable>
               );
             })}

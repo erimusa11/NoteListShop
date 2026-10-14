@@ -100,6 +100,7 @@ export const SpentList = memo(function SpentList({ tripId, groups, emptyText, fo
             onMove={(to, groupName) => moveItem(tripId, category.key, item.id, to, groupName)}
             showQuantity={category.showQuantity}
             personOptions={category.personOptions}
+            hasChoices={!!category.nameOptions}
           />
         );
       }}
