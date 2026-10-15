@@ -1,9 +1,20 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { BottomSheet } from '@/components/BottomSheet';
 import { PieChart } from '@/components/charts/PieChart';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
+import { formatDateAlbanian } from '@/utils/dates';
 import { CATEGORY_COLORS, type SectionSpend } from '@/utils/reports';
 import { formatPrice } from '@/utils/totals';
+
+/** A list the card can show. */
+export interface PieChoice {
+  id: string;
+  name: string;
+  createdAt: number;
+}
 
 interface LatestListPieProps {
   listName: string;
@@ -11,23 +22,44 @@ interface LatestListPieProps {
   income: number;
   /** A category of the legend (or its slice) was tapped: the key is its section, to open Të shpenzuarat at that part. */
   onPressSection?: (sectionKey: string) => void;
+  /** The lists to switch between (newest first). With more than one, the title opens a choice of them. */
+  choices?: PieChoice[];
+  selectedId?: string;
+  onSelect?: (id: string) => void;
 }
 
 // More entries than this and the legend is laid out in two columns instead of one long list.
 const TWO_COLUMNS_FROM = 4;
 
-export function LatestListPie({ listName, sections, income, onPressSection }: LatestListPieProps) {
+export function LatestListPie({ listName, sections, income, onPressSection, choices, selectedId, onSelect }: LatestListPieProps) {
+  const [pickerOpen, setPickerOpen] = useState(false);
   const total = sections.reduce((sum, s) => sum + s.spent, 0);
   // Only the categories with spending, so all the categories do not make this card a long list of zeros.
   const spent = sections.filter((s) => s.spent > 0);
   const twoColumns = spent.length >= TWO_COLUMNS_FROM;
+  const switchable = !!choices && choices.length > 1 && !!onSelect;
 
   return (
     <View style={[styles.card, shadow]}>
       <View style={styles.header}>
-        <Text style={styles.title} numberOfLines={1}>
-          {listName}
-        </Text>
+        {switchable ? (
+          <Pressable
+            onPress={() => setPickerOpen(true)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`${listName}. Zgjidh një listë tjetër`}
+            style={({ pressed }) => [styles.titleButton, pressed && styles.pressed]}
+          >
+            <Text style={[styles.title, styles.titleInButton]} numberOfLines={1}>
+              {listName}
+            </Text>
+            <Ionicons name="chevron-down" size={16} color={colors.primaryDark} />
+          </Pressable>
+        ) : (
+          <Text style={styles.title} numberOfLines={1}>
+            {listName}
+          </Text>
+        )}
         <Text style={styles.total}>{formatPrice(total)}</Text>
       </View>
       {spent.length === 0 ? (
@@ -90,11 +122,56 @@ export function LatestListPie({ listName, sections, income, onPressSection }: La
           <Text style={styles.plannedValue}>{formatPrice(income)}</Text>
         </View>
       </View>
+
+      {switchable && (
+        <BottomSheet visible={pickerOpen} onClose={() => setPickerOpen(false)} title="Zgjidh listën">
+          <ScrollView style={styles.pickerList} showsVerticalScrollIndicator={false}>
+            {choices.map((entry) => {
+              const selected = entry.id === selectedId;
+              return (
+                <Pressable
+                  key={entry.id}
+                  onPress={() => {
+                    onSelect(entry.id);
+                    setPickerOpen(false);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  style={({ pressed }) => [styles.pickerRow, selected && styles.pickerRowSelected, pressed && styles.pressed]}
+                >
+                  <View style={styles.pickerText}>
+                    <Text style={styles.pickerName} numberOfLines={1}>
+                      {entry.name}
+                    </Text>
+                    <Text style={styles.pickerDate}>Krijuar më {formatDateAlbanian(entry.createdAt)}</Text>
+                  </View>
+                  {selected && <Ionicons name="checkmark-circle" size={22} color={colors.primary} />}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </BottomSheet>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  titleButton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  titleInButton: { flex: 0, flexShrink: 1 },
+  pickerList: { maxHeight: 360 },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radii.md,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.sm,
+  },
+  pickerRowSelected: { backgroundColor: colors.primaryLight },
+  pickerText: { flex: 1 },
+  pickerName: { fontSize: 16, fontWeight: '700', color: colors.text },
+  pickerDate: { fontSize: 12, color: colors.textMuted },
   card: {
     backgroundColor: colors.card,
     borderRadius: radii.md,

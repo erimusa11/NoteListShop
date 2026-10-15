@@ -7,7 +7,8 @@ import { normalizeText } from '@/utils/suggestions';
 // The copy of a starred item that goes into another list: unchecked and back at normal priority.
 // Name, quantity and price are taken as they are; from then on the price (and the rest) belongs to that list alone.
 export function copyToTrip(item: ShoppingItem, tripId: string): ShoppingItem {
-  return { ...item, id: `${tripId}:${item.sharedId}`, bought: false, priority: DEFAULT_PRIORITY };
+  const { boughtAt: _at, ...rest } = item;
+  return { ...rest, id: `${tripId}:${item.sharedId}`, bought: false, priority: DEFAULT_PRIORITY };
 }
 
 // One entry per starred item, taken from the newest list that has it.

@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { BottomSheet } from '@/components/BottomSheet';
 import { PrioritySelector } from '@/components/PrioritySelector';
+import { type Tone, tones } from '@/theme/noteTones';
 import { colors, radii, spacing } from '@/theme/theme';
 import type { NoteItem, QuantityUnit } from '@/types/models';
 import {
@@ -16,6 +17,9 @@ import {
 } from '@/utils/noteLists';
 import { DEFAULT_PRIORITY, normalizePriority } from '@/utils/priority';
 import { DEFAULT_QUANTITY, sanitizeQuantityInput } from '@/utils/quantity';
+
+// Quick choices for the repeat in days (0 is no repeat): a week is the usual reminder.
+const REPEAT_PRESETS = [0, 7, 14, 30];
 
 /** What the sheet is showing: a new item (`item` null) or an existing one. `key` changes with every opening, so the form starts fresh. */
 export interface NoteItemSheetState {
@@ -33,9 +37,11 @@ interface NoteItemSheetProps {
   shopping?: boolean;
   /** What was added before, offered while a new item is typed: one tap adds it with the amount it was last used with. */
   suggestions: NoteSuggestion[];
+  /** The colors of the list the item belongs to (green for the normal list, orange or violet for the shopping one). */
+  tone?: Tone;
 }
 
-export function NoteItemSheet({ sheet, onClose, onSave, onDelete, suggestions, shopping }: NoteItemSheetProps) {
+export function NoteItemSheet({ sheet, onClose, onSave, onDelete, suggestions, shopping, tone = tones.orange }: NoteItemSheetProps) {
   return (
     <BottomSheet visible={sheet.open} onClose={onClose} title={sheet.item ? 'Ndrysho artikullin' : 'Artikull i ri'}>
       <NoteItemForm
@@ -45,6 +51,7 @@ export function NoteItemSheet({ sheet, onClose, onSave, onDelete, suggestions, s
         onDelete={onDelete}
         suggestions={suggestions}
         shopping={shopping}
+        tone={tone}
       />
     </BottomSheet>
   );
@@ -56,12 +63,14 @@ function NoteItemForm({
   onDelete,
   suggestions,
   shopping,
-}: Pick<NoteItemSheetProps, 'onSave' | 'onDelete' | 'suggestions' | 'shopping'> & { item: NoteItem | null }) {
+  tone = tones.orange,
+}: Pick<NoteItemSheetProps, 'onSave' | 'onDelete' | 'suggestions' | 'shopping' | 'tone'> & { item: NoteItem | null }) {
   const [name, setName] = useState(item?.name ?? '');
   // The amount is 1 until it is changed; an empty or invalid one is saved as 1 too.
   const [quantity, setQuantity] = useState(item ? String(item.quantity) : DEFAULT_QUANTITY);
   const [unit, setUnit] = useState<QuantityUnit>(item?.unit ?? DEFAULT_UNIT);
   const [price, setPrice] = useState(item?.price != null ? String(item.price) : '');
+  const [repeat, setRepeat] = useState(item?.repeatDays ? String(item.repeatDays) : '');
   const [importance, setImportance] = useState<number>(normalizePriority(item?.importance ?? DEFAULT_PRIORITY));
   // Deleting takes a second tap, so a stray touch cannot remove an item.
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -74,7 +83,7 @@ function NoteItemForm({
 
   const canSave = name.trim().length > 0;
   const save = () => {
-    if (canSave) onSave({ name, quantity, unit, ...(shopping ? { price } : { importance }) });
+    if (canSave) onSave({ name, quantity, unit, repeatDays: repeat, ...(shopping ? { price } : { importance }) });
   };
 
   return (
@@ -102,10 +111,10 @@ function NoteItemForm({
                 onPress={() => onSave({ name: s.name, quantity: String(s.quantity), unit: s.unit })}
                 accessibilityRole="button"
                 accessibilityLabel={`Shto ${s.name}, ${formatQuantity(s.quantity, s.unit)}`}
-                style={styles.chip}
+                style={[styles.chip, { backgroundColor: tone.light }]}
               >
-                <Ionicons name="add-circle" size={16} color={colors.primary} />
-                <Text style={styles.chipText}>{s.name}</Text>
+                <Ionicons name="add-circle" size={16} color={tone.main} />
+                <Text style={[styles.chipText, { color: tone.dark }]}>{s.name}</Text>
                 <Text style={styles.chipMeta}>{formatQuantity(s.quantity, s.unit)}</Text>
               </Pressable>
             ))}
@@ -117,6 +126,7 @@ function NoteItemForm({
         <>
           <Text style={[styles.label, styles.gap]}>Rëndësia</Text>
           <PrioritySelector value={importance} onChange={setImportance} />
+
         </>
       )}
 
@@ -145,9 +155,9 @@ function NoteItemForm({
                     onPress={() => setUnit(entry.value)}
                     accessibilityRole="radio"
                     accessibilityState={{ selected }}
-                    style={[styles.unit, selected && styles.unitSelected]}
+                    style={[styles.unit, selected && { backgroundColor: tone.light, borderColor: tone.main }]}
                   >
-                    <Text style={[styles.unitText, selected && styles.unitTextSelected]}>{entry.label}</Text>
+                    <Text style={[styles.unitText, selected && [styles.unitTextSelected, { color: tone.dark }]]}>{entry.label}</Text>
                   </Pressable>
                 );
               })}
@@ -168,7 +178,38 @@ function NoteItemForm({
         </>
       )}
 
-      <Pressable onPress={save} disabled={!canSave} accessibilityRole="button" style={[styles.save, !canSave && styles.saveDisabled]}>
+        <Text style={[styles.label, styles.gap]}>Kujtesë: kthehet e pashënuar pas (ditë)</Text>
+        <View style={styles.repeatRow}>
+          <TextInput
+            value={repeat}
+            onChangeText={(text) => setRepeat(text.replace(/\D/g, '').slice(0, 3))}
+            placeholder="—"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="number-pad"
+            style={[styles.input, styles.quantityInput]}
+            accessibilityLabel="Ditë deri sa kthehet"
+            onSubmitEditing={save}
+          />
+          <View style={styles.units}>
+            {REPEAT_PRESETS.map((days) => {
+              const value = days === 0 ? '' : String(days);
+              const selected = repeat === value;
+              return (
+                <Pressable
+                  key={days}
+                  onPress={() => setRepeat(value)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  style={[styles.unit, selected && { backgroundColor: tone.light, borderColor: tone.main }]}
+                >
+                  <Text style={[styles.unitText, selected && [styles.unitTextSelected, { color: tone.dark }]]}>{days === 0 ? 'Jo' : days}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+      <Pressable onPress={save} disabled={!canSave} accessibilityRole="button" style={[styles.save, { backgroundColor: tone.main }, !canSave && styles.saveDisabled]}>
         <Text style={styles.saveText}>{item ? 'Ruaj ndryshimet' : shopping ? 'Shto produktin' : 'Shto shënimin'}</Text>
       </Pressable>
 
@@ -204,14 +245,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: colors.primaryLight,
     borderRadius: radii.pill,
     paddingVertical: 6,
     paddingLeft: 8,
     paddingRight: 12,
   },
-  chipText: { fontSize: 14, fontWeight: '600', color: colors.primaryDark },
+  chipText: { fontSize: 14, fontWeight: '600' },
   chipMeta: { fontSize: 12, color: colors.textMuted },
+  repeatRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   quantityRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   quantityInput: { width: 84, textAlign: 'center', fontWeight: '700' },
   units: { flex: 1, flexDirection: 'row', gap: spacing.xs },
@@ -224,11 +265,9 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'transparent',
   },
-  unitSelected: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
   unitText: { fontSize: 14, fontWeight: '600', color: colors.textMuted },
-  unitTextSelected: { color: colors.primaryDark, fontWeight: '700' },
+  unitTextSelected: { fontWeight: '700' },
   save: {
-    backgroundColor: colors.primary,
     borderRadius: radii.sm,
     paddingVertical: spacing.sm + 4,
     alignItems: 'center',

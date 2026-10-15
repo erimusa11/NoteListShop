@@ -2,14 +2,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Keyboard, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AuthField } from '@/components/AuthField';
+import { DeleteAccountSheet } from '@/components/DeleteAccountSheet';
+import { BrandBackdrop } from '@/components/BrandBackdrop';
+import { FamilyLabelsCard } from '@/components/FamilyLabelsCard';
 import { useAppLock } from '@/context/AppLockContext';
 import { useAuth } from '@/context/AuthContext';
 import { useProfile } from '@/context/ProfileContext';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import { cleanName } from '@/utils/profileName';
+
+// The backdrop above the avatar, without the status bar's height.
+const BANNER_HEIGHT = 112;
 
 // How long after the last keystroke the name is saved.
 const AUTOSAVE_MS = 800;
@@ -17,12 +23,14 @@ const AUTOSAVE_MS = 800;
 // The profile: a name and surname that are used across the app. While they are empty, the name of the Google account is used.
 export default function ProfileScreen() {
   const { demoMode, signOut } = useAuth();
+  const insets = useSafeAreaInsets();
   const profile = useProfile();
   const { supported, enabled: lockEnabled, setEnabled: setLockEnabled } = useAppLock();
   const [first, setFirst] = useState(profile.custom.firstName);
   const [last, setLast] = useState(profile.custom.lastName);
   const [saved, setSaved] = useState(false);
   const [lockError, setLockError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   // What the app will call the user with what is typed now, shown at the top while typing.
   const shown = profile.preview({ firstName: first, lastName: last });
@@ -79,22 +87,13 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-        <Pressable
-          onPress={goBack}
-          hitSlop={8}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel="Kthehu"
-        >
-          <Ionicons name="arrow-back" size={22} color={colors.text} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Profili</Text>
-      </View>
-
+    // The page draws its own top: the backdrop of the app icon goes up under the status bar.
+    <SafeAreaView style={styles.safeArea} edges={['bottom', 'left', 'right']}>
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={styles.banner}>
+            <BrandBackdrop height={BANNER_HEIGHT + insets.top} />
+          </View>
           <View style={styles.hero}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{shown.firstName.charAt(0).toUpperCase()}</Text>
@@ -177,6 +176,8 @@ export default function ProfileScreen() {
             )}
           </View>
 
+          <FamilyLabelsCard />
+
           {supported && !demoMode && (
             <View style={[styles.card, shadow]}>
               <View style={styles.lockRow}>
@@ -185,7 +186,10 @@ export default function ProfileScreen() {
                 </View>
                 <View style={styles.lockText}>
                   <Text style={styles.lockTitle}>Kyçja e aplikacionit</Text>
-                  <Text style={styles.lockHint}>Gjurmë gishti, PIN ose model kur e hap</Text>
+                  <Text style={styles.lockHint}>
+                    Gjurmë gishti, PIN ose model kur e hap. Ekrani fshihet edhe në aplikacionet e fundit dhe pamjet e
+                    ekranit bllokohen.
+                  </Text>
                 </View>
                 <Switch
                   value={lockEnabled}
@@ -198,12 +202,62 @@ export default function ProfileScreen() {
             </View>
           )}
 
+          {!demoMode && (
+            <View style={[styles.card, shadow]}>
+              <View style={styles.lockRow}>
+                <View style={styles.lockIcon}>
+                  <Ionicons name="shield-checkmark" size={22} color={colors.primaryDark} />
+                </View>
+                <View style={styles.lockText}>
+                  <Text style={styles.lockTitle}>Privatësia</Text>
+                  <Text style={styles.lockHint}>
+                    Të dhënat e tua ruhen vetëm në llogarinë tënde dhe i sheh vetëm ti.
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.legalLinks}>
+                <Pressable onPress={() => router.push('/terms')} hitSlop={8} accessibilityRole="link">
+                  <Text style={styles.link}>Kushtet e përdorimit</Text>
+                </Pressable>
+                <Pressable onPress={() => router.push('/privacy')} hitSlop={8} accessibilityRole="link">
+                  <Text style={styles.link}>Politika e privatësisë</Text>
+                </Pressable>
+              </View>
+              <Pressable
+                onPress={() => setDeleteOpen(true)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Fshi llogarinë dhe të gjitha të dhënat"
+              >
+                <Text style={styles.dangerLink}>Fshi llogarinë dhe të dhënat</Text>
+              </Pressable>
+            </View>
+          )}
+
           <Pressable onPress={signOut} accessibilityRole="button" style={styles.signOutButton}>
             <Ionicons name="log-out-outline" size={20} color={colors.danger} />
             <Text style={styles.signOutText}>{demoMode ? 'Dil nga demo' : 'Dil nga llogaria'}</Text>
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Over the backdrop, and staying in place while the page scrolls. */}
+      <View style={[styles.header, { top: insets.top + spacing.sm }]}>
+        <Pressable
+          onPress={goBack}
+          hitSlop={8}
+          style={[styles.backButton, shadow]}
+          accessibilityRole="button"
+          accessibilityLabel="Kthehu"
+        >
+          <Ionicons name="arrow-back" size={22} color={colors.text} />
+        </Pressable>
+        <Text style={styles.headerTitle} accessibilityRole="header">
+          Profili
+        </Text>
+      </View>
+
+      {!demoMode && deleteOpen && <DeleteAccountSheet visible onClose={() => setDeleteOpen(false)} />}
     </SafeAreaView>
   );
 }
@@ -212,13 +266,16 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: colors.background },
   header: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
   },
+  // Across the whole width of the page, up to its top: the content has a margin that the backdrop does not keep.
+  banner: { marginHorizontal: -spacing.md, marginTop: -spacing.md },
   backButton: {
     width: 38,
     height: 38,
@@ -229,7 +286,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 20, fontWeight: '700', color: colors.text },
   scroll: { padding: spacing.md, paddingBottom: spacing.xl, gap: spacing.md, width: '100%', maxWidth: 520, alignSelf: 'center' },
-  hero: { alignItems: 'center', gap: 4, paddingVertical: spacing.sm },
+  // The avatar sits on the lower edge of the backdrop (half of it, and the gap between the blocks).
+  hero: { alignItems: 'center', gap: 4, paddingBottom: spacing.sm, marginTop: -(48 + spacing.md) },
   avatar: {
     width: 96,
     height: 96,
@@ -277,6 +335,8 @@ const styles = StyleSheet.create({
   primaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   disabled: { opacity: 0.5 },
   link: { fontSize: 14, fontWeight: '600', color: colors.primaryDark, textAlign: 'center' },
+  legalLinks: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', columnGap: spacing.lg, rowGap: spacing.xs },
+  dangerLink: { fontSize: 14, fontWeight: '600', color: colors.danger, textAlign: 'center' },
   lockRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   lockIcon: {
     width: 40,

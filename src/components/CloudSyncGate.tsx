@@ -1,17 +1,35 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SplashScreen from 'expo-splash-screen';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/context/AuthContext';
+import { useFamilyLabels } from '@/context/FamilyLabelsContext';
 import { useTrips } from '@/context/TripsContext';
 import { db } from '@/lib/firebase';
 import { colors, radii, spacing } from '@/theme/theme';
-import { clearDemoNoteLists } from '@/utils/noteListStore';
-import { clearDemoTasks } from '@/utils/taskStore';
+import type { NoteList } from '@/types/models';
+import { normalizeLabels } from '@/utils/familyLabels';
+import {
+  mergeNoteHistory,
+  mergeNoteLists,
+  type NoteHistoryEntry,
+  normalizeNoteHistory,
+  normalizeNoteLists,
+} from '@/utils/noteLists';
+import {
+  cachedNoteHistory,
+  cachedNoteLists,
+  clearDemoNoteLists,
+  hydrateNoteData,
+  loadNoteLists,
+  subscribeNoteLists,
+} from '@/utils/noteListStore';
+import { cloudCopyKey, forgetPhoneData, noteSyncKey } from '@/utils/phoneData';
 import { upgradeLegacyTrips, type StoredData } from '@/utils/tripLists';
+import { withTimeout } from '@/utils/withTimeout';
 
 const SAVE_DELAY_MS = 700;
 const OFFLINE_LOAD_TIMEOUT_MS = 6000;
@@ -23,12 +41,20 @@ const asList = (value: unknown): unknown[] => (Array.isArray(value) ? value : []
 
 // Data from an older version or a damaged copy may lack a list or hold a broken trip: every list becomes a real
 // array and anything that is not a trip object is dropped, so the rest of the app can rely on the shape.
+// The note lists are null when the data never had any (an account from before they were synced), which is not the same
+// as having none: the lists on the phone are kept then.
 function normalize(data: Record<string, unknown> | undefined) {
   return {
     trips: asList(data?.trips).filter((trip) => trip !== null && typeof trip === 'object'),
     bills: asList(data?.bills),
     supplies: asList(data?.supplies),
     wishlist: asList(data?.wishlist),
+    noteLists: Array.isArray(data?.noteLists) ? normalizeNoteLists(data.noteLists) : (null as NoteList[] | null),
+    noteHistory: Array.isArray(data?.noteHistory)
+      ? normalizeNoteHistory(data.noteHistory)
+      : (null as NoteHistoryEntry[] | null),
+    // The names the person gave to the family's choices (people, cars); none in data from before they could be changed.
+    labels: normalizeLabels(data?.labels),
   };
 }
 
@@ -41,7 +67,10 @@ interface LocalCopy {
   dirty: boolean;
 }
 
-const cacheKey = (uid: string) => `cloudCopy.${uid}`;
+// `noteSyncKey` is set once this phone has taken part in the sync of the note lists: before that, its lists are merged with the
+// account's instead of being replaced by them, so notes made on several phones before the sync existed all survive.
+const cacheKey = cloudCopyKey;
+const NO_HISTORY: NoteHistoryEntry[] = [];
 
 async function readCopy(uid: string): Promise<LocalCopy | null> {
   try {
@@ -58,25 +87,10 @@ function writeCopy(uid: string, copy: LocalCopy) {
   AsyncStorage.setItem(cacheKey(uid), JSON.stringify(copy)).catch(() => {});
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject({ code: 'timeout' }), ms);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
-}
-
 export function CloudSyncGate({ children }: { children: ReactNode }) {
   const { user, hasPassword, loading, demoMode, signOut } = useAuth();
   const { allTrips, hydrate: hydrateTrips } = useTrips();
+  const { labels, hydrate: hydrateLabels } = useFamilyLabels();
 
   const uid = user && hasPassword && db ? user.uid : null;
   const [loadedUid, setLoadedUid] = useState<string | null>(null);
@@ -88,13 +102,23 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
   const [unsynced, setUnsynced] = useState(false);
   const [pendingShown, setPendingShown] = useState(false);
   const insets = useSafeAreaInsets();
+  const noteLists = useSyncExternalStore(
+    subscribeNoteLists,
+    () => (uid ? cachedNoteLists(uid) : null),
+    () => null,
+  );
+  const noteHistory = useSyncExternalStore(
+    subscribeNoteLists,
+    () => (uid ? cachedNoteHistory(uid) : NO_HISTORY),
+    () => NO_HISTORY,
+  );
   const lastSaved = useRef('');
   const latestJson = useRef('');
   const previousUid = useRef<string | null>(null);
 
-  const hydrators = useRef({ hydrateTrips });
+  const hydrators = useRef({ hydrateTrips, hydrateLabels });
   useEffect(() => {
-    hydrators.current = { hydrateTrips };
+    hydrators.current = { hydrateTrips, hydrateLabels };
   });
 
   // Demo data lives only in memory (uid stays null, so nothing syncs); drop it when leaving demo mode.
@@ -107,19 +131,21 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
     if (!wasDemo.current) return;
     wasDemo.current = false;
     hydrators.current.hydrateTrips([]);
-    clearDemoTasks();
+    hydrators.current.hydrateLabels({});
     clearDemoNoteLists();
   }, [demoMode]);
 
   useEffect(() => {
     if (!uid || !db) {
       if (previousUid.current) {
-        // Drop the phone copy on sign-out, unless it still holds changes that never reached the account.
+        // Drop everything the phone keeps of the account on sign-out (the offline copy and the notes, so nothing is left on a
+        // phone that is lent or lost), unless it still holds changes that never reached the account.
         const leaving = previousUid.current;
         readCopy(leaving).then((copy) => {
-          if (copy && !copy.dirty) AsyncStorage.removeItem(cacheKey(leaving)).catch(() => {});
+          if (copy && !copy.dirty) forgetPhoneData(leaving);
         });
         hydrators.current.hydrateTrips([]);
+        hydrators.current.hydrateLabels({});
         lastSaved.current = '';
       }
       previousUid.current = null;
@@ -145,10 +171,14 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
       if (cancelled) return;
 
       let data: CloudData;
+      // A copy still marked as unsent that is exactly what the account holds (the app was closed just after the account
+      // confirmed the save): it is not holding anything back, so it counts as sent.
+      let alreadySent = false;
       if (server) {
         // Unsent changes from the phone win, so nothing made offline is lost; they are pushed right after.
         data = copy?.dirty ? copy.data : server;
         lastSaved.current = JSON.stringify(server);
+        alreadySent = Boolean(copy?.dirty) && JSON.stringify(copy?.data) === lastSaved.current;
       } else if (copy && failure?.code !== 'permission-denied') {
         data = copy.data;
         lastSaved.current = copy.dirty ? '' : JSON.stringify(data);
@@ -161,9 +191,32 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
         return;
       }
 
+      // The note lists are kept on the phone as well, so they are read from there and joined with the account's.
+      const [phoneLists, synced] = await Promise.all([
+        loadNoteLists(uid),
+        AsyncStorage.getItem(noteSyncKey(uid)).then(
+          (raw) => raw === '1',
+          () => false,
+        ),
+      ]);
+      if (cancelled) return;
+      const phoneHistory = cachedNoteHistory(uid);
+      if (data.noteLists !== null) {
+        data = {
+          ...data,
+          noteLists: synced ? data.noteLists : mergeNoteLists(data.noteLists, phoneLists),
+          noteHistory: synced ? (data.noteHistory ?? []) : mergeNoteHistory(data.noteHistory ?? [], phoneHistory),
+        };
+      } else {
+        data = { ...data, noteLists: phoneLists, noteHistory: phoneHistory };
+      }
+      hydrateNoteData(uid, data.noteLists ?? [], data.noteHistory ?? []);
+      AsyncStorage.setItem(noteSyncKey(uid), '1').catch(() => {});
+
       latestJson.current = JSON.stringify(data);
-      if (!copy?.dirty) writeCopy(uid, { data, dirty: false });
+      if (!copy?.dirty || alreadySent) writeCopy(uid, { data, dirty: false });
       hydrators.current.hydrateTrips(upgradeLegacyTrips(data as StoredData));
+      hydrators.current.hydrateLabels(data.labels);
       setLoadedUid(uid);
     })().catch(() => {
       // Anything unexpected while loading shows the retry panel instead of an endless spinner.
@@ -176,9 +229,9 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
   }, [uid, attempt]);
 
   useEffect(() => {
-    if (!uid || !db || loadedUid !== uid) return;
+    if (!uid || !db || loadedUid !== uid || !noteLists) return;
     // bills, supplies and wishlist now live inside each trip; the empty lists stay because the Firestore rules still require them.
-    const payload = { trips: allTrips, bills: [], supplies: [], wishlist: [] };
+    const payload: CloudData = { trips: allTrips, bills: [], supplies: [], wishlist: [], noteLists, noteHistory, labels };
     const json = JSON.stringify(payload);
     latestJson.current = json;
     if (json === lastSaved.current) return;
@@ -188,8 +241,16 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
     setUnsynced(true);
 
     const timer = setTimeout(() => {
-      setDoc(doc(db!, 'users', uid), { ...payload, updatedAt: serverTimestamp() })
+      // The names are only sent once some were changed, so an account that never changed them is saved the way it always was.
+      const { labels: custom, ...rest } = payload;
+      setDoc(doc(db!, 'users', uid), {
+        ...rest,
+        ...(Object.keys(custom ?? {}).length > 0 ? { labels: custom } : {}),
+        updatedAt: serverTimestamp(),
+      })
         .then(() => {
+          // Signed out in the meantime: the phone copy was dealt with then, and must not be written back now.
+          if (previousUid.current !== uid) return;
           lastSaved.current = json;
           setSaveError(null);
           if (latestJson.current === json) {
@@ -197,11 +258,17 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
             setUnsynced(false);
           }
         })
-        .catch(() => setSaveError('Ruajtja në llogari dështoi. Do të provojmë përsëri kur të ndryshosh diçka.'));
+        .catch((error: { code?: string }) =>
+          setSaveError(
+            error?.code === 'permission-denied'
+              ? 'Rregullat e Firestore nuk e lejojnë ruajtjen. Publiko skedarin firestore.rules te Firebase (Firestore Database > Rules).'
+              : 'Ruajtja në llogari dështoi. Do të provojmë përsëri kur të ndryshosh diçka.',
+          ),
+        );
     }, SAVE_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [uid, loadedUid, allTrips]);
+  }, [uid, loadedUid, allTrips, noteLists, noteHistory, labels]);
 
   // While this panel stands in for the app no navigator exists, and the splash screen is only hidden once one does;
   // without this the retry and sign-out buttons would sit behind a splash that never leaves.
@@ -260,12 +327,12 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
     <View style={styles.flex}>
       {children}
       {saveError ? (
-        <View style={[styles.banner, { paddingTop: insets.top + spacing.xs }]} pointerEvents="none">
+        <View style={[styles.banner, { paddingTop: insets.top + spacing.xs }]}>
           <Text style={styles.bannerText}>{saveError}</Text>
         </View>
       ) : (
         pendingShown && (
-          <View style={[styles.banner, styles.bannerPending, { paddingTop: insets.top + spacing.xs }]} pointerEvents="none">
+          <View style={[styles.banner, styles.bannerPending, { paddingTop: insets.top + spacing.xs }]}>
             <Text style={styles.bannerText}>Pa internet — ndryshimet janë ruajtur në telefon dhe dërgohen kur të kthehet.</Text>
           </View>
         )
@@ -296,6 +363,7 @@ const styles = StyleSheet.create({
   buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   link: { fontSize: 14, fontWeight: '600', color: colors.primaryDark },
   banner: {
+    pointerEvents: 'none',
     position: 'absolute',
     top: 0,
     left: 0,

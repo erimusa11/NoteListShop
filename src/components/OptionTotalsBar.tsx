@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useFamilyLabels } from '@/context/FamilyLabelsContext';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { OptionTotal } from '@/utils/options';
 import { formatPrice } from '@/utils/totals';
@@ -16,6 +17,7 @@ interface OptionTotalsBarProps {
 // What each choice of a category (Naftë, Gaz, Benzinë; Drion, Alois…) adds up to, under the category total.
 // Each one is also a filter for the list below it. More than three wrap onto a second row.
 export function OptionTotalsBar({ options, selected, onSelect }: OptionTotalsBarProps) {
+  const { label } = useFamilyLabels();
   return (
     <View style={styles.wrap}>
       <View style={[styles.container, shadow]}>
@@ -27,14 +29,14 @@ export function OptionTotalsBar({ options, selected, onSelect }: OptionTotalsBar
               onPress={() => onSelect(active ? null : option.name)}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
-              accessibilityLabel={`${option.name}, ${formatPrice(option.total)}`}
+              accessibilityLabel={`${label(option.name)}, ${formatPrice(option.total)}`}
               accessibilityHint={active ? 'Shfaq të gjitha' : 'Shfaq vetëm këtë'}
               style={[styles.cell, active && { backgroundColor: option.color + '22' }]}
             >
               <View style={styles.labelRow}>
                 <View style={[styles.dot, { backgroundColor: option.color }]} />
                 <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
-                  {option.name}
+                  {label(option.name)}
                 </Text>
               </View>
               <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
@@ -52,7 +54,7 @@ export function OptionTotalsBar({ options, selected, onSelect }: OptionTotalsBar
           hitSlop={8}
           style={styles.filterPill}
         >
-          <Text style={styles.filterText}>Vetëm: {selected}</Text>
+          <Text style={styles.filterText}>Vetëm: {label(selected)}</Text>
           <Ionicons name="close-circle" size={16} color={colors.primaryDark} />
         </Pressable>
       )}

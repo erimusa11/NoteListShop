@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import type { ShoppingItem } from '@/types/models';
 
+import { useFamilyLabels } from '@/context/FamilyLabelsContext';
 import { colors, radii, spacing } from '@/theme/theme';
 import {
   describeDays,
@@ -106,6 +107,7 @@ interface FixedSectionProps {
 
 // Amounts that have nothing to do with the days (a monthly fee, a trip, books…): a label, a level and an amount.
 function FixedSection({ kid, items, levels, defaultLevel, onAdd, onPrice, onRemove }: FixedSectionProps) {
+  const { label: nameOf } = useFamilyLabels();
   const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState('');
   const [level, setLevel] = useState(defaultLevel);
@@ -140,7 +142,7 @@ function FixedSection({ kid, items, levels, defaultLevel, onAdd, onPrice, onRemo
             value={item.price != null ? String(item.price) : ''}
             placeholder="Çmimi"
             width={86}
-            label={`Çmimi fiks, ${kid} ${item.note || item.name}`}
+            label={`Çmimi fiks, ${nameOf(kid)} ${item.note || item.name}`}
             sanitize={sanitizeQuantityInput}
             onCommit={(text) => onPrice(item.id, text)}
           />
@@ -149,7 +151,7 @@ function FixedSection({ kid, items, levels, defaultLevel, onAdd, onPrice, onRemo
             onPress={() => onRemove(item.id)}
             hitSlop={6}
             accessibilityRole="button"
-            accessibilityLabel={`Hiq çmimin fiks ${item.note || item.name} të ${kid}`}
+            accessibilityLabel={`Hiq çmimin fiks ${item.note || item.name} të ${nameOf(kid)}`}
             style={({ pressed }) => [styles.trash, pressed && styles.stepPressed]}
           >
             <Ionicons name="trash-outline" size={18} color={colors.danger} />
@@ -166,7 +168,7 @@ function FixedSection({ kid, items, levels, defaultLevel, onAdd, onPrice, onRemo
             placeholderTextColor={colors.textMuted}
             style={styles.formInput}
             maxLength={60}
-            accessibilityLabel={`Emërtimi i çmimit fiks të ${kid}`}
+            accessibilityLabel={`Emërtimi i çmimit fiks të ${nameOf(kid)}`}
           />
           <View style={styles.levels}>
             {levels.map((entry) => {
@@ -189,7 +191,7 @@ function FixedSection({ kid, items, levels, defaultLevel, onAdd, onPrice, onRemo
               value={amount}
               placeholder="Shuma"
               width={110}
-              label={`Shuma e çmimit fiks të ${kid}`}
+              label={`Shuma e çmimit fiks të ${nameOf(kid)}`}
               sanitize={sanitizeQuantityInput}
               onCommit={setAmount}
             />
@@ -216,7 +218,7 @@ function FixedSection({ kid, items, levels, defaultLevel, onAdd, onPrice, onRemo
             setAdding(true);
           }}
           accessibilityRole="button"
-          accessibilityLabel={`Shto çmim fiks për ${kid}`}
+          accessibilityLabel={`Shto çmim fiks për ${nameOf(kid)}`}
           style={({ pressed }) => [styles.sync, pressed && styles.stepPressed]}
         >
           <Ionicons name="add-circle-outline" size={16} color={colors.primaryDark} />
@@ -240,6 +242,7 @@ interface PlaceRowProps {
 // One place of one child: how many days are paid, what a day costs, and what that makes. The days can be changed here
 // directly (a number, or one by one with the steppers) without marking each of them on the calendar.
 function PlaceRow({ kid, row, place, draft, suggested, onDays, onPrice }: PlaceRowProps) {
+  const { label: nameOf } = useFamilyLabels();
   const paid = row.place;
   const priceValue = row.item ? (row.price != null ? String(row.price) : '') : draft;
   return (
@@ -256,18 +259,18 @@ function PlaceRow({ kid, row, place, draft, suggested, onDays, onPrice }: PlaceR
         <View style={styles.field}>
           <Text style={styles.fieldLabel}>Ditë</Text>
           <View style={styles.fieldRow}>
-            <Stepper icon="remove" label={`Një ditë më pak, ${kid} ${place.label}`} disabled={row.days <= 0} onPress={() => onDays(kid, paid, row.days - 1)} />
+            <Stepper icon="remove" label={`Një ditë më pak, ${nameOf(kid)} ${place.label}`} disabled={row.days <= 0} onPress={() => onDays(kid, paid, row.days - 1)} />
             <NumberBox
               value={String(row.days)}
               width={54}
-              label={`Ditët e ${kid} në ${place.label}`}
+              label={`Ditët e ${nameOf(kid)} në ${place.label}`}
               sanitize={sanitizeDays}
               onCommit={(text) => {
                 const days = parseInt(text, 10);
                 if (Number.isFinite(days)) onDays(kid, paid, days);
               }}
             />
-            <Stepper icon="add" label={`Një ditë më shumë, ${kid} ${place.label}`} onPress={() => onDays(kid, paid, row.days + 1)} />
+            <Stepper icon="add" label={`Një ditë më shumë, ${nameOf(kid)} ${place.label}`} onPress={() => onDays(kid, paid, row.days + 1)} />
           </View>
         </View>
 
@@ -278,7 +281,7 @@ function PlaceRow({ kid, row, place, draft, suggested, onDays, onPrice }: PlaceR
               value={priceValue}
               placeholder={suggested != null ? String(suggested) : 'Çmimi'}
               width={86}
-              label={`Çmimi i një dite, ${kid} ${place.label}`}
+              label={`Çmimi i një dite, ${nameOf(kid)} ${place.label}`}
               sanitize={sanitizeQuantityInput}
               onCommit={(text) => onPrice(kid, paid, text)}
             />
@@ -318,6 +321,7 @@ export function AttendanceSummary({
   onFixedPrice,
   onRemoveFixed,
 }: AttendanceSummaryProps) {
+  const { label: nameOf, initial } = useFamilyLabels();
   const totalDays = summary.reduce((sum, kid) => sum + kid.days, 0);
   const totalAmount = summary.reduce((sum, kid) => sum + kid.amount, 0);
 
@@ -330,9 +334,9 @@ export function AttendanceSummary({
           <View key={entry.kid} style={styles.kid}>
             <View style={styles.kidHeader}>
               <View style={[styles.avatar, { backgroundColor: info?.color ?? colors.textMuted }]}>
-                <Text style={styles.avatarText}>{info?.initial ?? entry.kid.charAt(0)}</Text>
+                <Text style={styles.avatarText}>{initial(entry.kid)}</Text>
               </View>
-              <Text style={styles.kidName}>{entry.kid}</Text>
+              <Text style={styles.kidName}>{nameOf(entry.kid)}</Text>
               <Text style={styles.kidTotal}>
                 {entry.days} ditë · {formatPrice(entry.amount)}
               </Text>
@@ -367,7 +371,7 @@ export function AttendanceSummary({
               </View>
             )}
 
-            {empty && <Text style={styles.hint}>Zgjidh më sipër ku shkon {entry.kid}, pastaj shëno ditët.</Text>}
+            {empty && <Text style={styles.hint}>Zgjidh më sipër ku shkon {nameOf(entry.kid)}, pastaj shëno ditët.</Text>}
 
             <FixedSection
               kid={entry.kid}

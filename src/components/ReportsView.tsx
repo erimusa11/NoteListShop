@@ -5,6 +5,7 @@ import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { ColumnChart } from '@/components/charts/ColumnChart';
 import { PieChart } from '@/components/charts/PieChart';
 import { EmptyState } from '@/components/EmptyState';
+import { useFamilyLabels } from '@/context/FamilyLabelsContext';
 import { useTrips } from '@/context/TripsContext';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import { CATEGORIES } from '@/utils/categories';
@@ -73,9 +74,12 @@ const OptionCard = memo(function OptionCard({
   history: OptionHistory;
   onOpenTrip: (id: string) => void;
 }) {
-  const { category, options, total } = history;
+  const { category, total } = history;
+  const { label } = useFamilyLabels();
   const hasSpend = total > 0;
-  const listCount = options[0]?.columns.length ?? 0;
+  const listCount = history.options[0]?.columns.length ?? 0;
+  // Only the choices that cost something: the ones at zero would just be lines of zeros.
+  const options = history.options.filter((option) => option.total > 0);
 
   return (
     <View style={[styles.card, shadow]}>
@@ -96,27 +100,25 @@ const OptionCard = memo(function OptionCard({
           <View key={option.name} style={styles.optionBlock}>
             <View style={styles.totalRow}>
               <View style={[styles.dot, { backgroundColor: option.color }]} />
-              <Text style={[styles.totalName, option.total === 0 && styles.muted]} numberOfLines={1}>
-                {option.name}
+              <Text style={styles.totalName} numberOfLines={1}>
+                {label(option.name)}
               </Text>
-              <Text style={[styles.totalPercent, option.total === 0 && styles.muted]}>
+              <Text style={styles.totalPercent}>
                 {Math.round((option.total / total) * 100)}%
               </Text>
-              <Text style={[styles.totalValue, option.total === 0 && styles.muted]}>{formatPrice(option.total)}</Text>
+              <Text style={styles.totalValue}>{formatPrice(option.total)}</Text>
             </View>
-            {option.total > 0 && (
-              <ColumnChart
-                data={option.columns.map((column) => ({
-                  key: column.id,
-                  label: formatDayMonthShort(column.createdAt),
-                  description: `${column.name}, ${formatPrice(column.spent)} për ${option.name}`,
-                  value: column.spent,
-                }))}
-                color={option.color}
-                height={72}
-                onPressColumn={onOpenTrip}
-              />
-            )}
+            <ColumnChart
+              data={option.columns.map((column) => ({
+                key: column.id,
+                label: formatDayMonthShort(column.createdAt),
+                description: `${column.name}, ${formatPrice(column.spent)} për ${label(option.name)}`,
+                value: column.spent,
+              }))}
+              color={option.color}
+              height={72}
+              onPressColumn={onOpenTrip}
+            />
           </View>
         ))}
     </View>
@@ -127,6 +129,8 @@ const OptionCard = memo(function OptionCard({
 function TotalsCard({ histories }: { histories: CategoryHistory[] }) {
   const grandTotal = histories.reduce((sum, h) => sum + h.total, 0);
   const listCount = histories[0]?.columns.length ?? 0;
+  // Only the categories that cost something, the biggest first.
+  const spent = histories.filter((h) => h.total > 0).sort((a, b) => b.total - a.total);
 
   return (
     <View style={[styles.card, shadow]}>
@@ -134,26 +138,28 @@ function TotalsCard({ histories }: { histories: CategoryHistory[] }) {
         <Text style={styles.totalsTitle}>Totali sipas kategorisë</Text>
         <Text style={styles.cardSubtitle}>{listsLabel(listCount)}</Text>
       </View>
-      <View style={styles.totalsList}>
-        {histories.map(({ category, total }) => (
-          <View key={category.section} style={styles.totalRow}>
-            <View style={[styles.dot, { backgroundColor: category.color }]} />
-            <Text style={[styles.totalName, total === 0 && styles.muted]} numberOfLines={2}>
-              {category.label}
-            </Text>
-            <Text style={[styles.totalPercent, total === 0 && styles.muted]}>
-              {grandTotal > 0 ? `${Math.round((total / grandTotal) * 100)}%` : '0%'}
-            </Text>
-            <Text style={[styles.totalValue, total === 0 && styles.muted]}>{formatPrice(total)}</Text>
-          </View>
-        ))}
-      </View>
+      {spent.length === 0 ? (
+        <Text style={styles.cardSubtitle}>Asnjë shpenzim ende</Text>
+      ) : (
+        <View style={styles.totalsList}>
+          {spent.map(({ category, total }) => (
+            <View key={category.section} style={styles.totalRow}>
+              <View style={[styles.dot, { backgroundColor: category.color }]} />
+              <Text style={styles.totalName} numberOfLines={2}>
+                {category.label}
+              </Text>
+              <Text style={styles.totalPercent}>{Math.round((total / grandTotal) * 100)}%</Text>
+              <Text style={styles.totalValue}>{formatPrice(total)}</Text>
+            </View>
+          ))}
+        </View>
+      )}
       <View style={styles.grandRow}>
         <Text style={styles.grandLabel}>Gjithsej</Text>
         <Text style={styles.grandValue}>{formatPrice(grandTotal)}</Text>
       </View>
       {grandTotal > 0 && (
-        <PieChart slices={histories.map(({ category, total }) => ({ key: category.section, value: total, color: category.color }))} />
+        <PieChart slices={spent.map(({ category, total }) => ({ key: category.section, value: total, color: category.color }))} />
       )}
     </View>
   );
@@ -176,17 +182,19 @@ export function ReportsView({ onOpenTrip }: ReportsViewProps) {
         [buildOptionHistory(trips, category), buildPersonHistory(trips, category)] as const,
       ]),
     );
+    // The totals come first. A category (or a split) that cost nothing has no chart.
     return [
+      { kind: 'totals', key: 'totals' },
       ...histories.flatMap((history): ReportRow[] => {
         const { section } = history.category;
         const [options, people] = splits.get(section) ?? [null, null];
-        return [
+        const cards: ReportRow[] = [
           { kind: 'category', key: section, history },
           ...(options ? [{ kind: 'options' as const, key: `${section}-options`, history: options }] : []),
           ...(people ? [{ kind: 'options' as const, key: `${section}-people`, history: people }] : []),
         ];
+        return cards.filter((row) => row.kind === 'totals' || row.history.total > 0);
       }),
-      { kind: 'totals', key: 'totals' },
     ];
   }, [histories, trips]);
 

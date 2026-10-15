@@ -7,18 +7,29 @@ service cloud.firestore {
 
     function validShape() {
       let d = request.resource.data;
-      return d.keys().hasOnly(['trips', 'bills', 'supplies', 'wishlist', 'updatedAt'])
+      // noteLists, noteHistory and labels (the names the person gave to the family's choices) may be missing: an older version
+      // of the app does not send them.
+      return d.keys().hasOnly(['trips', 'bills', 'supplies', 'wishlist', 'noteLists', 'noteHistory', 'labels', 'updatedAt'])
         && d.trips is list && d.bills is list && d.supplies is list && d.wishlist is list
         && d.trips.size() <= 500
         && d.bills.size() <= 1000
         && d.supplies.size() <= 1000
         && d.wishlist.size() <= 1000
+        && (!('noteLists' in d) || (d.noteLists is list && d.noteLists.size() <= 1000))
+        && (!('noteHistory' in d) || (d.noteHistory is list && d.noteHistory.size() <= 300))
+        && (!('labels' in d) || (d.labels is map && d.labels.size() <= 6))
         && d.updatedAt == request.time;
     }
 
+    // Everything not named here is closed. Each person has exactly one document, `users/<their id>`, which only they can read,
+    // write or delete: there is no way to list the users or to see another person's data.
     match /users/{userId} {
-      allow read, delete: if isOwner(userId);
-      allow create, update: if isOwner(userId) && validShape();
+      allow get, delete: if isOwner(userId);
+      allow create: if isOwner(userId) && validShape();
+      // Once the notes are in the account, a save that leaves them out (an older version of the app, which does not know
+      // about them) would erase them, so it is refused until that app is updated.
+      allow update: if isOwner(userId) && validShape()
+        && (!('noteLists' in resource.data) || 'noteLists' in request.resource.data);
     }
   }
 }

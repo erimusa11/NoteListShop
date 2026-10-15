@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
+import { useFamilyLabels } from '@/context/FamilyLabelsContext';
 import { colors, spacing } from '@/theme/theme';
 import type { AttendancePlace } from '@/types/models';
 import type { KidInfo, PlaceInfo } from '@/utils/attendance';
@@ -22,6 +23,7 @@ const COMPACT_BELOW = 350;
 // Tapping the picked circle again leaves the child out.
 export function AttendanceBrush({ kids, places, value, onChange }: AttendanceBrushProps) {
   const compact = useWindowDimensions().width < COMPACT_BELOW;
+  const { label, initial } = useFamilyLabels();
   return (
     <View>
       <View style={styles.headRow}>
@@ -38,13 +40,13 @@ export function AttendanceBrush({ kids, places, value, onChange }: AttendanceBru
       {kids.map((kid) => {
         const chosen = value[kid.name] ?? null;
         return (
-          <View key={kid.name} style={styles.row} accessibilityRole="radiogroup" accessibilityLabel={kid.name}>
+          <View key={kid.name} style={styles.row} accessibilityRole="radiogroup" accessibilityLabel={label(kid.name)}>
             <View style={styles.who}>
               <View style={[styles.avatar, { backgroundColor: kid.color }, chosen === null && styles.off]}>
-                <Text style={styles.avatarText}>{kid.initial}</Text>
+                <Text style={styles.avatarText}>{initial(kid.name)}</Text>
               </View>
               <Text style={[styles.name, chosen === null && styles.nameOff]} numberOfLines={1}>
-                {kid.name}
+                {label(kid.name)}
               </Text>
             </View>
             {places.map((place) => {
@@ -55,7 +57,7 @@ export function AttendanceBrush({ kids, places, value, onChange }: AttendanceBru
                     onPress={() => onChange(kid.name, selected ? null : place.value)}
                     accessibilityRole="radio"
                     accessibilityState={{ checked: selected }}
-                    accessibilityLabel={`${kid.name}: ${place.label}`}
+                    accessibilityLabel={`${label(kid.name)}: ${place.label}`}
                     hitSlop={4}
                     style={({ pressed }) => [
                       styles.dot,
@@ -65,7 +67,7 @@ export function AttendanceBrush({ kids, places, value, onChange }: AttendanceBru
                       pressed && styles.pressed,
                     ]}
                   >
-                    {selected && <Text style={styles.dotText}>{kid.initial}</Text>}
+                    {selected && <Text style={styles.dotText}>{initial(kid.name)}</Text>}
                   </Pressable>
                 </View>
               );

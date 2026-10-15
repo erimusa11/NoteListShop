@@ -18,6 +18,8 @@ interface ItemListProps {
   limit?: number;
   /** The people an item can be for (Drion, Alois), when the category asks. */
   personOptions?: string[];
+  /** The category has choices (`nameOptions`): see ItemRow. */
+  hasChoices?: boolean;
   /** Above the rows; it scrolls away with them. */
   header?: ReactElement | null;
 }
@@ -35,6 +37,7 @@ export const ItemList = memo(function ItemList({
   showQuantity = true,
   limit,
   personOptions,
+  hasChoices,
   header,
 }: ItemListProps) {
   const { toggleItem, updateItem, moveItem, toggleStar } = useTripActions();
@@ -61,6 +64,7 @@ export const ItemList = memo(function ItemList({
           onMove={(to, group) => moveItem(tripId, list, item.id, to, group)}
           showQuantity={showQuantity}
           personOptions={personOptions}
+          hasChoices={hasChoices}
         />
       )}
       ListHeaderComponent={header}

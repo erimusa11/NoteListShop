@@ -24,6 +24,7 @@ import { PrioritySelector } from '@/components/PrioritySelector';
 import { ms, spring, STAMP_MS, SUCK, TEAR } from '@/theme/motion';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { ItemListKey, ShoppingItem } from '@/types/models';
+import { useFamilyLabels } from '@/context/FamilyLabelsContext';
 import { nextOption, optionMatcher, personColor } from '@/utils/options';
 import { normalizePriority, priorityInfo } from '@/utils/priority';
 import { DEFAULT_QUANTITY, normalizeQuantity, parseQuantity, sanitizeQuantityInput } from '@/utils/quantity';
@@ -44,6 +45,8 @@ interface ItemRowProps {
   onMove?: (to: ItemListKey, group?: string) => void;
   /** The people an item of this category can be for (Drion, Alois): the row shows who it is for, and a tap switches it. */
   personOptions?: string[];
+  /** The category has choices (`nameOptions`), so the name (and the description) can be one of the family names, shown by its label. */
+  hasChoices?: boolean;
 }
 
 // Holding a row this long (a deliberate press, not a tap) asks whether to delete it. A thin red line fills along the
@@ -69,8 +72,12 @@ export function ItemRow({
   moveFrom,
   onMove,
   personOptions,
+  hasChoices = false,
 }: ItemRowProps) {
   const reduced = useReducedMotion();
+  const { label, nameFrom } = useFamilyLabels();
+  const show = (text: string) => (hasChoices ? label(text) : text);
+  const parse = (text: string) => (hasChoices ? nameFrom(text) : text);
   const [priorityOpen, setPriorityOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   // The pop-ups are only built once they are needed: a list has many rows and most of them are never
@@ -269,10 +276,10 @@ export function ItemRow({
             <Animated.View style={outlineStyle}>
               <Ionicons name="ellipse-outline" size={28} color={colors.primary} />
             </Animated.View>
-            <Animated.View style={[styles.layer, stampStyle]} pointerEvents="none">
+            <Animated.View style={[styles.layer, stampStyle]}>
               <Ionicons name="checkmark-circle" size={28} color={colors.success} />
             </Animated.View>
-            <View style={styles.layer} pointerEvents="none">
+            <View style={styles.layer}>
               <Animated.View style={[styles.ring, ringStyle]} />
             </View>
           </Pressable>
@@ -295,9 +302,9 @@ export function ItemRow({
             >
               {item.note ? (
                 <InlineEditableField
-                  value={item.note}
+                  value={show(item.note)}
                   placeholder="Përshkrimi"
-                  onChange={(note) => onUpdate({ note: note.trim() })}
+                  onChange={(note) => onUpdate({ note: parse(note.trim()) })}
                   onEditingChange={(e) => {
                     editing.value = e ? 1 : 0;
                   }}
@@ -306,9 +313,9 @@ export function ItemRow({
                 />
               ) : (
                 <InlineEditableField
-                  value={item.name}
+                  value={show(item.name)}
                   placeholder="Emri i artikullit"
-                  onChange={(name) => onUpdate({ name })}
+                  onChange={(name) => onUpdate({ name: parse(name) })}
                   onEditingChange={(e) => {
                     editing.value = e ? 1 : 0;
                   }}
@@ -316,13 +323,13 @@ export function ItemRow({
                   textStyle={[styles.name, item.bought && styles.nameBought, item.bought && wrapped && styles.nameStruck]}
                 />
               )}
-              {!wrapped && <Animated.View style={[styles.strike, strikeStyle]} pointerEvents="none" />}
+              {!wrapped && <Animated.View style={[styles.strike, strikeStyle]} />}
             </View>
             {item.note ? (
               <InlineEditableField
-                value={item.name}
+                value={show(item.name)}
                 placeholder="Emri i artikullit"
-                onChange={(name) => onUpdate({ name })}
+                onChange={(name) => onUpdate({ name: parse(name) })}
                 numberOfLines={2}
                 textStyle={styles.note}
               />
@@ -351,11 +358,11 @@ export function ItemRow({
                   onPress={() => onUpdate({ person: nextOption(personOptions, item.person) })}
                   hitSlop={6}
                   accessibilityRole="button"
-                  accessibilityLabel={item.person ? `Për: ${item.person}. Ndrysho` : 'Zgjidh për kë është'}
+                  accessibilityLabel={item.person ? `Për: ${label(item.person)}. Ndrysho` : 'Zgjidh për kë është'}
                   style={styles.personTag}
                 >
                   <Ionicons name="person" size={11} color={personTone} />
-                  <Text style={[styles.personText, { color: personTone }]}>{item.person || 'Për kë?'}</Text>
+                  <Text style={[styles.personText, { color: personTone }]}>{item.person ? label(item.person) : 'Për kë?'}</Text>
                 </Pressable>
               )}
               {!item.bought && (
@@ -424,7 +431,7 @@ export function ItemRow({
               </Pressable>
             )}
           </View>
-          <View style={styles.holdTrack} pointerEvents="none">
+          <View style={styles.holdTrack}>
             <Animated.View style={[styles.holdLine, holdStyle]} />
           </View>
         </Animated.View>
@@ -433,7 +440,7 @@ export function ItemRow({
         <ConfirmDialog
           visible={confirmOpen}
           title="Fshi artikullin?"
-          message={`A je i sigurt që do të fshish "${item.name}"?`}
+          message={`A je i sigurt që do të fshish "${show(item.name)}"?`}
           details={starred ? ['Do të fshihet edhe nga listat e tjera, përveç atyre ku është shënuar (✓).'] : []}
           confirmLabel="Fshi"
           onConfirm={() => {
@@ -484,10 +491,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   cardOrigin: { transformOrigin: 'right center' },
-  holdTrack: { position: 'absolute', left: radii.md, right: radii.md, bottom: 0, height: 3 },
+  holdTrack: { pointerEvents: 'none', position: 'absolute', left: radii.md, right: radii.md, bottom: 0, height: 3 },
   holdLine: { height: 3, borderRadius: 2, backgroundColor: colors.danger },
   checkbox: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   layer: {
+    pointerEvents: 'none',
     position: 'absolute',
     left: 0,
     right: 0,
@@ -507,6 +515,7 @@ const styles = StyleSheet.create({
   tag: { fontSize: 11, fontWeight: '700', paddingHorizontal: spacing.xs },
   nameWrap: { alignSelf: 'flex-start', maxWidth: '100%' },
   strike: {
+    pointerEvents: 'none',
     position: 'absolute',
     left: spacing.xs,
     top: '50%',

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { useAuth } from '@/context/AuthContext';
+import { profileKey } from '@/utils/phoneData';
 import {
   cleanName,
   type CustomName,
@@ -27,7 +28,7 @@ interface ProfileValue extends ResolvedName {
 
 const ProfileContext = createContext<ProfileValue | null>(null);
 
-const storageKey = (uid: string) => `profile.${uid}`;
+const storageKey = profileKey;
 
 interface Stored {
   scope: string;

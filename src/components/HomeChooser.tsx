@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { Image, type ImageSourcePropType, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -11,8 +12,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { BrandBackdrop, BrandChip } from '@/components/BrandBackdrop';
 import { spring } from '@/theme/motion';
-import { colors, radii, shadow, spacing } from '@/theme/theme';
+import { brand, colors, radii, shadow, spacing } from '@/theme/theme';
 import { formatDateAlbanian } from '@/utils/dates';
 
 export type Section = 'shop' | 'notes';
@@ -79,15 +81,31 @@ export function HomeChooser({ name, initial, demo, onOpenProfile, onChoose }: Ho
   const [today] = useState(() => formatDateAlbanian(Date.now()));
   // The avatar fills the room above the greeting, a bit smaller on a short screen so the cards still fit.
   const { height } = useWindowDimensions();
-  const avatarSize = height < 700 ? 84 : 112;
+  const short = height < 700;
+  const avatarSize = short ? 84 : 112;
+  // The backdrop of the app icon goes up under the status bar; the avatar sits on its lower edge.
+  const insets = useSafeAreaInsets();
+  const bannerHeight = (short ? 104 : 136) + insets.top;
   return (
     <View style={styles.container}>
+      <View style={styles.banner}>
+        <BrandBackdrop height={bannerHeight}>
+          <View style={[styles.chipSlot, { top: insets.top + 14, left: 18 }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <BrandChip icon="calendar" iconColor={colors.primaryDark} text={today} rotate="-4deg" />
+          </View>
+          {demo && (
+            <View style={[styles.chipSlot, { bottom: avatarSize / 2 + 10, right: 16 }]}>
+              <BrandChip icon="flask" iconColor={brand.sageDark} text="Demo · nuk ruhet" textColor={brand.sageDark} rotate="4deg" />
+            </View>
+          )}
+        </BrandBackdrop>
+      </View>
       <View style={styles.hero}>
         <Pressable
           onPress={onOpenProfile}
           accessibilityRole="button"
           accessibilityLabel="Profili"
-          style={({ pressed }) => [styles.avatarButton, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.avatarButton, { marginTop: -avatarSize / 2 }, pressed && styles.pressed]}
         >
           <View
             style={[styles.avatar, shadow, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}
@@ -102,18 +120,7 @@ export function HomeChooser({ name, initial, demo, onOpenProfile, onChoose }: Ho
         <Text style={styles.heroName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>
           {name}
         </Text>
-        <View style={styles.metaRow}>
-          <Ionicons name="calendar-outline" size={14} color={colors.textMuted} />
-          <Text style={styles.meta}>{today}</Text>
-          <Text style={styles.metaDot}>·</Text>
-          <Text style={styles.meta}>Zgjidh ku do të shkosh</Text>
-        </View>
-        {demo && (
-          <View style={styles.demoPill}>
-            <Ionicons name="flask-outline" size={13} color={colors.primaryDark} />
-            <Text style={styles.demoText}>Modalitet demo · ndryshimet nuk ruhen</Text>
-          </View>
-        )}
+        <Text style={styles.meta}>Zgjidh ku do të shkosh</Text>
       </View>
 
       {CHOICES.map((choice, index) => (
@@ -143,7 +150,7 @@ function ChoiceCard({ choice, index, onPress }: { choice: Choice; index: number;
   return (
     <View style={styles.slot}>
       <Animated.View style={[styles.card, shadow, { backgroundColor: choice.tint }, cardStyle]}>
-        <View style={styles.clip} pointerEvents="none">
+        <View style={styles.clip}>
           <View style={[styles.shape, styles.shapeBig, { backgroundColor: choice.shapeA }]} />
           <View style={[styles.shape, styles.shapeSmall, { backgroundColor: choice.shapeB }]} />
         </View>
@@ -179,7 +186,10 @@ function ChoiceCard({ choice, index, onPress }: { choice: Choice; index: number;
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', gap: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.md },
+  container: { flex: 1, gap: spacing.md, paddingBottom: spacing.md },
+  // Across the whole width: the screen has a side margin that the backdrop does not keep.
+  banner: { marginHorizontal: -spacing.md },
+  chipSlot: { position: 'absolute' },
   hero: { alignItems: 'center', gap: 2, marginBottom: spacing.xs },
   avatarButton: { marginBottom: spacing.sm },
   pressed: { opacity: 0.85 },
@@ -207,25 +217,11 @@ const styles = StyleSheet.create({
   },
   greeting: { fontSize: 16, color: colors.textMuted, textAlign: 'center' },
   heroName: { fontSize: 32, lineHeight: 38, fontWeight: '800', color: colors.text, textAlign: 'center' },
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 2 },
-  meta: { fontSize: 13, color: colors.textMuted },
-  metaDot: { fontSize: 13, color: colors.textMuted },
-  demoPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'center',
-    gap: 5,
-    backgroundColor: colors.primaryLight,
-    borderRadius: radii.pill,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    marginTop: spacing.sm,
-  },
-  demoText: { fontSize: 12, fontWeight: '600', color: colors.primaryDark },
+  meta: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
   slot: { flex: 1, minHeight: 140, maxHeight: 210 },
   card: { flex: 1, borderRadius: radii.lg },
   // The soft shapes are cut off by the card's rounded corners; the shadow stays on the card itself, which cannot clip.
-  clip: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, borderRadius: radii.lg, overflow: 'hidden' },
+  clip: { pointerEvents: 'none', position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, borderRadius: radii.lg, overflow: 'hidden' },
   shape: { position: 'absolute', borderRadius: 999 },
   shapeBig: { width: 210, height: 210, right: -60, top: -70, opacity: 0.55 },
   shapeSmall: { width: 120, height: 120, left: -35, bottom: -45, opacity: 0.9 },

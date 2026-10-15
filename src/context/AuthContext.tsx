@@ -1,18 +1,26 @@
 import {
+  deleteUser,
   EmailAuthProvider,
   GoogleAuthProvider,
   linkWithCredential,
   onAuthStateChanged,
+  reauthenticateWithCredential,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut as firebaseSignOut,
   type User,
 } from 'firebase/auth';
+import { deleteDoc, doc } from 'firebase/firestore';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
 
-import { auth, isFirebaseConfigured } from '@/lib/firebase';
+import { auth, db, isFirebaseConfigured } from '@/lib/firebase';
+import { forgetPhoneData } from '@/utils/phoneData';
+import { withTimeout } from '@/utils/withTimeout';
+
+// How long each cloud step of deleting the account may take before the user is told there is no connection.
+const DELETE_STEP_TIMEOUT_MS = 15_000;
 
 interface AuthContextValue {
   configured: boolean;
@@ -26,6 +34,11 @@ interface AuthContextValue {
   setAccountPassword: (password: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
+  /**
+   * Erases the account for good: its data in the cloud, the account itself, and everything this phone keeps of it. Asks for the
+   * password again first, so an open phone in someone else's hands is not enough to do it.
+   */
+  deleteAccount: (password: string) => Promise<void>;
   enterDemoMode: () => void;
 }
 
@@ -47,6 +60,13 @@ const MESSAGES: Record<string, string> = {
   'auth/operation-not-allowed': 'Ky lloj hyrjeje nuk është aktivizuar në Firebase (Authentication > Sign-in method).',
   'auth/unauthorized-domain': 'Ky domen nuk është i autorizuar në Firebase (Authentication > Settings > Authorized domains).',
   'auth/provider-already-linked': 'Kjo llogari ka tashmë një fjalëkalim.',
+  'auth/admin-restricted-operation': 'Regjistrimet e reja janë mbyllur. Mund të hyjnë vetëm llogaritë që ekzistojnë.',
+  'auth/password-does-not-meet-requirements':
+    'Fjalëkalimi nuk i plotëson kërkesat e sigurisë. Përdor të paktën 10 karaktere me shkronja dhe shifra.',
+  'auth/user-disabled': 'Kjo llogari është çaktivizuar.',
+  'auth/user-token-expired': 'Sesioni ka skaduar. Dil dhe hyr përsëri.',
+  timeout: 'Nuk ka lidhje me internetin. Provo përsëri.',
+  'account-partly-deleted': 'Të dhënat u fshinë, por llogaria jo. Trokit përsëri për ta përfunduar.',
   'auth/credential-already-in-use': 'Ky email ka tashmë një llogari tjetër.',
   'google-native-unavailable':
     'Hyrja me Google në telefon kërkon një development build. Hyr me email dhe fjalëkalim, ose përdore Google në web.',
@@ -102,6 +122,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (auth) await firebaseSignOut(auth);
   }, []);
 
+  const deleteAccount = useCallback(async (password: string) => {
+    const current = auth?.currentUser;
+    if (!auth || !db || !current || !current.email) throw new Error('auth/requires-recent-login');
+    const { uid, email } = current;
+    // The data goes first, while the account can still be proved to own it; then the account. A wrong password stops everything
+    // here. Each step has a time limit: without internet the cloud steps would wait forever, and the user would be stuck.
+    await withTimeout(
+      reauthenticateWithCredential(current, EmailAuthProvider.credential(email, password)),
+      DELETE_STEP_TIMEOUT_MS,
+    );
+    await withTimeout(deleteDoc(doc(db, 'users', uid)), DELETE_STEP_TIMEOUT_MS);
+    try {
+      await withTimeout(deleteUser(current), DELETE_STEP_TIMEOUT_MS);
+    } catch {
+      // The data is gone but the account is not: say so plainly, so the user knows to press the button again to finish.
+      throw Object.assign(new Error('account-partly-deleted'), { code: 'account-partly-deleted' });
+    }
+    forgetPhoneData(uid, true);
+  }, []);
+
   const enterDemoMode = useCallback(() => {
     setDemoMode(true);
   }, []);
@@ -118,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccountPassword,
       resetPassword,
       signOut,
+      deleteAccount,
       enterDemoMode,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -1,7 +1,15 @@
 import { createContext, ReactNode, useContext, useMemo, useState } from 'react';
 
 import { mockBills, mockItems, mockWishlist } from '@/mocks/mockItems';
-import type { IncomeEntry, IncomeKind, ItemListKey, ShoppingItem, ShoppingTrip } from '@/types/models';
+import type {
+  IncomeEntry,
+  IncomeKind,
+  ItemListKey,
+  NewTripItem,
+  ShoppingItem,
+  ShoppingTrip,
+  TripItemRef,
+} from '@/types/models';
 import { CATEGORIES } from '@/utils/categories';
 import { formatDateAlbanian } from '@/utils/dates';
 import { moveCalendarItems } from '@/utils/attendance';
@@ -51,6 +59,13 @@ interface TripActions {
     note?: string,
     person?: string,
   ) => void;
+  /**
+   * Adds several items to a list at once (each to the category it names), as normal priority items. Returns where each one
+   * went, so `discardItems` can take them out again.
+   */
+  addItems: (tripId: string, entries: NewTripItem[]) => TripItemRef[];
+  /** Takes items out of a list without remembering them as deleted: the undo of `addItems`. */
+  discardItems: (tripId: string, refs: TripItemRef[]) => void;
   toggleItem: (tripId: string, list: ItemListKey, itemId: string) => void;
   updateItem: (tripId: string, list: ItemListKey, itemId: string, patch: Partial<ShoppingItem>) => void;
   removeItem: (tripId: string, list: ItemListKey, itemId: string) => void;
@@ -124,10 +139,60 @@ export function TripsProvider({ children }: { children: ReactNode }) {
             },
           ]),
         ),
+      addItems: (tripId, entries) => {
+        const now = Date.now();
+        // The ids are made here, not inside the update, so they can be handed back (and an update that runs twice makes no new ones).
+        const created = entries.map(({ list, name, quantity, price, bought }) => ({
+          list,
+          item: {
+            id: newItemId(),
+            name,
+            quantity,
+            price,
+            bought: bought === true,
+            createdAt: now,
+            priority: 1,
+            ...(bought === true ? { boughtAt: now } : {}),
+          } as ShoppingItem,
+        }));
+        if (created.length > 0) {
+          setTrips((prev) =>
+            prev.map((trip) => {
+              if (trip.id !== tripId) return trip;
+              const next: ShoppingTrip = { ...trip };
+              for (const { list, item } of created) next[list] = [...(next[list] ?? []), item];
+              return next;
+            }),
+          );
+        }
+        return created.map(({ list, item }) => ({ list, id: item.id }));
+      },
+      discardItems: (tripId, refs) => {
+        if (refs.length === 0) return;
+        // The ids `addItems` makes are unique across the categories, so an item that was moved to another category in the
+        // meantime is still found (and taken out) by its id.
+        const gone = new Set(refs.map(({ id }) => id));
+        setTrips((prev) =>
+          prev.map((trip) => {
+            if (trip.id !== tripId) return trip;
+            const next: ShoppingTrip = { ...trip };
+            for (const { key } of CATEGORIES) {
+              const items = trip[key] ?? [];
+              if (items.some((item) => gone.has(item.id))) next[key] = items.filter((item) => !gone.has(item.id));
+            }
+            return next;
+          }),
+        );
+      },
       toggleItem: (tripId, list, itemId) =>
         setTrips((prev) =>
           mapItems(prev, tripId, list, (items) =>
-            items.map((item) => (item.id === itemId ? { ...item, bought: !item.bought } : item)),
+            items.map((item) => {
+              if (item.id !== itemId) return item;
+              // Checking notes when; unchecking forgets it.
+              const { boughtAt: _at, ...rest } = item;
+              return item.bought ? { ...rest, bought: false } : { ...rest, bought: true, boughtAt: Date.now() };
+            }),
           ),
         ),
       updateItem: (tripId, list, itemId, patch) => setTrips((prev) => patchItem(prev, tripId, list, itemId, patch)),
