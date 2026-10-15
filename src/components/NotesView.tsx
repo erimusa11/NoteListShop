@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { NoteListBody } from '@/components/NoteListBody';
 import { useNoteLists } from '@/hooks/useNoteLists';
@@ -15,6 +15,11 @@ const TABS: { kind: NoteListKind; title: string; icon: 'list' | 'cart'; accent: 
   { kind: 'products', title: 'Listat e blerjeve', icon: 'cart', accent: tones.orange },
 ];
 
+// A sideways swipe of at least this many points (or a quick flick) changes the tab.
+const SWIPE_DISTANCE = 56;
+const SWIPE_FLICK_DISTANCE = 28;
+const SWIPE_FLICK_SPEED = 0.5;
+
 // The Note List Shop page: two folder tabs, the normal list and the shopping list. The open tab is joined to the colored sheet
 // under it, which holds that one list (made by itself the first time), so its items are right on the page. The page is only
 // built when its menu is opened, so the rest of the app does not pay for it.
@@ -22,6 +27,21 @@ export function NotesView() {
   const { lists, addList, resetRepeating, clearStale } = useNoteLists();
   const [tab, setTab] = useState<NoteListKind>('work');
   const created = useRef<Set<NoteListKind>>(new Set());
+
+  // Swiping the page to the left opens the tab on the right (the shopping list), swiping to the right opens the one on the left
+  // (the normal list). Only a clearly sideways move takes the touch, so scrolling the list and tapping a card work as before.
+  const swipe = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_event, g) => Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+        onPanResponderRelease: (_event, g) => {
+          const far = Math.abs(g.dx) > SWIPE_DISTANCE || (Math.abs(g.dx) > SWIPE_FLICK_DISTANCE && Math.abs(g.vx) > SWIPE_FLICK_SPEED);
+          if (!far) return;
+          setTab(g.dx < 0 ? 'products' : 'work');
+        },
+      }),
+    [],
+  );
 
   // The one list of each tab; when there are older extra ones of a kind, the newest is the one shown.
   const listOf = (kind: NoteListKind) => newestFirst(lists ?? []).find((list) => isProductList(list) === (kind === 'products'));
@@ -61,7 +81,7 @@ export function NotesView() {
   const accent = TABS[activeIndex].accent;
 
   return (
-    <View style={styles.flex}>
+    <View style={styles.flex} {...swipe.panHandlers}>
       <View style={styles.tabs} accessibilityRole="tablist">
         {TABS.map((t) => {
           const active = t.kind === tab;

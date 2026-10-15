@@ -144,7 +144,16 @@ export function TripsProvider({ children }: { children: ReactNode }) {
         // The ids are made here, not inside the update, so they can be handed back (and an update that runs twice makes no new ones).
         const created = entries.map(({ list, name, quantity, price, bought }) => ({
           list,
-          item: { id: newItemId(), name, quantity, price, bought: bought === true, createdAt: now, priority: 1 } as ShoppingItem,
+          item: {
+            id: newItemId(),
+            name,
+            quantity,
+            price,
+            bought: bought === true,
+            createdAt: now,
+            priority: 1,
+            ...(bought === true ? { boughtAt: now } : {}),
+          } as ShoppingItem,
         }));
         if (created.length > 0) {
           setTrips((prev) =>
@@ -178,7 +187,12 @@ export function TripsProvider({ children }: { children: ReactNode }) {
       toggleItem: (tripId, list, itemId) =>
         setTrips((prev) =>
           mapItems(prev, tripId, list, (items) =>
-            items.map((item) => (item.id === itemId ? { ...item, bought: !item.bought } : item)),
+            items.map((item) => {
+              if (item.id !== itemId) return item;
+              // Checking notes when; unchecking forgets it.
+              const { boughtAt: _at, ...rest } = item;
+              return item.bought ? { ...rest, bought: false } : { ...rest, bought: true, boughtAt: Date.now() };
+            }),
           ),
         ),
       updateItem: (tripId, list, itemId, patch) => setTrips((prev) => patchItem(prev, tripId, list, itemId, patch)),

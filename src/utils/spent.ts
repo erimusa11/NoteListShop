@@ -14,9 +14,20 @@ export interface SpentGroup {
   total: number;
 }
 
+/** One checked item with the category it is in. */
+export interface SpentEntry {
+  category: Category;
+  item: ShoppingItem;
+}
+
+/** When an item was checked off; an item checked before that was noted counts from the day it was added. */
+export const boughtTime = (item: ShoppingItem): number => item.boughtAt ?? item.createdAt;
+
 export interface SpentItems {
   /** One group per category that has something checked, the one that took the most money first. */
   groups: SpentGroup[];
+  /** Every checked item of every category in one list, the one checked last first. */
+  latest: SpentEntry[];
   /** How many items are checked in all. */
   count: number;
 }
@@ -24,14 +35,17 @@ export interface SpentItems {
 // Unchecking an item here unchecks it in its own category, and it leaves this tab; checking it there brings it back.
 export function spentItems(trip: ShoppingTrip | undefined, categories: Category[]): SpentItems {
   const groups: SpentGroup[] = [];
+  const latest: SpentEntry[] = [];
   let count = 0;
   for (const category of categories) {
     const items = (trip?.[category.key] ?? []).filter((item) => item.bought);
     if (items.length === 0) continue;
     count += items.length;
     groups.push({ category, items, total: computeSpentTotal(items) });
+    for (const item of items) latest.push({ category, item });
   }
   // `sort` keeps the order of equal groups, so a tie stays in tab order.
   groups.sort((a, b) => b.total - a.total);
-  return { groups, count };
+  latest.sort((a, b) => boughtTime(b.item) - boughtTime(a.item));
+  return { groups, latest, count };
 }

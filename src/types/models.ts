@@ -5,6 +5,8 @@ export interface ShoppingItem {
   price: number | null;
   bought: boolean;
   createdAt: number;
+  /** When it was last checked off (the newest-checked view of Të shpenzuarat uses it). Missing on items checked before it was noted: they count from `createdAt`. */
+  boughtAt?: number;
   /** 1 = normal … 5 = urgent. Missing means 1. */
   priority?: number;
   /** Set when the item is starred. Its copies in other lists carry the same id and follow its name. */

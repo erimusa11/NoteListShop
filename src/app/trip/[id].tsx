@@ -35,7 +35,7 @@ import {
 } from '@/utils/incomes';
 import { goBackOrHome } from '@/utils/navigation';
 import { buildOptionTotals, buildPersonTotals, itemOption, itemsForOption, itemsForPerson } from '@/utils/options';
-import { SPENT_COLOR, SPENT_SECTION, type SpentGroup, spentItems } from '@/utils/spent';
+import { SPENT_COLOR, SPENT_SECTION, type SpentEntry, type SpentGroup, spentItems } from '@/utils/spent';
 import { buildListSuggestions, buildSuggestions, suggestionGroups } from '@/utils/suggestions';
 import { categoriesAlphabetically, computeSpentTotal, computeTotal, tripAllItems } from '@/utils/totals';
 
@@ -46,6 +46,7 @@ const NO_ITEMS: ShoppingItem[] = [];
 const NO_INCOMES: IncomeEntry[] = [];
 const NO_ENTRIES: ImportantEntry[] = [];
 const NO_GROUPS: SpentGroup[] = [];
+const NO_LATEST: SpentEntry[] = [];
 
 
 const PREPARE_AFTER_MS = 600;
@@ -460,6 +461,7 @@ export default function TripDetailScreen() {
                       <SpentList
                         tripId={trip.id}
                         groups={opened.includes(SPENT_SECTION) ? spent.groups : NO_GROUPS}
+                        latest={opened.includes(SPENT_SECTION) ? spent.latest : NO_LATEST}
                         focusSection={startSection === SPENT_SECTION ? focusCategory : undefined}
                         emptyText="Ende nuk ke shënuar asnjë artikull si të blerë."
                       />
