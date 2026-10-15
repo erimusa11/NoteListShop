@@ -2,11 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { colors, spacing } from '@/theme/theme';
+import type { Tone } from '@/theme/noteTones';
 
 interface EmptyStateProps {
   icon?: keyof typeof Ionicons.glyphMap;
   title?: string;
   subtitle?: string;
+  /** The colors of the page it is on; the orange of the shopping pages when missing. */
+  tone?: Tone;
 }
 
 // Kept still on purpose: an animation that never ends keeps the screen redrawing for as long as it is open.
@@ -14,13 +17,14 @@ export function EmptyState({
   icon = 'cart-outline',
   title = 'Lista juaj është bosh',
   subtitle = 'Shtoni artikullin e parë më poshtë!',
+  tone,
 }: EmptyStateProps) {
   return (
     <View style={styles.container}>
       <View style={styles.iconWrap}>
         <View style={styles.shadowEllipse} />
-        <View style={styles.iconCircle}>
-          <Ionicons name={icon} size={40} color={colors.primary} />
+        <View style={[styles.iconCircle, tone && { backgroundColor: tone.light }]}>
+          <Ionicons name={icon} size={40} color={tone?.main ?? colors.primary} />
         </View>
       </View>
       <Text style={styles.title}>{title}</Text>

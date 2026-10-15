@@ -1,154 +1,150 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { NoteListSheet, type NoteListSheetState } from '@/components/NoteListSheet';
-import { NoteListsPanel } from '@/components/NoteListsPanel';
-import { TrashSheet } from '@/components/TrashSheet';
-import { useUndo } from '@/context/UndoContext';
+import { NoteListBody } from '@/components/NoteListBody';
 import { useNoteLists } from '@/hooks/useNoteLists';
-import { colors, radii, shadow, spacing } from '@/theme/theme';
-import type { NoteList, NoteListKind } from '@/types/models';
-import { newestFirst } from '@/utils/noteLists';
-import { TRASH_DAYS } from '@/utils/trash';
+import { type Tone, tones } from '@/theme/noteTones';
+import { radii, spacing } from '@/theme/theme';
+import type { NoteListKind } from '@/types/models';
+import { isProductList, newestFirst } from '@/utils/noteLists';
 
-// The Note List Shop page. Each group is made by naming it and choosing its category: a normal list (text items with a
-// priority, like to-dos) or a shopping list (products with an amount, a unit and a price, and a total). The two kinds are
-// shown apart, newest first, and the latest of each shows its most important open items right on the page. The page is only
+// Each tab has its own tone: green for the normal list, orange for the shopping list.
+const TABS: { kind: NoteListKind; title: string; icon: 'list' | 'cart'; accent: Tone }[] = [
+  { kind: 'work', title: 'Listat normale', icon: 'list', accent: tones.green },
+  { kind: 'products', title: 'Listat e blerjeve', icon: 'cart', accent: tones.orange },
+];
+
+// The Note List Shop page: two folder tabs, the normal list and the shopping list. The open tab is joined to the colored sheet
+// under it, which holds that one list (made by itself the first time), so its items are right on the page. The page is only
 // built when its menu is opened, so the rest of the app does not pay for it.
 export function NotesView() {
-  const { lists: noteLists, trashedLists, addList, removeList, restoreList, purgeList } = useNoteLists();
-  const { showUndo } = useUndo();
-  const [trashOpen, setTrashOpen] = useState(false);
-  const groups = useMemo(() => newestFirst(noteLists ?? []), [noteLists]);
-  const [listSheet, setListSheet] = useState<NoteListSheetState | null>(null);
-  // The group that is asked about; kept after the question closes so its name does not vanish while the dialog fades out.
-  const [deleteTarget, setDeleteTarget] = useState<NoteList | null>(null);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const { lists, addList, resetRepeating, clearStale } = useNoteLists();
+  const [tab, setTab] = useState<NoteListKind>('work');
+  const created = useRef<Set<NoteListKind>>(new Set());
 
-  const openListSheet = () => setListSheet((prev) => ({ open: true, key: (prev?.key ?? 0) + 1 }));
-  const closeListSheet = () => setListSheet((prev) => (prev ? { ...prev, open: false } : prev));
-  const openGroup = (id: string) => router.push({ pathname: '/note/[id]', params: { id } });
-  // A new group is opened right away, so its first item can be added.
-  const createGroup = (name: string, kind: NoteListKind) => {
-    const id = addList(name, kind);
-    closeListSheet();
-    openGroup(id);
-  };
-  const askDelete = (list: NoteList) => {
-    setDeleteTarget(list);
-    setDeleteOpen(true);
-  };
+  // The one list of each tab; when there are older extra ones of a kind, the newest is the one shown.
+  const listOf = (kind: NoteListKind) => newestFirst(lists ?? []).find((list) => isProductList(list) === (kind === 'products'));
 
-  const welcome = noteLists ? (
-    <View style={styles.welcome}>
-      <View style={[styles.logoCard, shadow]}>
-        <Image
-          source={require('@/assets/images/note-list-logo.png')}
-          style={styles.logo}
-          resizeMode="contain"
-          accessibilityLabel="Note List Shop by Eri"
-        />
-      </View>
-      <Text style={styles.welcomeTitle}>Asnjë listë ende</Text>
-      <Text style={styles.welcomeText}>Shtyp + për të krijuar listën e parë.</Text>
-    </View>
-  ) : (
-    <View style={styles.flex} />
-  );
+  useEffect(() => {
+    if (!lists) return;
+    for (const { kind, title } of TABS) {
+      if (created.current.has(kind)) continue;
+      if (!lists.some((list) => isProductList(list) === (kind === 'products'))) {
+        created.current.add(kind);
+        addList(title, kind);
+      }
+    }
+  }, [lists, addList]);
+
+  // Repeating items (a weekly reminder) come back unchecked once their days have passed, and checked items that do not repeat
+  // are cleared after a month so the lists (and the copy in the cloud) stay small. Both run when the lists load, when the app is
+  // opened again and every hour while it stays open.
+  const hasLists = lists !== null;
+  useEffect(() => {
+    if (!hasLists) return;
+    const maintain = () => {
+      resetRepeating();
+      clearStale();
+    };
+    maintain();
+    const timer = setInterval(maintain, 60 * 60 * 1000);
+    const sub = AppState.addEventListener('change', (state) => state === 'active' && maintain());
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, [hasLists, resetRepeating, clearStale]);
+
+  const current = listOf(tab);
+  const activeIndex = TABS.findIndex((t) => t.kind === tab);
+  const accent = TABS[activeIndex].accent;
 
   return (
     <View style={styles.flex}>
-      <NoteListsPanel
-        lists={groups}
-        empty={welcome}
-        onOpen={(list) => openGroup(list.id)}
-        onDelete={askDelete}
-        trashCount={trashedLists.length}
-        onOpenTrash={() => setTrashOpen(true)}
-      />
-
-      <View style={styles.footer}>
-        <Pressable
-          onPress={openListSheet}
-          accessibilityRole="button"
-          accessibilityLabel="Krijo listë"
-          style={[styles.fab, shadow]}
-          hitSlop={8}
-        >
-          <Ionicons name="add" size={30} color="#FFFFFF" />
-        </Pressable>
+      <View style={styles.tabs} accessibilityRole="tablist">
+        {TABS.map((t) => {
+          const active = t.kind === tab;
+          const left = listOf(t.kind)?.items.filter((item) => !item.done).length ?? 0;
+          return (
+            <Pressable
+              key={t.kind}
+              onPress={() => setTab(t.kind)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={left > 0 ? `${t.title}, ${left} mbeten` : t.title}
+              style={[
+                styles.tab,
+                active
+                  ? { backgroundColor: t.accent.soft, borderTopColor: t.accent.main }
+                  : [styles.tabIdle, { backgroundColor: t.accent.idle }],
+              ]}
+            >
+              <Ionicons name={t.icon} size={active ? 20 : 17} color={active ? t.accent.dark : t.accent.main} />
+              <Text style={[styles.tabText, { color: t.accent.dark }, active && styles.tabTextActive]} numberOfLines={1}>
+                {t.title}
+              </Text>
+              {left > 0 && (
+                <View style={[styles.badge, { backgroundColor: active ? t.accent.main : t.accent.light }]}>
+                  <Text style={[styles.badgeText, { color: active ? '#FFFFFF' : t.accent.dark }]}>{left}</Text>
+                </View>
+              )}
+            </Pressable>
+          );
+        })}
       </View>
-
-      <TrashSheet
-        visible={trashOpen}
-        onClose={() => setTrashOpen(false)}
-        title="Koshi i listave"
-        entries={trashedLists.map((list) => ({
-          id: list.id,
-          name: list.name,
-          meta: `${list.items.length} ${list.items.length === 1 ? 'artikull' : 'artikuj'}`,
-          deletedAt: list.deletedAt ?? 0,
-        }))}
-        onRestore={(id) => {
-          restoreList(id);
-          if (trashedLists.length <= 1) setTrashOpen(false);
-        }}
-        onPurge={(id) => {
-          purgeList(id);
-          if (trashedLists.length <= 1) setTrashOpen(false);
-        }}
-      />
-      {listSheet && <NoteListSheet sheet={listSheet} onClose={closeListSheet} onSave={createGroup} />}
-
-      <ConfirmDialog
-        visible={deleteOpen}
-        title="Fshi listën?"
-        message={`A je i sigurt që do të fshish "${deleteTarget?.name ?? ''}"?`}
-        details={
-          deleteTarget && deleteTarget.items.length > 0
-            ? [
-                `${deleteTarget.items.length} ${deleteTarget.items.length === 1 ? 'artikull' : 'artikuj'} në të.`,
-                `Lista ruhet ${TRASH_DAYS} ditë në Koshin dhe mund ta kthesh.`,
-              ]
-            : [`Lista ruhet ${TRASH_DAYS} ditë në Koshin dhe mund ta kthesh.`]
-        }
-        confirmLabel="Fshi"
-        onConfirm={() => {
-          setDeleteOpen(false);
-          if (deleteTarget) {
-            const { id, name } = deleteTarget;
-            removeList(id);
-            showUndo(`"${name}" u fshi`, () => restoreList(id));
-          }
-        }}
-        onCancel={() => setDeleteOpen(false)}
-      />
+      <View
+        style={[
+          styles.sheet,
+          { backgroundColor: accent.soft },
+          activeIndex === 0 ? styles.sheetSquareLeft : styles.sheetSquareRight,
+        ]}
+      >
+        {/* Two soft circles behind the cards, the same shapes as on the cards of the home screen. */}
+        <View style={[styles.blobs, activeIndex === 0 ? styles.sheetSquareLeft : styles.sheetSquareRight]}>
+          <View style={[styles.blob, styles.blobBig, { backgroundColor: accent.light }]} />
+          <View style={[styles.blob, styles.blobSmall, { backgroundColor: accent.light }]} />
+        </View>
+        {current ? <NoteListBody key={current.id} listId={current.id} accent={accent} /> : <View style={styles.flex} />}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  welcome: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingTop: spacing.lg },
-  logoCard: {
-    backgroundColor: colors.card,
-    borderRadius: radii.lg,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
+  tabs: { flexDirection: 'row', alignItems: 'flex-end', gap: 4, zIndex: 1 },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing.sm + 4,
+    borderTopWidth: 3,
+    borderTopColor: 'transparent',
+    borderTopLeftRadius: radii.md,
+    borderTopRightRadius: radii.md,
+    marginBottom: -1,
   },
-  logo: { width: 240, height: 166 },
-  welcomeTitle: { fontSize: 17, fontWeight: '600', color: colors.text },
-  welcomeText: { fontSize: 14, color: colors.textMuted },
-  footer: { paddingBottom: spacing.sm, alignItems: 'flex-end' },
-  fab: {
-    width: 56,
-    height: 56,
-    borderRadius: radii.pill,
-    backgroundColor: colors.primary,
+  tabIdle: { paddingVertical: spacing.sm + 1, borderTopWidth: 0 },
+  tabText: { fontSize: 14, fontWeight: '600', flexShrink: 1 },
+  tabTextActive: { fontWeight: '800' },
+  badge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  badgeText: { fontSize: 12, fontWeight: '700' },
+  sheet: { flex: 1, borderRadius: radii.lg, padding: spacing.md, paddingBottom: spacing.sm },
+  // The circles are clipped by their own layer, not by the sheet, so nothing inside the sheet can be scrolled by accident.
+  blobs: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: radii.lg, overflow: 'hidden', pointerEvents: 'none' },
+  blob: { position: 'absolute', borderRadius: radii.pill },
+  blobBig: { width: 240, height: 240, top: -90, right: -80, opacity: 0.6 },
+  blobSmall: { width: 160, height: 160, bottom: -56, left: -56, opacity: 0.45 },
+  sheetSquareLeft: { borderTopLeftRadius: 0 },
+  sheetSquareRight: { borderTopRightRadius: 0 },
 });

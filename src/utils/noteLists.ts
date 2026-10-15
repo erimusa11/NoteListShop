@@ -56,7 +56,56 @@ export interface NoteItemFields {
   importance?: number;
   /** The part of a shopping list the item goes in (new items only; an item keeps its part when edited). */
   section?: NoteSection;
+  /** The text of the repeat field, only in a normal list: after that many days a checked item comes back unchecked. Empty or invalid means no repeat. */
+  repeatDays?: string;
 }
+
+export const MAX_REPEAT_DAYS = 365;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The days typed in the repeat field: a whole number from 1 to a year, or undefined for nothing usable. */
+export function parseRepeatDays(text: string | undefined): number | undefined {
+  const value = parseInt((text ?? '').trim(), 10);
+  return Number.isFinite(value) && value >= 1 ? Math.min(value, MAX_REPEAT_DAYS) : undefined;
+}
+
+/** How many days are left before a checked, repeating item comes back; undefined when it is not waiting to. */
+export function daysUntilRepeat(item: NoteItem, now: number): number | undefined {
+  if (!item.done || !item.repeatDays || item.doneAt === undefined) return undefined;
+  return Math.max(1, Math.ceil((item.doneAt + item.repeatDays * DAY_MS - now) / DAY_MS));
+}
+
+/** Whether a checked, repeating item has waited its days and should come back unchecked. */
+export const isRepeatDue = (item: NoteItem, now: number): boolean =>
+  item.done && !!item.repeatDays && item.doneAt !== undefined && now - item.doneAt >= item.repeatDays * DAY_MS;
+
+/** A checked item of a normal list that does not repeat is cleared after this many days, so the lists stay small. */
+export const STALE_DONE_DAYS = 30;
+
+/**
+ * The normal list with its stale items cleared: checked, not repeating and checked at least `STALE_DONE_DAYS` ago. A checked item
+ * that has no day yet (from before the days were noted) only gets today's, so nothing is cleared the moment this first runs.
+ * Returns the same list when there is nothing to change.
+ */
+export function tidyNormalList(list: NoteList, now: number): NoteList {
+  if (isProductList(list)) return list;
+  const limit = STALE_DONE_DAYS * DAY_MS;
+  let changed = false;
+  const items = list.items.flatMap((item): NoteItem[] => {
+    if (!item.done || item.repeatDays) return [item];
+    if (item.doneAt === undefined) {
+      changed = true;
+      return [{ ...item, doneAt: now }];
+    }
+    if (now - item.doneAt < limit) return [item];
+    changed = true;
+    return [];
+  });
+  return changed ? { ...list, items } : list;
+}
+
+/** A checked product that was sent to a list, or moved to the checked ones, is only kept there, not among the products still to buy. */
+export const isFinished = (item: NoteItem): boolean => item.done && (item.sentTo !== undefined || item.archived === true);
 
 /** The price typed in a field: a number from zero up, or undefined for nothing usable. */
 export function parseNotePrice(text: string | undefined): number | undefined {
@@ -79,8 +128,9 @@ export function createNoteList(name: string, kind: NoteListKind = 'work'): NoteL
   return { id: newNoteId(), name: name.trim(), createdAt: Date.now(), items: [], ...(kind === 'products' ? { kind } : {}) };
 }
 
-export function createNoteItem({ name, quantity, unit, price, importance, section }: NoteItemFields): NoteItem {
+export function createNoteItem({ name, quantity, unit, price, importance, section, repeatDays }: NoteItemFields): NoteItem {
   const cost = parseNotePrice(price);
+  const repeat = parseRepeatDays(repeatDays);
   return {
     id: newNoteId(),
     name: name.trim(),
@@ -91,11 +141,14 @@ export function createNoteItem({ name, quantity, unit, price, importance, sectio
     ...(cost !== undefined ? { price: cost } : {}),
     ...(importance !== undefined ? { importance: normalizePriority(importance) } : {}),
     ...sectionField(section),
+    ...(repeat !== undefined ? { repeatDays: repeat } : {}),
   };
 }
 
-export function editNoteItem(item: NoteItem, { name, quantity, unit, price, importance }: NoteItemFields): NoteItem {
-  const { price: _before, importance: _level, ...rest } = item;
+export function editNoteItem(item: NoteItem, { name, quantity, unit, price, importance, repeatDays }: NoteItemFields): NoteItem {
+  const { price: _before, importance: _level, repeatDays: _repeat, ...rest } = item;
+  // Like the priority, the repeat field is only in a normal list; where it is not, the item keeps what it has.
+  const repeat = repeatDays === undefined ? _repeat : parseRepeatDays(repeatDays);
   // The price field is only there in a list of products and the priority only in a normal list; where one is not, the item keeps what it has.
   const cost = price === undefined ? _before : parseNotePrice(price);
   const level = importance === undefined ? _level : normalizePriority(importance);
@@ -106,6 +159,9 @@ export function editNoteItem(item: NoteItem, { name, quantity, unit, price, impo
     unit: isUnit(unit) ? unit : DEFAULT_UNIT,
     ...(cost !== undefined ? { price: cost } : {}),
     ...(level !== undefined ? { importance: level } : {}),
+    ...(repeat !== undefined ? { repeatDays: repeat } : {}),
+    // An item that is checked already starts counting its days from now.
+    ...(repeat !== undefined && item.done && item.doneAt === undefined ? { doneAt: Date.now() } : {}),
   };
 }
 
@@ -142,6 +198,12 @@ export function normalizeNoteLists(raw: unknown): NoteList[] {
               ...(Number.isFinite(item.importance) ? { importance: normalizePriority(Number(item.importance)) } : {}),
               ...sectionField(item.section as NoteSection | undefined),
               ...(typeof item.sentTo === 'string' && item.sentTo ? { sentTo: item.sentTo } : {}),
+              ...(Number.isFinite(item.sentCount) && Number(item.sentCount) >= 1 ? { sentCount: Math.floor(Number(item.sentCount)) } : {}),
+              ...(Number.isFinite(item.repeatDays) && Number(item.repeatDays) >= 1
+                ? { repeatDays: Math.min(Math.floor(Number(item.repeatDays)), MAX_REPEAT_DAYS) }
+                : {}),
+              ...(Number.isFinite(item.doneAt) ? { doneAt: Number(item.doneAt) } : {}),
+              ...(item.archived === true ? { archived: true } : {}),
             },
           ];
         }),

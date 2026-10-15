@@ -46,6 +46,14 @@ export interface NoteItem {
   section?: NoteSection;
   /** In a list of products: the id of the shopping list (Note Shop List) a copy of it was sent to. Missing while it was never sent. */
   sentTo?: string;
+  /** In a list of products: how many times a copy of it was sent to a list. Missing means once if `sentTo` is set (from before it was counted), otherwise never. */
+  sentCount?: number;
+  /** In a normal list: after this many days a checked item comes back unchecked, like a reminder. Missing means it does not repeat. */
+  repeatDays?: number;
+  /** When the item was last checked; the repeat counts its days from here. */
+  doneAt?: number;
+  /** In a list of products: a checked item that was moved to the checked ones without being sent anywhere. */
+  archived?: boolean;
 }
 
 /** What a group is for: a normal list (text items with a priority, like to-dos) or a shopping list of products, whose items have an amount and a price that adds up. */

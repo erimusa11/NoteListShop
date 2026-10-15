@@ -1,6 +1,6 @@
 import type { ItemListKey, NewTripItem, NoteItem, NoteList, NoteSection } from '@/types/models';
 import { CATEGORIES } from '@/utils/categories';
-import { isProductList, NOTE_SECTIONS, sectionOf, UNITS } from '@/utils/noteLists';
+import { isFinished, isProductList, NOTE_SECTIONS, sectionOf, UNITS } from '@/utils/noteLists';
 import { parseQuantity } from '@/utils/quantity';
 
 /**
@@ -17,11 +17,18 @@ export function targetLabel(section: NoteSection): string {
   return CATEGORIES.find((category) => category.key === SECTION_TARGET[section])?.label ?? '';
 }
 
-/** The items that are checked off, the only ones that can be sent, in the order of the tabs (Ushqime first). */
+/** The items that are checked off and still among the products (not sent, not moved to the checked ones), in the order of the tabs (Ushqime first). */
 export function sendableItems(list: Pick<NoteList, 'items' | 'kind'>): NoteItem[] {
   if (!isProductList(list)) return [];
-  return NOTE_SECTIONS.flatMap(({ value }) => list.items.filter((item) => item.done && sectionOf(item) === value));
+  return NOTE_SECTIONS.flatMap(({ value }) => list.items.filter((item) => item.done && !isFinished(item) && sectionOf(item) === value));
 }
+
+/** How many times a copy of the item was sent to a list (an item that went before the count existed counts once). */
+export const timesSent = (item: Pick<NoteItem, 'sentTo' | 'sentCount'>): number =>
+  item.sentCount ?? (item.sentTo !== undefined ? 1 : 0);
+
+/** "Dërguar 3 herë": said of an item that was sent more than once. */
+export const sentManyText = (times: number): string => `Dërguar ${times} herë`;
 
 /** Whether a copy of the item already went to this list. */
 export const isSentTo = (item: Pick<NoteItem, 'sentTo'>, tripId: string | undefined): boolean =>

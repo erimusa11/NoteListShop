@@ -1,13 +1,15 @@
+import { priorityColors } from '@/theme/noteTones';
+
 export type PriorityLevel = 1 | 2 | 3 | 4 | 5;
 
 export const DEFAULT_PRIORITY: PriorityLevel = 1;
 
 export const PRIORITY_LEVELS: { level: PriorityLevel; label: string; color: string }[] = [
-  { level: 1, label: 'Normale', color: '#8A7E76' },
-  { level: 2, label: 'Pak e rëndësishme', color: '#3E7CB1' },
-  { level: 3, label: 'E rëndësishme', color: '#D99100' },
-  { level: 4, label: 'Shumë e rëndësishme', color: '#E8590C' },
-  { level: 5, label: 'Urgjente', color: '#D32F2F' },
+  { level: 1, label: 'Normale', color: priorityColors[0] },
+  { level: 2, label: 'Pak e rëndësishme', color: priorityColors[1] },
+  { level: 3, label: 'E rëndësishme', color: priorityColors[2] },
+  { level: 4, label: 'Shumë e rëndësishme', color: priorityColors[3] },
+  { level: 5, label: 'Urgjente', color: priorityColors[4] },
 ];
 
 export function normalizePriority(value: number | undefined | null): PriorityLevel {

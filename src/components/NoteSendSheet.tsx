@@ -4,9 +4,10 @@ import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } fr
 
 import { BottomSheet } from '@/components/BottomSheet';
 import { colors, radii, spacing } from '@/theme/theme';
+import { doneTone, tones } from '@/theme/noteTones';
 import type { NoteItem, NoteSection } from '@/types/models';
 import { formatQuantity, NOTE_SECTIONS, sectionOf } from '@/utils/noteLists';
-import { isSentTo, targetLabel } from '@/utils/noteSend';
+import { isSentTo, sentManyText, targetLabel, timesSent } from '@/utils/noteSend';
 import { formatNumber } from '@/utils/totals';
 
 /** What the sheet is showing; `key` changes with every opening, so the choice starts fresh. */
@@ -29,6 +30,9 @@ const SECTION_ICON: Record<NoteSection, 'nutrition-outline' | 'sparkles-outline'
   ushqime: 'nutrition-outline',
   detergjente: 'sparkles-outline',
 };
+
+// The sheet belongs to the shopping list, so it wears its orange.
+const T = tones.orange;
 
 const countText = (n: number) => `${n} ${n === 1 ? 'artikull' : 'artikuj'}`;
 
@@ -85,7 +89,7 @@ function SendForm({ items, target, onSend }: Pick<NoteSendSheetProps, 'items' | 
   return (
     <>
       <View style={styles.target}>
-        <Ionicons name="albums-outline" size={18} color={colors.primaryDark} />
+        <Ionicons name="albums-outline" size={18} color={T.dark} />
         <Text style={styles.targetText} numberOfLines={3}>
           Kopje te lista e fundit: <Text style={styles.targetName}>{target.name}</Text>. Futen si të blera.
         </Text>
@@ -101,7 +105,7 @@ function SendForm({ items, target, onSend }: Pick<NoteSendSheetProps, 'items' | 
         <Ionicons
           name={everything ? 'checkbox' : chosen.length > 0 ? 'remove-circle' : 'square-outline'}
           size={24}
-          color={chosen.length > 0 ? colors.primary : colors.textMuted}
+          color={chosen.length > 0 ? T.main : colors.textMuted}
         />
         <Text style={styles.allText}>{everything ? 'Hiq të gjitha' : 'Zgjidh të gjitha'}</Text>
         <Text style={styles.allCount}>
@@ -116,7 +120,7 @@ function SendForm({ items, target, onSend }: Pick<NoteSendSheetProps, 'items' | 
           return (
             <View key={value} style={styles.group}>
               <View style={styles.groupHeader}>
-                <Ionicons name={SECTION_ICON[value]} size={16} color={colors.primaryDark} />
+                <Ionicons name={SECTION_ICON[value]} size={16} color={T.dark} />
                 <Text style={styles.groupTitle}>
                   {label} <Text style={styles.groupArrow}>→</Text> {targetLabel(value)}
                 </Text>
@@ -136,7 +140,7 @@ function SendForm({ items, target, onSend }: Pick<NoteSendSheetProps, 'items' | 
                     <Ionicons
                       name={on ? 'checkbox' : 'square-outline'}
                       size={24}
-                      color={on ? colors.primary : colors.textMuted}
+                      color={on ? T.main : colors.textMuted}
                     />
                     <View style={styles.rowText}>
                       <Text style={styles.rowName} numberOfLines={2}>
@@ -144,8 +148,8 @@ function SendForm({ items, target, onSend }: Pick<NoteSendSheetProps, 'items' | 
                       </Text>
                       {sent && (
                         <View style={styles.sentRow}>
-                          <Ionicons name="paper-plane" size={11} color={colors.success} />
-                          <Text style={styles.sentText}>Dërguar më parë</Text>
+                          <Ionicons name="paper-plane" size={11} color={doneTone.main} />
+                          <Text style={styles.sentText}>{timesSent(item) > 1 ? sentManyText(timesSent(item)) : 'Dërguar më parë'}</Text>
                         </View>
                       )}
                     </View>
@@ -186,12 +190,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs + 2,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: T.light,
     borderRadius: radii.md,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm + 2,
   },
-  targetText: { flex: 1, fontSize: 13, color: colors.primaryDark },
+  targetText: { flex: 1, fontSize: 13, color: T.dark },
   targetName: { fontWeight: '800' },
   allRow: {
     flexDirection: 'row',
@@ -205,7 +209,7 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   group: { marginBottom: spacing.sm },
   groupHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: spacing.xs },
-  groupTitle: { fontSize: 13, fontWeight: '800', color: colors.primaryDark },
+  groupTitle: { fontSize: 13, fontWeight: '800', color: T.dark },
   groupArrow: { color: colors.textMuted },
   row: {
     flexDirection: 'row',
@@ -218,20 +222,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm + 2,
     marginTop: spacing.xs + 2,
   },
-  rowOn: { borderColor: colors.primary, backgroundColor: colors.primaryLight + '66' },
+  rowOn: { borderColor: T.main, backgroundColor: T.light + '66' },
   rowText: { flex: 1 },
   rowName: { fontSize: 15, fontWeight: '600', color: colors.text },
   sentRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  sentText: { fontSize: 12, fontWeight: '600', color: colors.success },
+  sentText: { fontSize: 12, fontWeight: '600', color: doneTone.main },
   rowAmount: { alignItems: 'flex-end' },
-  rowQuantity: { fontSize: 13, fontWeight: '700', color: colors.primaryDark },
+  rowQuantity: { fontSize: 13, fontWeight: '700', color: T.dark },
   rowPrice: { fontSize: 12, color: colors.textMuted },
   send: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.primary,
+    backgroundColor: T.main,
     borderRadius: radii.pill,
     paddingVertical: spacing.sm + 6,
     marginTop: spacing.sm,

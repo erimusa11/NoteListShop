@@ -6,9 +6,12 @@ import {
   createNoteItem,
   createNoteList,
   editNoteItem,
+  isRepeatDue,
   type NoteItemFields,
   rememberNoteItems,
+  tidyNormalList,
 } from '@/utils/noteLists';
+import { timesSent } from '@/utils/noteSend';
 import {
   cachedNoteHistory,
   cachedNoteLists,
@@ -18,6 +21,16 @@ import {
   saveNoteLists,
   subscribeNoteLists,
 } from '@/utils/noteListStore';
+
+/** The item checked or unchecked; a checked one remembers when, so a repeating item knows when to come back. */
+function withDone(item: NoteItem, done: boolean): NoteItem {
+  // Checking or unchecking again starts a new purchase: the item is no longer sent or moved to the checked ones. How many times it
+  // went to a list in all is kept, so the next send is counted on top of the earlier ones.
+  const { doneAt: _before, archived: _archived, sentTo: _sent, ...rest } = item;
+  const sent = timesSent(item);
+  const counted = sent > 0 ? { ...rest, sentCount: sent } : rest;
+  return done ? { ...counted, done, doneAt: Date.now() } : { ...counted, done };
+}
 
 /**
  * The groups of the Note List Shop page (each with its own items). Nothing is read until a component uses this hook;
@@ -117,30 +130,82 @@ export function useNoteLists() {
       toggleItem: (listId: string, itemId: string) =>
         changeList(listId, (list) => ({
           ...list,
-          items: list.items.map((item) => (item.id === itemId ? { ...item, done: !item.done } : item)),
+          items: list.items.map((item) => (item.id === itemId ? withDone(item, !item.done) : item)),
         })),
       /** Checks off (or, with `false`, unchecks) these items of a group in one go. */
       setItemsDone: (listId: string, itemIds: string[], done: boolean) => {
         const ids = new Set(itemIds);
         changeList(listId, (list) => ({
           ...list,
-          items: list.items.map((item) => (ids.has(item.id) && item.done !== done ? { ...item, done } : item)),
+          items: list.items.map((item) => (ids.has(item.id) && item.done !== done ? withDone(item, done) : item)),
         }));
       },
       /**
        * Notes which shopping list (an id) a copy of each of these items was sent to; an item mapped to `undefined` is
-       * marked as never sent. An item that is not in `sentTo` stays as it is.
+       * marked as never sent. An item that is not in `sentTo` stays as it is. `counts` sets how many times each was sent.
        */
-      markItemsSent: (listId: string, sentTo: Record<string, string | undefined>) =>
+      markItemsSent: (listId: string, sentTo: Record<string, string | undefined>, counts?: Record<string, number | undefined>) =>
         changeList(listId, (list) => ({
           ...list,
           items: list.items.map((item) => {
             if (!(item.id in sentTo)) return item;
-            const { sentTo: _before, ...rest } = item;
+            const { sentTo: _before, sentCount: _count, ...rest } = item;
             const to = sentTo[item.id];
-            return to ? { ...rest, sentTo: to } : rest;
+            // `counts` says how many times it was sent now; without it the count stays as it was.
+            const count = counts && item.id in counts ? counts[item.id] : item.sentCount;
+            return { ...rest, ...(to ? { sentTo: to } : {}), ...(count ? { sentCount: count } : {}) };
           }),
         })),
+      /**
+       * Brings a checked product that was put away (sent, or moved to the checked ones) back among the products to buy, with the
+       * fields just given, instead of making a second one with the same name. It goes to the end, as a new product would.
+       */
+      reviveItem: (listId: string, itemId: string, fields: NoteItemFields) =>
+        changeList(listId, (list) => ({
+          ...list,
+          items: list.items.map((item) => {
+            if (item.id !== itemId) return item;
+            // The copy it sent before was of the last time; this one is bought again.
+            const { sentTo: _sent, ...back } = withDone(editNoteItem(item, fields), false);
+            return { ...back, createdAt: Date.now() };
+          }),
+        })),
+      /** Moves these checked items to the part of the checked ones (or, with `false`, back among the others) without sending them. */
+      archiveItems: (listId: string, itemIds: string[], archived: boolean) => {
+        const ids = new Set(itemIds);
+        changeList(listId, (list) => ({
+          ...list,
+          items: list.items.map((item) => {
+            if (!ids.has(item.id) || !item.done) return item;
+            const { archived: _before, ...rest } = item;
+            return archived ? { ...rest, archived: true } : rest;
+          }),
+        }));
+      },
+      /** Brings back unchecked every repeating item whose days have passed since it was checked; saves nothing when none is due. */
+      resetRepeating: () => {
+        const now = Date.now();
+        const current = cachedNoteLists(scope);
+        if (!current?.some((list) => list.items.some((item) => isRepeatDue(item, now)))) return;
+        commit((all) =>
+          all.map((list) => ({
+            ...list,
+            items: list.items.map((item) => {
+              if (!isRepeatDue(item, now)) return item;
+              // A product that comes back is to be bought again: its copy in a list is of the last time.
+              const { sentTo: _sent, ...back } = withDone(item, false);
+              return back;
+            }),
+          })),
+        );
+      },
+      /** Clears the checked items of the normal list that were not repeating and are a month old; saves nothing when there are none. */
+      clearStale: () => {
+        const now = Date.now();
+        const current = cachedNoteLists(scope);
+        if (!current?.some((list) => tidyNormalList(list, now) !== list)) return;
+        commit((all) => all.map((list) => tidyNormalList(list, now)));
+      },
       /** Puts a deleted item back in its group, at the place its creation date gives it. */
       restoreItem: (listId: string, item: NoteItem) =>
         changeList(listId, (list) => {

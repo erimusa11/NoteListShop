@@ -31,7 +31,6 @@ function RootNavigator() {
       <Stack.Protected guard={signedIn && (accepted || demoMode)}>
         <Stack.Screen name="index" />
         <Stack.Screen name="trip/[id]" />
-        <Stack.Screen name="note/[id]" />
         <Stack.Screen name="profile" />
       </Stack.Protected>
       <Stack.Protected guard={user === null && !demoMode}>
