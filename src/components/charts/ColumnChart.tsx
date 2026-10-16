@@ -8,6 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { usePrivacy } from '@/context/PrivacyContext';
 import { ms } from '@/theme/motion';
 import { colors } from '@/theme/theme';
 import { formatCompact } from '@/utils/reports';
@@ -35,6 +36,7 @@ const VALUE_H = 14;
 
 export function ColumnChart({ data, color, height = 96, onPressColumn }: ColumnChartProps) {
   const reduced = useReducedMotion();
+  const { hidden } = usePrivacy();
   const rise = useSharedValue(reduced ? 1 : 0);
 
   // One short fade for the whole chart instead of an animation per column.
@@ -63,7 +65,7 @@ export function ColumnChart({ data, color, height = 96, onPressColumn }: ColumnC
             <View style={[styles.plot, { height }]}>
               {column.value > 0 && (
                 <Text style={styles.value} numberOfLines={1} maxFontSizeMultiplier={1}>
-                  {formatCompact(column.value)}
+                  {hidden ? '•••' : formatCompact(column.value)}
                 </Text>
               )}
               <View style={[styles.bar, { height: barHeight, backgroundColor: color }]} />

@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { type ReactNode, useCallback, useState } from 'react';
 import { BackHandler, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BottomTabBar } from '@/components/BottomTabBar';
-import { MiniColumns } from '@/components/charts/MiniColumns';
 import { QokatView } from '@/components/QokatView';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { CreateListButton } from '@/components/CreateListButton';
@@ -22,9 +23,10 @@ import { useAuth } from '@/context/AuthContext';
 import { useProfile } from '@/context/ProfileContext';
 import { useTrips } from '@/context/TripsContext';
 import { useUndo } from '@/context/UndoContext';
+import { useTabSwipe } from '@/hooks/useTabSwipe';
 import { colors, spacing } from '@/theme/theme';
 import type { ShoppingTrip } from '@/types/models';
-import { buildListSpend, buildSavings, buildSectionSpend } from '@/utils/reports';
+import { buildSavings, buildSectionSpend } from '@/utils/reports';
 import { SPENT_SECTION } from '@/utils/spent';
 import { tripAllItems, tripIncomeTotal } from '@/utils/totals';
 import { TRASH_DAYS } from '@/utils/trash';
@@ -37,6 +39,8 @@ type Tab = 'home' | 'lists' | 'reports' | 'qokat' | 'school' | 'notes';
 type ShopTab = 'lists' | 'reports' | 'qokat' | 'school';
 const isShopTab = (value: Tab): value is ShopTab =>
   value === 'lists' || value === 'reports' || value === 'qokat' || value === 'school';
+// The order of the tabs at the bottom, which is the order a sideways swipe goes through.
+const SHOP_ORDER: ShopTab[] = ['lists', 'reports', 'qokat', 'school'];
 
 // Lower-case and strip accents so "shtator" finds "Shtator" and "mire" finds "Mirë".
 function normalizeText(value: string): string {
@@ -61,6 +65,16 @@ export default function ListsOverviewScreen() {
   const [returnTab, setReturnTab] = useState<ShopTab>('lists');
   // The list whose days the Kopesht & Shkolle page shows; the newest one until another is picked there.
   const [schoolTripId, setSchoolTripId] = useState<string | null>(null);
+  // Swiping sideways on a shopping page slides to the page next to it, like tapping its tab.
+  const swipe = useTabSwipe(SHOP_ORDER, isShopTab(tab) ? tab : 'lists', setTab);
+  const wrapPage = (page: ReactNode) =>
+    isShopTab(tab) ? (
+      <GestureDetector gesture={swipe.gesture}>
+        <Animated.View style={[styles.page, swipe.slideStyle]}>{page}</Animated.View>
+      </GestureDetector>
+    ) : (
+      page
+    );
   const goTo = (next: Tab) => {
     if (isShopTab(tab)) setReturnTab(tab);
     setTab(next);
@@ -99,14 +113,6 @@ export default function ListsOverviewScreen() {
   const latestSections = buildSectionSpend(pieTrip ? [pieTrip] : []);
   // Newest list first, so the breakdown of the bank reads like the lists below.
   const savings = buildSavings(sorted);
-  const recent = buildListSpend(trips)
-    .slice(-12)
-    .map((list) => ({
-      key: list.id,
-      label: list.name,
-      value: list.spent,
-      over: list.budget != null && list.spent > list.budget,
-    }));
 
   const openTrip = (id: string) => router.push({ pathname: '/trip/[id]', params: { id } });
   // A category of the pie opens that list on Të shpenzuarat, at the part of that category.
@@ -240,7 +246,7 @@ export default function ListsOverviewScreen() {
             />
           </View>
         )}
-        {tab === 'home' ? (
+        {wrapPage(tab === 'home' ? (
           <HomeChooser
             name={fullName}
             initial={initial}
@@ -254,15 +260,15 @@ export default function ListsOverviewScreen() {
             keyExtractor={(trip) => trip.id}
             style={styles.list}
             ListHeaderComponent={
-              recent.length > 0 && !needle ? (
+              trips.length > 0 && !needle ? (
                 <>
                   {savings.lists > 0 && <SavingsCard savings={savings} onOpenList={openTrip} />}
-                  <MiniColumns data={recent} onPressColumn={openTrip} />
                   <LatestListPie
                     listName={`${pieTrip.name} · sipas kategorisë`}
                     sections={latestSections}
                     income={tripIncomeTotal(pieTrip)}
                     onPressSection={(section) => openSpent(pieTrip.id, section)}
+                    onPressCard={() => openTrip(pieTrip.id)}
                     choices={sorted}
                     selectedId={pieTrip.id}
                     onSelect={setPieTripId}
@@ -326,14 +332,14 @@ export default function ListsOverviewScreen() {
           <ReportsView onOpenTrip={openTrip} />
         ) : tab === 'qokat' ? (
           // Only built once its tab is opened, so it costs nothing until then.
-          <QokatView onOpenTrip={openTrip} />
+          <QokatView onOpenTrip={openTrip} onEdgeSwipe={swipe.go} />
         ) : tab === 'school' ? (
           // Same: the days calendar is only built once its tab is opened.
           <SchoolDaysTab tripId={schoolTripId} onPickTrip={setSchoolTripId} onGoToLists={() => setTab('lists')} />
         ) : (
           // Same here: nothing of the Note List Shop page runs, or is read from the phone, until its tab is opened.
           <NotesView />
-        )}
+        ))}
       </View>
 
       <ConfirmDialog
@@ -401,6 +407,7 @@ export default function ListsOverviewScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
+  page: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

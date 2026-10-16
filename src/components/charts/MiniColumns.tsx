@@ -9,9 +9,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { usePrivacy } from '@/context/PrivacyContext';
 import { ms } from '@/theme/motion';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
-import { formatPrice } from '@/utils/totals';
 
 export interface MiniColumn {
   key: string;
@@ -39,6 +39,7 @@ function Bar({
   onPress: () => void;
 }) {
   const reduced = useReducedMotion();
+  const { price } = usePrivacy();
   const target = max > 0 ? column.value / max : 0;
   const grow = useSharedValue(reduced ? 1 : 0);
 
@@ -55,7 +56,7 @@ function Bar({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${column.label}, ${formatPrice(column.value)} shpenzuar`}
+      accessibilityLabel={`${column.label}, ${price(column.value)} shpenzuar`}
       style={styles.slot}
     >
       <Animated.View
@@ -66,6 +67,7 @@ function Bar({
 }
 
 export function MiniColumns({ data, onPressColumn }: MiniColumnsProps) {
+  const { price } = usePrivacy();
   const max = Math.max(...data.map((d) => d.value), 0);
   const total = data.reduce((sum, d) => sum + d.value, 0);
 
@@ -73,7 +75,7 @@ export function MiniColumns({ data, onPressColumn }: MiniColumnsProps) {
     <View style={[styles.card, shadow]}>
       <View style={styles.header}>
         <Text style={styles.title}>{data.length === 1 ? 'Lista e fundit' : `${data.length} listat e fundit`}</Text>
-        <Text style={styles.total}>{formatPrice(total)}</Text>
+        <Text style={styles.total}>{price(total)}</Text>
       </View>
       <View style={styles.plot}>
         {data.map((column, index) => (

@@ -9,12 +9,13 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 
+import { usePrivacy } from '@/context/PrivacyContext';
 import { HOLD_LIST_TO_DELETE_MS, useHoldToDelete } from '@/hooks/useHoldToDelete';
 import { ms, spring } from '@/theme/motion';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { ShoppingTrip } from '@/types/models';
 import { formatDateTimeAlbanian } from '@/utils/dates';
-import { computeSpentTotal, formatPrice, tripAllItems, tripIncomeTotal } from '@/utils/totals';
+import { computeSpentTotal, tripAllItems, tripIncomeTotal } from '@/utils/totals';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -28,6 +29,7 @@ interface TripCardProps {
 
 export function TripCard({ trip, onPress, onLongPress, index = 0 }: TripCardProps) {
   const reduced = useReducedMotion();
+  const { price } = usePrivacy();
   const allItems = tripAllItems(trip);
   const spentTotal = computeSpentTotal(allItems);
   const boughtCount = allItems.filter((item) => item.bought).length;
@@ -102,11 +104,11 @@ export function TripCard({ trip, onPress, onLongPress, index = 0 }: TripCardProp
               />
             </View>
             <Text style={styles.progressLabel}>
-              {formatPrice(spentTotal)} / {formatPrice(income)}
+              {price(spentTotal)} / {price(income)}
             </Text>
           </View>
         ) : (
-          <Text style={styles.spentOnly}>{formatPrice(spentTotal)} shpenzuar</Text>
+          <Text style={styles.spentOnly}>{price(spentTotal)} shpenzuar</Text>
         )}
         <View style={styles.holdTrack}>
           <Animated.View style={[styles.holdLine, holdStyle]} />

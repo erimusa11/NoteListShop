@@ -20,6 +20,8 @@ interface InlineEditableFieldProps {
   /** How many lines the text may take before it is cut off with "…". One by default; a longer text goes on to the next line. */
   numberOfLines?: number;
   onEditingChange?: (editing: boolean) => void;
+  /** False shows the text without letting it be tapped to edit (an amount hidden by private mode). */
+  editable?: boolean;
 }
 
 export function InlineEditableField({
@@ -36,6 +38,7 @@ export function InlineEditableField({
   chip = false,
   numberOfLines = 1,
   onEditingChange,
+  editable = true,
 }:InlineEditableFieldProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -46,7 +49,7 @@ export function InlineEditableField({
     if (draft !== value) onChange(draft);
   };
 
-  if (editing) {
+  if (editing && editable) {
     return (
       <TextInput
         value={draft}
@@ -63,6 +66,7 @@ export function InlineEditableField({
 
   return (
     <Pressable
+      disabled={!editable}
       onPress={() => {
         setDraft(value);
         setEditing(true);
@@ -82,7 +86,7 @@ export function InlineEditableField({
             {placeholder}
           </Text>
         )}
-        {chip && <Ionicons name="pencil" size={11} color={colors.textMuted} style={styles.chipIcon} />}
+        {chip && editable && <Ionicons name="pencil" size={11} color={colors.textMuted} style={styles.chipIcon} />}
       </View>
     </Pressable>
   );

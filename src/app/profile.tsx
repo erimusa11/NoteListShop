@@ -10,6 +10,7 @@ import { BrandBackdrop } from '@/components/BrandBackdrop';
 import { FamilyLabelsCard } from '@/components/FamilyLabelsCard';
 import { useAppLock } from '@/context/AppLockContext';
 import { useAuth } from '@/context/AuthContext';
+import { usePrivacy } from '@/context/PrivacyContext';
 import { useProfile } from '@/context/ProfileContext';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import { cleanName } from '@/utils/profileName';
@@ -25,6 +26,7 @@ export default function ProfileScreen() {
   const { demoMode, signOut } = useAuth();
   const insets = useSafeAreaInsets();
   const profile = useProfile();
+  const { hidden: privateMode, setHidden: setPrivateMode } = usePrivacy();
   const { supported, enabled: lockEnabled, setEnabled: setLockEnabled } = useAppLock();
   const [first, setFirst] = useState(profile.custom.firstName);
   const [last, setLast] = useState(profile.custom.lastName);
@@ -61,6 +63,19 @@ export default function ProfileScreen() {
     },
     [],
   );
+
+  // A name that arrives from another device (or the account when the page opens first) fills the fields, unless they already
+  // hold that same name: typing is never touched, since the name saved from it is the same as what is typed. While an edit is
+  // waiting on the autosave timer, the incoming name is held back too, so a keystroke in flight is never erased by it; it is
+  // picked up again (this check re-runs every render) once that edit is saved or cleared.
+  const savedFirst = profile.custom.firstName;
+  const savedLast = profile.custom.lastName;
+  const [seenName, setSeenName] = useState({ first: savedFirst, last: savedLast });
+  if ((seenName.first !== savedFirst || seenName.last !== savedLast) && !canSave) {
+    setSeenName({ first: savedFirst, last: savedLast });
+    if (cleanName(first) !== savedFirst) setFirst(savedFirst);
+    if (cleanName(last) !== savedLast) setLast(savedLast);
+  }
 
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/'));
 
@@ -112,6 +127,16 @@ export default function ProfileScreen() {
                 <Text style={[styles.badgeText, shown.isCustom && styles.badgeTextCustom]}>{badge}</Text>
               </View>
             )}
+            <Pressable
+              onPress={signOut}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={demoMode ? 'Dil nga demo' : 'Dil nga llogaria'}
+              style={({ pressed }) => [styles.signOutPill, pressed && styles.pressed]}
+            >
+              <Ionicons name="log-out-outline" size={16} color={colors.danger} />
+              <Text style={styles.signOutText}>{demoMode ? 'Dil nga demo' : 'Dil nga llogaria'}</Text>
+            </Pressable>
           </View>
 
           <View style={[styles.card, shadow]}>
@@ -176,6 +201,27 @@ export default function ProfileScreen() {
             )}
           </View>
 
+          <View style={[styles.card, shadow]}>
+            <View style={styles.lockRow}>
+              <View style={styles.lockIcon}>
+                <Ionicons name={privateMode ? 'eye-off' : 'eye'} size={22} color={colors.primaryDark} />
+              </View>
+              <View style={styles.lockText}>
+                <Text style={styles.lockTitle}>Modaliteti privat</Text>
+                <Text style={styles.lockHint}>
+                  Fsheh shumat totale (të ardhurat, totalet e listave, qokat…) dhe shfaq ••••• në vend të tyre. Gjithçka
+                  tjetër punon njësoj.
+                </Text>
+              </View>
+              <Switch
+                value={privateMode}
+                onValueChange={setPrivateMode}
+                trackColor={{ true: colors.primary, false: colors.border }}
+                accessibilityLabel="Modaliteti privat"
+              />
+            </View>
+          </View>
+
           <FamilyLabelsCard />
 
           {supported && !demoMode && (
@@ -234,10 +280,6 @@ export default function ProfileScreen() {
             </View>
           )}
 
-          <Pressable onPress={signOut} accessibilityRole="button" style={styles.signOutButton}>
-            <Ionicons name="log-out-outline" size={20} color={colors.danger} />
-            <Text style={styles.signOutText}>{demoMode ? 'Dil nga demo' : 'Dil nga llogaria'}</Text>
-          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -349,16 +391,18 @@ const styles = StyleSheet.create({
   lockText: { flex: 1 },
   lockTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
   lockHint: { fontSize: 13, color: colors.textMuted },
-  signOutButton: {
+  pressed: { opacity: 0.6 },
+  signOutPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    borderRadius: radii.pill,
+    gap: 6,
+    backgroundColor: '#FDECEA',
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    paddingVertical: spacing.sm + 4,
+    borderColor: '#F5C2BD',
+    borderRadius: radii.pill,
+    paddingVertical: 7,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
   },
-  signOutText: { fontSize: 15, fontWeight: '700', color: colors.danger },
+  signOutText: { fontSize: 13, fontWeight: '700', color: colors.danger },
 });

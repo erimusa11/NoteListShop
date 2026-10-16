@@ -6,14 +6,16 @@ import { AuthField } from '@/components/AuthField';
 import { BottomSheet } from '@/components/BottomSheet';
 import { authErrorMessage, useAuth } from '@/context/AuthContext';
 import { colors, radii, spacing } from '@/theme/theme';
+import { DELETE_GRACE_DAYS } from '@/utils/accountDeletion';
 
 interface DeleteAccountSheetProps {
   visible: boolean;
   onClose: () => void;
 }
 
-// Erasing the account and all its data (the right to have your data deleted). It asks for the password once more, and says
-// plainly what goes. When it is done the account is signed out, so the app returns to the sign-in page by itself.
+// Deleting the account and all its data (the right to have your data deleted). It asks for the password once more, and says
+// plainly what happens: the account is signed out at once and erased after a few days, unless the person signs in again before
+// that. When it is done the app returns to the sign-in page by itself.
 export function DeleteAccountSheet({ visible, onClose }: DeleteAccountSheetProps) {
   return (
     <BottomSheet visible={visible} onClose={onClose} title="Fshi llogarinë">
@@ -55,8 +57,15 @@ function DeleteForm({ onClose }: { onClose: () => void }) {
       <View style={styles.warning}>
         <Ionicons name="warning" size={20} color={colors.danger} />
         <Text style={styles.warningText}>
-          Kjo fshin përgjithmonë llogarinë {user?.email ? `(${user.email}) ` : ''}dhe të gjitha listat, shënimet dhe të
-          dhënat e saj, nga cloud-i dhe nga ky telefon. Nuk mund të kthehet.
+          Do të dalësh menjëherë dhe llogaria {user?.email ? `(${user.email}) ` : ''}me të gjitha listat, shënimet dhe të
+          dhënat e saj do të fshihet pas {DELETE_GRACE_DAYS} ditësh. Nga ky telefon fshihen tani.
+        </Text>
+      </View>
+      <View style={styles.restore}>
+        <Ionicons name="refresh-circle" size={20} color={colors.success} />
+        <Text style={styles.warningText}>
+          Nëse brenda {DELETE_GRACE_DAYS} ditëve hyn përsëri në llogari, fshirja anulohet dhe gjithçka kthehet. Pas kësaj
+          fshihet përgjithmonë dhe nuk mund të kthehet.
         </Text>
       </View>
 
@@ -84,7 +93,7 @@ function DeleteForm({ onClose }: { onClose: () => void }) {
         onPress={submit}
         disabled={!canDelete}
         accessibilityRole="button"
-        accessibilityLabel="Fshi llogarinë dhe të dhënat përgjithmonë"
+        accessibilityLabel={`Fshi llogarinë pas ${DELETE_GRACE_DAYS} ditësh`}
         style={({ pressed }) => [styles.delete, !canDelete && styles.disabled, pressed && styles.pressed]}
       >
         {busy ? (
@@ -92,7 +101,7 @@ function DeleteForm({ onClose }: { onClose: () => void }) {
         ) : (
           <>
             <Ionicons name="trash" size={18} color="#FFFFFF" />
-            <Text style={styles.deleteText}>Fshi përgjithmonë</Text>
+            <Text style={styles.deleteText}>Fshi llogarinë</Text>
           </>
         )}
       </Pressable>
@@ -108,6 +117,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     backgroundColor: '#FDE6E3',
+    borderRadius: radii.md,
+    padding: spacing.sm + 2,
+  },
+  restore: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    backgroundColor: colors.successLight,
     borderRadius: radii.md,
     padding: spacing.sm + 2,
   },

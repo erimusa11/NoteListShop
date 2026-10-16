@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Animated, AppState, Easing, PanResponder, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { NoteListBody } from '@/components/NoteListBody';
 import { useNoteLists } from '@/hooks/useNoteLists';
@@ -20,6 +20,10 @@ const SWIPE_DISTANCE = 56;
 const SWIPE_FLICK_DISTANCE = 28;
 const SWIPE_FLICK_SPEED = 0.5;
 
+// The list of the new tab slides in from the side it came from (a short distance, a quarter of a second) while it fades in.
+const SLIDE_DISTANCE = 36;
+const SLIDE_MS = 260;
+
 // The Note List Shop page: two folder tabs, the normal list and the shopping list. The open tab is joined to the colored sheet
 // under it, which holds that one list (made by itself the first time), so its items are right on the page. The page is only
 // built when its menu is opened, so the rest of the app does not pay for it.
@@ -27,6 +31,9 @@ export function NotesView() {
   const { lists, addList, resetRepeating, clearStale } = useNoteLists();
   const [tab, setTab] = useState<NoteListKind>('work');
   const created = useRef<Set<NoteListKind>>(new Set());
+  const [slideX] = useState(() => new Animated.Value(0));
+  const [fade] = useState(() => new Animated.Value(1));
+  const shownTab = useRef<NoteListKind>('work');
 
   // Swiping the page to the left opens the tab on the right (the shopping list), swiping to the right opens the one on the left
   // (the normal list). Only a clearly sideways move takes the touch, so scrolling the list and tapping a card work as before.
@@ -80,6 +87,21 @@ export function NotesView() {
   const activeIndex = TABS.findIndex((t) => t.kind === tab);
   const accent = TABS[activeIndex].accent;
 
+  // Before the new list is drawn it is moved to the side and hidden, then it glides to its place. Tapping a tab and swiping do it
+  // the same way, from the right when the shopping list opens and from the left when the normal list does.
+  useLayoutEffect(() => {
+    if (shownTab.current === tab) return;
+    const fromRight = tab === 'products';
+    shownTab.current = tab;
+    slideX.setValue(fromRight ? SLIDE_DISTANCE : -SLIDE_DISTANCE);
+    fade.setValue(0);
+    const native = Platform.OS !== 'web';
+    Animated.parallel([
+      Animated.timing(slideX, { toValue: 0, duration: SLIDE_MS, easing: Easing.out(Easing.cubic), useNativeDriver: native }),
+      Animated.timing(fade, { toValue: 1, duration: SLIDE_MS, easing: Easing.out(Easing.quad), useNativeDriver: native }),
+    ]).start();
+  }, [tab, slideX, fade]);
+
   return (
     <View style={styles.flex} {...swipe.panHandlers}>
       <View style={styles.tabs} accessibilityRole="tablist">
@@ -125,7 +147,9 @@ export function NotesView() {
           <View style={[styles.blob, styles.blobBig, { backgroundColor: accent.light }]} />
           <View style={[styles.blob, styles.blobSmall, { backgroundColor: accent.light }]} />
         </View>
-        {current ? <NoteListBody key={current.id} listId={current.id} accent={accent} /> : <View style={styles.flex} />}
+        <Animated.View style={[styles.flex, { opacity: fade, transform: [{ translateX: slideX }] }]}>
+          {current ? <NoteListBody key={current.id} listId={current.id} accent={accent} /> : <View style={styles.flex} />}
+        </Animated.View>
       </View>
     </View>
   );

@@ -3,9 +3,12 @@ import { memo, useMemo } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 
 import { ColumnChart } from '@/components/charts/ColumnChart';
+import { MiniColumns } from '@/components/charts/MiniColumns';
 import { PieChart } from '@/components/charts/PieChart';
+import { CompareLists } from '@/components/CompareLists';
 import { EmptyState } from '@/components/EmptyState';
 import { useFamilyLabels } from '@/context/FamilyLabelsContext';
+import { usePrivacy } from '@/context/PrivacyContext';
 import { useTrips } from '@/context/TripsContext';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import { CATEGORIES } from '@/utils/categories';
@@ -13,11 +16,11 @@ import { formatDayMonthShort } from '@/utils/dates';
 import {
   buildCategoryHistory,
   buildOptionHistory,
+  buildListSpend,
   buildPersonHistory,
   type CategoryHistory,
   type OptionHistory,
 } from '@/utils/reports';
-import { formatPrice } from '@/utils/totals';
 
 interface ReportsViewProps {
   onOpenTrip: (id: string) => void;
@@ -39,11 +42,12 @@ const CategoryCard = memo(function CategoryCard({
   onOpenTrip: (id: string) => void;
 }) {
   const { category, columns, total } = history;
+  const { price } = usePrivacy();
   const hasSpend = total > 0;
   const data = columns.map((column) => ({
     key: column.id,
     label: formatDayMonthShort(column.createdAt),
-    description: `${column.name}, ${formatPrice(column.spent)} në ${category.label}`,
+    description: `${column.name}, ${price(column.spent)} në ${category.label}`,
     value: column.spent,
   }));
 
@@ -59,7 +63,7 @@ const CategoryCard = memo(function CategoryCard({
           </Text>
           <Text style={styles.cardSubtitle}>{hasSpend ? listsLabel(columns.length) : 'Asnjë shpenzim ende'}</Text>
         </View>
-        <Text style={[styles.cardTotal, !hasSpend && { color: colors.textMuted }]}>{formatPrice(total)}</Text>
+        <Text style={[styles.cardTotal, !hasSpend && { color: colors.textMuted }]}>{price(total)}</Text>
       </View>
       {hasSpend && <ColumnChart data={data} color={category.color} onPressColumn={onOpenTrip} />}
     </View>
@@ -76,6 +80,7 @@ const OptionCard = memo(function OptionCard({
 }) {
   const { category, total } = history;
   const { label } = useFamilyLabels();
+  const { price } = usePrivacy();
   const hasSpend = total > 0;
   const listCount = history.options[0]?.columns.length ?? 0;
   // Only the choices that cost something: the ones at zero would just be lines of zeros.
@@ -93,7 +98,7 @@ const OptionCard = memo(function OptionCard({
           </Text>
           <Text style={styles.cardSubtitle}>{hasSpend ? listsLabel(listCount) : 'Asnjë shpenzim ende'}</Text>
         </View>
-        <Text style={[styles.cardTotal, !hasSpend && { color: colors.textMuted }]}>{formatPrice(total)}</Text>
+        <Text style={[styles.cardTotal, !hasSpend && { color: colors.textMuted }]}>{price(total)}</Text>
       </View>
       {hasSpend &&
         options.map((option) => (
@@ -106,13 +111,13 @@ const OptionCard = memo(function OptionCard({
               <Text style={styles.totalPercent}>
                 {Math.round((option.total / total) * 100)}%
               </Text>
-              <Text style={styles.totalValue}>{formatPrice(option.total)}</Text>
+              <Text style={styles.totalValue}>{price(option.total)}</Text>
             </View>
             <ColumnChart
               data={option.columns.map((column) => ({
                 key: column.id,
                 label: formatDayMonthShort(column.createdAt),
-                description: `${column.name}, ${formatPrice(column.spent)} për ${label(option.name)}`,
+                description: `${column.name}, ${price(column.spent)} për ${label(option.name)}`,
                 value: column.spent,
               }))}
               color={option.color}
@@ -127,6 +132,7 @@ const OptionCard = memo(function OptionCard({
 
 // What each category cost over the same lists the charts show, all of them together, and how that splits up.
 function TotalsCard({ histories }: { histories: CategoryHistory[] }) {
+  const { price } = usePrivacy();
   const grandTotal = histories.reduce((sum, h) => sum + h.total, 0);
   const listCount = histories[0]?.columns.length ?? 0;
   // Only the categories that cost something, the biggest first.
@@ -149,14 +155,14 @@ function TotalsCard({ histories }: { histories: CategoryHistory[] }) {
                 {category.label}
               </Text>
               <Text style={styles.totalPercent}>{Math.round((total / grandTotal) * 100)}%</Text>
-              <Text style={styles.totalValue}>{formatPrice(total)}</Text>
+              <Text style={styles.totalValue}>{price(total)}</Text>
             </View>
           ))}
         </View>
       )}
       <View style={styles.grandRow}>
         <Text style={styles.grandLabel}>Gjithsej</Text>
-        <Text style={styles.grandValue}>{formatPrice(grandTotal)}</Text>
+        <Text style={styles.grandValue}>{price(grandTotal)}</Text>
       </View>
       {grandTotal > 0 && (
         <PieChart slices={spent.map(({ category, total }) => ({ key: category.section, value: total, color: category.color }))} />
@@ -173,6 +179,19 @@ type ReportRow =
 export function ReportsView({ onOpenTrip }: ReportsViewProps) {
   const { trips } = useTrips();
   const histories = useMemo(() => buildCategoryHistory(trips), [trips]);
+  // What each of the last lists spent, as small columns at the top (the card that used to be on the home page).
+  const recent = useMemo(
+    () =>
+      buildListSpend(trips)
+        .slice(-12)
+        .map((list) => ({
+          key: list.id,
+          label: list.name,
+          value: list.spent,
+          over: list.budget != null && list.spent > list.budget,
+        })),
+    [trips],
+  );
   // A category with a choice gets its split-by-choice card straight after its own card, and one that also asks who it
   // is for (Kopesht & Shkolle) gets a split by person after that.
   const rows = useMemo<ReportRow[]>(() => {
@@ -230,6 +249,8 @@ export function ReportsView({ onOpenTrip }: ReportsViewProps) {
       }}
       ListHeaderComponent={
         <View style={styles.header}>
+          <MiniColumns data={recent} onPressColumn={onOpenTrip} />
+          <CompareLists trips={trips} onOpenTrip={onOpenTrip} />
           <Text style={styles.intro}>Shpenzimet e secilës kategori, listë pas liste. Trokit një kolonë për të hapur listën.</Text>
         </View>
       }

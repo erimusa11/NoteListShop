@@ -10,7 +10,6 @@ export const cloudCopyKey = (uid: string) => `cloudCopy.${uid}`;
 export const noteSyncKey = (uid: string) => `noteSync.${uid}`;
 /** The name typed in the profile page. */
 export const profileKey = (uid: string) => `profile.${uid}`;
-
 /**
  * Removes the copy of an account's data from this phone: the offline copy, the notes and their history. For when the account
  * signs out (only once everything reached the account) or is deleted. The profile name stays unless `withProfile` is set,

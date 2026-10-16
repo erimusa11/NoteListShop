@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { InlineEditableField } from '@/components/InlineEditableField';
+import { HIDDEN_AMOUNT, usePrivacy } from '@/context/PrivacyContext';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { IncomeEntry } from '@/types/models';
 import { incomeKindInfo, nextIncomeKind } from '@/utils/incomes';
@@ -15,6 +16,7 @@ interface IncomeRowProps {
 
 export function IncomeRow({ income, onUpdate, onRemove }: IncomeRowProps) {
   const kind = incomeKindInfo(income);
+  const { hidden } = usePrivacy();
   return (
     <View style={styles.wrapper}>
       <View style={[styles.card, shadow]}>
@@ -44,7 +46,9 @@ export function IncomeRow({ income, onUpdate, onRemove }: IncomeRowProps) {
         </View>
         <InlineEditableField
           value={String(income.amount)}
-          displayValue={formatNumber(income.amount)}
+          displayValue={hidden ? HIDDEN_AMOUNT : formatNumber(income.amount)}
+          // Editing would show the amount, so it waits for private mode to be turned off.
+          editable={!hidden}
           placeholder="Shuma"
           onChange={(text) => {
             const parsed = parseFloat(text.replace(',', '.'));
