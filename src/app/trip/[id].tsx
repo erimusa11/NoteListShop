@@ -109,6 +109,8 @@ const CategoryPane = memo(function CategoryPane({
     return personFilter ? itemsForPerson(byGroup, category, personFilter) : byGroup;
   }, [items, category, optionFilter, personFilter]);
   const { label } = useFamilyLabels();
+  // Qoka is private all through: its totals and its prices. The other categories only hide the totals of the whole list.
+  const alwaysShow = category.key !== 'qoka';
   const filterText = [optionFilter, personFilter]
     .filter((name): name is string => Boolean(name))
     .map((name) => label(name))
@@ -116,12 +118,13 @@ const CategoryPane = memo(function CategoryPane({
 
   return (
     <Pane active={active}>
-      <BillsSummaryBar totalAmount={total} paidAmount={spent} totalLabel={category.totalLabel} />
+      <BillsSummaryBar totalAmount={total} paidAmount={spent} totalLabel={category.totalLabel} alwaysShow={alwaysShow} />
       {optionTotals.length > 0 && (
         <OptionTotalsBar
           options={optionTotals}
           selected={optionFilter}
           onSelect={(group) => onOptionFilter(category.section, group)}
+          alwaysShow={alwaysShow}
         />
       )}
       {personTotals.length > 0 && (
@@ -129,6 +132,7 @@ const CategoryPane = memo(function CategoryPane({
           options={personTotals}
           selected={personFilter}
           onSelect={(person) => onPersonFilter(category.section, person)}
+          alwaysShow={alwaysShow}
         />
       )}
       {overBy > 0 && <OverBudgetCard amount={overBy} />}
@@ -141,6 +145,7 @@ const CategoryPane = memo(function CategoryPane({
         limit={preview ? PREVIEW_ROWS : undefined}
         personOptions={category.personOptions}
         hasChoices={!!category.nameOptions}
+        hideAmounts={!alwaysShow}
       />
     </Pane>
   );

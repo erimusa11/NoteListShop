@@ -9,7 +9,7 @@ service cloud.firestore {
       let d = request.resource.data;
       // noteLists, noteHistory and labels (the names the person gave to the family's choices) may be missing: an older version
       // of the app does not send them.
-      return d.keys().hasOnly(['trips', 'bills', 'supplies', 'wishlist', 'noteLists', 'noteHistory', 'labels', 'updatedAt'])
+      return d.keys().hasOnly(['trips', 'bills', 'supplies', 'wishlist', 'noteLists', 'noteHistory', 'labels', 'settings', 'deleteAt', 'updatedAt'])
         && d.trips is list && d.bills is list && d.supplies is list && d.wishlist is list
         && d.trips.size() <= 500
         && d.bills.size() <= 1000
@@ -18,6 +18,15 @@ service cloud.firestore {
         && (!('noteLists' in d) || (d.noteLists is list && d.noteLists.size() <= 1000))
         && (!('noteHistory' in d) || (d.noteHistory is list && d.noteHistory.size() <= 300))
         && (!('labels' in d) || (d.labels is map && d.labels.size() <= 6))
+        // deleteAt: when the account was deleted, the moment it is erased (2 days later) unless the person signs in again before.
+        // Set a TTL policy on this field for the collection group `users` so the data goes by itself if nobody returns.
+        && (!('deleteAt' in d) || d.deleteAt is timestamp)
+        // settings: what was chosen in the profile (the name and private mode), the same on every device. May be missing too.
+        && (!('settings' in d) || (d.settings is map
+          && d.settings.keys().hasOnly(['privateMode', 'firstName', 'lastName'])
+          && d.settings.privateMode is bool
+          && d.settings.firstName is string && d.settings.firstName.size() <= 40
+          && d.settings.lastName is string && d.settings.lastName.size() <= 40))
         && d.updatedAt == request.time;
     }
 

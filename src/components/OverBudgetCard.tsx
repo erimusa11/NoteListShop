@@ -1,20 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { usePrivacy } from '@/context/PrivacyContext';
 import { colors, radii, spacing } from '@/theme/theme';
-import { formatPrice } from '@/utils/totals';
 
 interface OverBudgetCardProps {
   amount: number;
 }
 
 export function OverBudgetCard({ amount }: OverBudgetCardProps) {
+  const { price } = usePrivacy();
   return (
     <View style={styles.card} accessibilityRole="alert">
       <Ionicons name="alert-circle" size={22} color={colors.danger} />
       <View style={styles.text}>
         <Text style={styles.label}>Ke tejkaluar të ardhurat</Text>
-        <Text style={styles.amount}>{formatPrice(amount)}</Text>
+        <Text style={styles.amount}>{price(amount)}</Text>
       </View>
     </View>
   );

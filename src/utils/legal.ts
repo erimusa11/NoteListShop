@@ -3,7 +3,7 @@
 
 /** Whoever accepted an older version is asked again. */
 export const LEGAL_VERSION = '2026-10-14';
-export const LEGAL_UPDATED = '14 tetor 2026';
+export const LEGAL_UPDATED = '16 tetor 2026';
 
 /** The address people can write to about their data. Shown at the end of both documents when it is not empty. */
 export const LEGAL_CONTACT_EMAIL = '';
@@ -66,14 +66,14 @@ export const PRIVACY_POLICY: LegalDocument = {
     {
       title: 'Sa kohë i ruajmë',
       body: [
-        'Derisa të fshish llogarinë. Listat që i fshin ti shkojnë në Koshin dhe fshihen përfundimisht pas 30 ditësh.',
+        'Derisa të fshish llogarinë. Pasi e fshin llogarinë, të dhënat mbeten në cloud edhe 2 ditë (që të mund ta rikthesh) dhe pastaj fshihen përgjithmonë. Listat që i fshin ti shkojnë në Koshin dhe fshihen përfundimisht pas 30 ditësh.',
       ],
     },
     {
       title: 'Të drejtat e tua',
       body: [
         'Qasje dhe korrigjim: i sheh dhe i ndryshon të dhënat vetë, në aplikacion.',
-        'Fshirje: te Profili, “Fshi llogarinë dhe të dhënat” heq përgjithmonë llogarinë dhe të gjitha të dhënat nga cloud-i dhe nga telefoni.',
+        'Fshirje: te Profili, “Fshi llogarinë dhe të dhënat” të nxjerr menjëherë nga llogaria dhe heq të dhënat nga telefoni. Në cloud ato mbahen edhe 2 ditë: nëse hyn përsëri brenda tyre, fshirja anulohet; përndryshe llogaria dhe të gjitha të dhënat fshihen përgjithmonë.',
         'Mund ta tërheqësh pranimin në çdo kohë duke fshirë llogarinë.',
         'Ke të drejtë të paraqesësh ankesë te autoriteti për mbrojtjen e të dhënave personale në vendin tënd.',
       ],
@@ -117,7 +117,7 @@ export const TERMS_OF_USE: LegalDocument = {
     {
       title: 'Të dhënat e tua',
       body: [
-        'Të dhënat që fut janë të tuat. Ne i ruajmë vetëm që aplikacioni të funksionojë, siç shpjegohet te Politika e privatësisë. Mund t’i fshish në çdo kohë (Profili, “Fshi llogarinë dhe të dhënat”).',
+        'Të dhënat që fut janë të tuat. Ne i ruajmë vetëm që aplikacioni të funksionojë, siç shpjegohet te Politika e privatësisë. Mund t’i fshish në çdo kohë (Profili, “Fshi llogarinë dhe të dhënat”); fshihen përgjithmonë pas 2 ditësh.',
       ],
     },
     {

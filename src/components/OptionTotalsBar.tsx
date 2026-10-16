@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useFamilyLabels } from '@/context/FamilyLabelsContext';
+import { usePrivacy } from '@/context/PrivacyContext';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { OptionTotal } from '@/utils/options';
 import { formatPrice } from '@/utils/totals';
@@ -12,12 +13,16 @@ interface OptionTotalsBarProps {
   selected: string | null;
   /** Tapping a group shows only its items; tapping the selected one again shows everything. */
   onSelect: (name: string | null) => void;
+  /** Shows the amounts even in private mode: for the tabs of a category. */
+  alwaysShow?: boolean;
 }
 
 // What each choice of a category (Naftë, Gaz, Benzinë; Drion, Alois…) adds up to, under the category total.
 // Each one is also a filter for the list below it. More than three wrap onto a second row.
-export function OptionTotalsBar({ options, selected, onSelect }: OptionTotalsBarProps) {
+export function OptionTotalsBar({ options, selected, onSelect, alwaysShow = false }: OptionTotalsBarProps) {
   const { label } = useFamilyLabels();
+  const { price: privatePrice } = usePrivacy();
+  const price = alwaysShow ? formatPrice : privatePrice;
   return (
     <View style={styles.wrap}>
       <View style={[styles.container, shadow]}>
@@ -29,7 +34,7 @@ export function OptionTotalsBar({ options, selected, onSelect }: OptionTotalsBar
               onPress={() => onSelect(active ? null : option.name)}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
-              accessibilityLabel={`${label(option.name)}, ${formatPrice(option.total)}`}
+              accessibilityLabel={`${label(option.name)}, ${price(option.total)}`}
               accessibilityHint={active ? 'Shfaq të gjitha' : 'Shfaq vetëm këtë'}
               style={[styles.cell, active && { backgroundColor: option.color + '22' }]}
             >
@@ -40,7 +45,7 @@ export function OptionTotalsBar({ options, selected, onSelect }: OptionTotalsBar
                 </Text>
               </View>
               <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
-                {formatPrice(option.total)}
+                {price(option.total)}
               </Text>
             </Pressable>
           );

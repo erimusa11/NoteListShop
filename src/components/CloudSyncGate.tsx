@@ -1,16 +1,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SplashScreen from 'expo-splash-screen';
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, serverTimestamp, setDoc, Timestamp } from 'firebase/firestore';
 import { ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/context/AuthContext';
 import { useFamilyLabels } from '@/context/FamilyLabelsContext';
+import { usePrivacy } from '@/context/PrivacyContext';
+import { useProfile } from '@/context/ProfileContext';
 import { useTrips } from '@/context/TripsContext';
 import { db } from '@/lib/firebase';
-import { colors, radii, spacing } from '@/theme/theme';
+import { brand, colors, radii, spacing } from '@/theme/theme';
 import type { NoteList } from '@/types/models';
+import { DELETE_GRACE_DAYS, formatDeleteMoment } from '@/utils/accountDeletion';
+import { type AccountSettings, normalizeSettings } from '@/utils/accountSettings';
 import { normalizeLabels } from '@/utils/familyLabels';
 import {
   mergeNoteHistory,
@@ -34,6 +38,8 @@ import { withTimeout } from '@/utils/withTimeout';
 const SAVE_DELAY_MS = 700;
 const OFFLINE_LOAD_TIMEOUT_MS = 6000;
 const PENDING_BANNER_DELAY_MS = 4000;
+// How long a message about the account (deleted, brought back) stays on top of the screen.
+const NOTICE_MS = 12_000;
 
 const LOAD_FAILED_MESSAGE = "Nuk mund t'i ngarkojmë të dhënat. Kontrollo internetin dhe provo përsëri.";
 
@@ -55,6 +61,8 @@ function normalize(data: Record<string, unknown> | undefined) {
       : (null as NoteHistoryEntry[] | null),
     // The names the person gave to the family's choices (people, cars); none in data from before they could be changed.
     labels: normalizeLabels(data?.labels),
+    // What was chosen in the profile (the name, private mode); null for an account that never changed it.
+    settings: normalizeSettings(data?.settings),
   };
 }
 
@@ -88,9 +96,24 @@ function writeCopy(uid: string, copy: LocalCopy) {
 }
 
 export function CloudSyncGate({ children }: { children: ReactNode }) {
-  const { user, hasPassword, loading, demoMode, signOut } = useAuth();
+  const {
+    user,
+    hasPassword,
+    loading,
+    demoMode,
+    signOut,
+    signedInThisSession,
+    restoreAccount,
+    endAccount,
+    handleRemoteDeletion,
+    notice,
+    showNotice,
+    clearNotice,
+  } = useAuth();
   const { allTrips, hydrate: hydrateTrips } = useTrips();
   const { labels, hydrate: hydrateLabels } = useFamilyLabels();
+  const { custom: profileName, hydrate: hydrateProfile } = useProfile();
+  const { hidden: privateMode, hydrate: hydratePrivacy } = usePrivacy();
 
   const uid = user && hasPassword && db ? user.uid : null;
   const [loadedUid, setLoadedUid] = useState<string | null>(null);
@@ -115,10 +138,18 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
   const lastSaved = useRef('');
   const latestJson = useRef('');
   const previousUid = useRef<string | null>(null);
+  // The settings as the account holds them (as text), to tell a change made on another device from our own save coming back.
+  const knownSettings = useRef('');
+  // Once the account holds settings they are always sent, so putting the defaults back reaches the other devices too.
+  const accountHasSettings = useRef(false);
 
-  const hydrators = useRef({ hydrateTrips, hydrateLabels });
+  const hydrators = useRef({ hydrateTrips, hydrateLabels, hydrateProfile, hydratePrivacy });
   useEffect(() => {
-    hydrators.current = { hydrateTrips, hydrateLabels };
+    hydrators.current = { hydrateTrips, hydrateLabels, hydrateProfile, hydratePrivacy };
+  });
+  const accountActions = useRef({ signOut, signedInThisSession, restoreAccount, endAccount, handleRemoteDeletion, showNotice });
+  useEffect(() => {
+    accountActions.current = { signOut, signedInThisSession, restoreAccount, endAccount, handleRemoteDeletion, showNotice };
   });
 
   // Demo data lives only in memory (uid stays null, so nothing syncs); drop it when leaving demo mode.
@@ -146,6 +177,8 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
         });
         hydrators.current.hydrateTrips([]);
         hydrators.current.hydrateLabels({});
+        knownSettings.current = '';
+        accountHasSettings.current = false;
         lastSaved.current = '';
       }
       previousUid.current = null;
@@ -161,14 +194,45 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
 
       let server: CloudData | null = null;
       let failure: { code?: string } | null = null;
+      // The moment the account is erased, when it was deleted and the days of waiting have not ended yet (or have just ended).
+      let eraseAt: number | null = null;
       try {
         const request = getDoc(doc(db!, 'users', uid));
         const snap = await (copy ? withTimeout(request, OFFLINE_LOAD_TIMEOUT_MS) : request);
         server = normalize(snap.exists() ? snap.data() : undefined);
+        const marked = snap.exists() ? snap.data().deleteAt : undefined;
+        eraseAt = marked instanceof Timestamp ? marked.toMillis() : null;
       } catch (e) {
         failure = (e as { code?: string }) ?? {};
       }
       if (cancelled) return;
+
+      if (eraseAt !== null) {
+        const actions = accountActions.current;
+        try {
+          if (Date.now() >= eraseAt) {
+            // The days are over: whoever signs in now finds the account gone.
+            await actions.endAccount();
+            actions.showNotice(`Llogaria u fshi përfundimisht, sepse kaluan ${DELETE_GRACE_DAYS} ditët.`);
+            return;
+          }
+          if (!actions.signedInThisSession()) {
+            // An old session still on this phone is not the person coming back: it must not undo the deletion.
+            actions.showNotice(
+              `Llogaria është caktuar për fshirje më ${formatDeleteMoment(eraseAt)}. Hyr përsëri për ta rikthyer.`,
+            );
+            await actions.signOut();
+            return;
+          }
+          // Signing in again within the days is the way back: the deletion is cancelled and everything is as it was.
+          await actions.restoreAccount();
+          actions.showNotice('Mirë se u ktheve! Fshirja e llogarisë u anulua.');
+        } catch {
+          if (!cancelled) setLoadError(LOAD_FAILED_MESSAGE);
+          return;
+        }
+        if (cancelled) return;
+      }
 
       let data: CloudData;
       // A copy still marked as unsent that is exactly what the account holds (the app was closed just after the account
@@ -217,6 +281,13 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
       if (!copy?.dirty || alreadySent) writeCopy(uid, { data, dirty: false });
       hydrators.current.hydrateTrips(upgradeLegacyTrips(data as StoredData));
       hydrators.current.hydrateLabels(data.labels);
+      knownSettings.current = data.settings ? JSON.stringify(data.settings) : '';
+      accountHasSettings.current = data.settings !== null;
+      // Without settings in the account the phone's own are kept (they are sent with the next save).
+      if (data.settings) {
+        hydrators.current.hydrateProfile(data.settings);
+        hydrators.current.hydratePrivacy(data.settings.privateMode);
+      }
       setLoadedUid(uid);
     })().catch(() => {
       // Anything unexpected while loading shows the retry panel instead of an endless spinner.
@@ -231,7 +302,11 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!uid || !db || loadedUid !== uid || !noteLists) return;
     // bills, supplies and wishlist now live inside each trip; the empty lists stay because the Firestore rules still require them.
-    const payload: CloudData = { trips: allTrips, bills: [], supplies: [], wishlist: [], noteLists, noteHistory, labels };
+    const settings: AccountSettings | null =
+      privateMode || profileName.firstName !== '' || accountHasSettings.current
+        ? { privateMode, firstName: profileName.firstName, lastName: profileName.lastName }
+        : null;
+    const payload: CloudData = { trips: allTrips, bills: [], supplies: [], wishlist: [], noteLists, noteHistory, labels, settings };
     const json = JSON.stringify(payload);
     latestJson.current = json;
     if (json === lastSaved.current) return;
@@ -242,13 +317,25 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
 
     const timer = setTimeout(() => {
       // The names are only sent once some were changed, so an account that never changed them is saved the way it always was.
-      const { labels: custom, ...rest } = payload;
-      setDoc(doc(db!, 'users', uid), {
+      const { labels: custom, settings: chosen, ...rest } = payload;
+      const base = {
         ...rest,
         ...(Object.keys(custom ?? {}).length > 0 ? { labels: custom } : {}),
         updatedAt: serverTimestamp(),
-      })
+      };
+      let sentSettings = Boolean(chosen);
+      setDoc(doc(db!, 'users', uid), chosen ? { ...base, settings: chosen } : base)
+        // Rules from before the settings existed refuse them; the rest of the data must still be saved, so it is sent without.
+        .catch((error: { code?: string }) => {
+          if (!chosen || error?.code !== 'permission-denied') throw error;
+          sentSettings = false;
+          return setDoc(doc(db!, 'users', uid), { ...base, updatedAt: serverTimestamp() });
+        })
         .then(() => {
+          // Marked as known only once the write actually lands, so a failed send never makes a later, real change from
+          // another device look like an echo of this one and get skipped by the listener below.
+          if (sentSettings && chosen) knownSettings.current = JSON.stringify(chosen);
+          if (sentSettings) accountHasSettings.current = true;
           // Signed out in the meantime: the phone copy was dealt with then, and must not be written back now.
           if (previousUid.current !== uid) return;
           lastSaved.current = json;
@@ -268,13 +355,47 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
     }, SAVE_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [uid, loadedUid, allTrips, noteLists, noteHistory, labels]);
+  }, [uid, loadedUid, allTrips, noteLists, noteHistory, labels, profileName, privateMode]);
+
+  // The settings chosen on another device arrive while this one is open: the name and private mode are applied, and nothing
+  // else (the lists are not reloaded here). Our own saves coming back are the same as what is known, so they change nothing.
+  useEffect(() => {
+    if (!uid || !db || loadedUid !== uid) return;
+    return onSnapshot(
+      doc(db, 'users', uid),
+      (snap) => {
+        if (snap.metadata.hasPendingWrites || !snap.exists()) return;
+        // Deleted on another device: this one leaves too, so it cannot keep saving over the account while it waits to be erased.
+        if (snap.data().deleteAt) {
+          void accountActions.current.handleRemoteDeletion();
+          return;
+        }
+        const remote = normalizeSettings(snap.data().settings);
+        if (!remote || JSON.stringify(remote) === knownSettings.current) return;
+        knownSettings.current = JSON.stringify(remote);
+        accountHasSettings.current = true;
+        // The applied settings are what the account holds, so they must not be sent back as a change of this device's lists.
+        if (lastSaved.current) {
+          lastSaved.current = JSON.stringify({ ...JSON.parse(lastSaved.current), settings: remote });
+        }
+        hydrators.current.hydrateProfile(remote);
+        hydrators.current.hydratePrivacy(remote.privateMode);
+      },
+      () => {},
+    );
+  }, [uid, loadedUid]);
 
   // While this panel stands in for the app no navigator exists, and the splash screen is only hidden once one does;
   // without this the retry and sign-out buttons would sit behind a splash that never leaves.
   useEffect(() => {
     if (loadError) SplashScreen.hideAsync().catch(() => {});
   }, [loadError]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(clearNotice, NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [notice, clearNotice]);
 
   useEffect(() => {
     if (!unsynced) return;
@@ -326,7 +447,11 @@ export function CloudSyncGate({ children }: { children: ReactNode }) {
   return (
     <View style={styles.flex}>
       {children}
-      {saveError ? (
+      {notice ? (
+        <View style={[styles.banner, styles.bannerNotice, { paddingTop: insets.top + spacing.xs }]}>
+          <Text style={styles.bannerText}>{notice}</Text>
+        </View>
+      ) : saveError ? (
         <View style={[styles.banner, { paddingTop: insets.top + spacing.xs }]}>
           <Text style={styles.bannerText}>{saveError}</Text>
         </View>
@@ -374,5 +499,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   bannerPending: { backgroundColor: colors.primaryDark },
+  bannerNotice: { backgroundColor: brand.sageDark },
   bannerText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600', textAlign: 'center' },
 });

@@ -8,6 +8,7 @@ import { AppLockProvider } from '@/context/AppLockContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { FamilyLabelsProvider } from '@/context/FamilyLabelsContext';
 import { LegalProvider, useLegal } from '@/context/LegalContext';
+import { PrivacyProvider } from '@/context/PrivacyContext';
 import { ProfileProvider } from '@/context/ProfileContext';
 import { TripsProvider } from '@/context/TripsContext';
 import { UndoProvider } from '@/context/UndoContext';
@@ -56,16 +57,18 @@ export default function RootLayout() {
         <TripsProvider>
           <FamilyLabelsProvider>
             <ProfileProvider>
-              <StatusBar style="dark" />
-              <CloudSyncGate>
-                <AppLockProvider>
-                  <UndoProvider>
-                    <LegalProvider>
-                      <RootNavigator />
-                    </LegalProvider>
-                  </UndoProvider>
-                </AppLockProvider>
-              </CloudSyncGate>
+              <PrivacyProvider>
+                <StatusBar style="dark" />
+                <CloudSyncGate>
+                  <AppLockProvider>
+                    <UndoProvider>
+                      <LegalProvider>
+                        <RootNavigator />
+                      </LegalProvider>
+                    </UndoProvider>
+                  </AppLockProvider>
+                </CloudSyncGate>
+              </PrivacyProvider>
             </ProfileProvider>
           </FamilyLabelsProvider>
         </TripsProvider>

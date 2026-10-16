@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useAuth } from '@/context/AuthContext';
 import { profileKey } from '@/utils/phoneData';
@@ -24,6 +24,8 @@ interface ProfileValue extends ResolvedName {
   save: (firstName: string, lastName: string) => void;
   /** The name that would be shown for this input, so the profile page can preview it while typing. */
   preview: (input: CustomName) => ResolvedName;
+  /** Replaces the name with the one that came from the account, so it is the same on every device (see CloudSyncGate). */
+  hydrate: (input: CustomName) => void;
 }
 
 const ProfileContext = createContext<ProfileValue | null>(null);
@@ -52,13 +54,15 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     setStored({ scope: 'none', value: EMPTY_NAME });
   }
   const custom = stored.scope === scope ? stored.value : EMPTY_NAME;
+  // The account's name wins over the one on the phone: once it arrived, a slower read of the phone must not replace it.
+  const fromAccount = useRef<string | null>(null);
 
   useEffect(() => {
     if (!uid) return;
     let cancelled = false;
     AsyncStorage.getItem(storageKey(uid)).then(
       (raw) => {
-        if (!cancelled) setStored({ scope: uid, value: parseStoredName(raw) });
+        if (!cancelled && fromAccount.current !== uid) setStored({ scope: uid, value: parseStoredName(raw) });
       },
       () => {},
     );
@@ -85,6 +89,25 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     [scope, uid],
   );
 
+  const hydrate = useCallback(
+    (input: CustomName) => {
+      const first = cleanName(input.firstName);
+      const value: CustomName = first ? { firstName: first, lastName: cleanName(input.lastName) } : EMPTY_NAME;
+      if (uid) fromAccount.current = uid;
+      setStored((prev) =>
+        prev.scope === scope && prev.value.firstName === value.firstName && prev.value.lastName === value.lastName
+          ? prev
+          : { scope, value },
+      );
+      if (!uid) return;
+      const write = first
+        ? AsyncStorage.setItem(storageKey(uid), JSON.stringify(value))
+        : AsyncStorage.removeItem(storageKey(uid));
+      write.catch(() => {});
+    },
+    [scope, uid],
+  );
+
   const preview = useCallback(
     (input: CustomName) => resolveName(input, accountName, email, fallback),
     [accountName, email, fallback],
@@ -100,8 +123,9 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       email,
       save,
       preview,
+      hydrate,
     };
-  }, [custom, accountName, email, fallback, save, preview]);
+  }, [custom, accountName, email, fallback, save, preview, hydrate]);
 
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;
 }

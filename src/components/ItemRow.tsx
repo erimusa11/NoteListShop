@@ -25,6 +25,7 @@ import { ms, spring, STAMP_MS, SUCK, TEAR } from '@/theme/motion';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { ItemListKey, ShoppingItem } from '@/types/models';
 import { useFamilyLabels } from '@/context/FamilyLabelsContext';
+import { HIDDEN_AMOUNT, usePrivacy } from '@/context/PrivacyContext';
 import { nextOption, optionMatcher, personColor } from '@/utils/options';
 import { normalizePriority, priorityInfo } from '@/utils/priority';
 import { DEFAULT_QUANTITY, normalizeQuantity, parseQuantity, sanitizeQuantityInput } from '@/utils/quantity';
@@ -47,6 +48,8 @@ interface ItemRowProps {
   personOptions?: string[];
   /** The category has choices (`nameOptions`), so the name (and the description) can be one of the family names, shown by its label. */
   hasChoices?: boolean;
+  /** Private mode hides this row's amounts (and keeps its price from being edited): for the Qoka category. */
+  hideAmounts?: boolean;
 }
 
 // Holding a row this long (a deliberate press, not a tap) asks whether to delete it. A thin red line fills along the
@@ -73,8 +76,10 @@ export function ItemRow({
   onMove,
   personOptions,
   hasChoices = false,
+  hideAmounts = false,
 }: ItemRowProps) {
   const reduced = useReducedMotion();
+  const masked = usePrivacy().hidden && hideAmounts;
   const { label, nameFrom } = useFamilyLabels();
   const show = (text: string) => (hasChoices ? label(text) : text);
   const parse = (text: string) => (hasChoices ? nameFrom(text) : text);
@@ -347,7 +352,7 @@ export function ItemRow({
                 />
                 {lineTotal != null && (
                   <Text style={[styles.lineTotal, item.bought && styles.priceBought]} numberOfLines={1}>
-                    = {formatNumber(lineTotal)} Lekë
+                    = {masked ? HIDDEN_AMOUNT : formatNumber(lineTotal)} Lekë
                   </Text>
                 )}
               </View>
@@ -400,7 +405,9 @@ export function ItemRow({
           <View style={styles.right}>
             <InlineEditableField
               value={item.price != null ? String(item.price) : ''}
-              displayValue={item.price != null ? formatNumber(item.price) : undefined}
+              displayValue={item.price != null ? (masked ? HIDDEN_AMOUNT : formatNumber(item.price)) : undefined}
+              // Editing would show the price, so it waits for private mode to be turned off.
+              editable={!masked}
               placeholder="Çmimi"
               onChange={(text) => {
                 const parsed = parseFloat(text.replace(',', '.'));

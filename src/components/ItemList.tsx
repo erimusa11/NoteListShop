@@ -20,6 +20,8 @@ interface ItemListProps {
   personOptions?: string[];
   /** The category has choices (`nameOptions`): see ItemRow. */
   hasChoices?: boolean;
+  /** The rows' amounts are hidden in private mode (see ItemRow). */
+  hideAmounts?: boolean;
   /** Above the rows; it scrolls away with them. */
   header?: ReactElement | null;
 }
@@ -38,6 +40,7 @@ export const ItemList = memo(function ItemList({
   limit,
   personOptions,
   hasChoices,
+  hideAmounts,
   header,
 }: ItemListProps) {
   const { toggleItem, updateItem, moveItem, toggleStar } = useTripActions();
@@ -65,6 +68,7 @@ export const ItemList = memo(function ItemList({
           showQuantity={showQuantity}
           personOptions={personOptions}
           hasChoices={hasChoices}
+          hideAmounts={hideAmounts}
         />
       )}
       ListHeaderComponent={header}

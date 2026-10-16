@@ -11,11 +11,12 @@ import {
   signOut as firebaseSignOut,
   type User,
 } from 'firebase/auth';
-import { deleteDoc, doc } from 'firebase/firestore';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { deleteDoc, deleteField, doc, getDoc, serverTimestamp, Timestamp, updateDoc } from 'firebase/firestore';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
 import { auth, db, isFirebaseConfigured } from '@/lib/firebase';
+import { DELETE_GRACE_DAYS, DELETE_GRACE_MS, formatDeleteMoment } from '@/utils/accountDeletion';
 import { forgetPhoneData } from '@/utils/phoneData';
 import { withTimeout } from '@/utils/withTimeout';
 
@@ -35,10 +36,23 @@ interface AuthContextValue {
   resetPassword: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
   /**
-   * Erases the account for good: its data in the cloud, the account itself, and everything this phone keeps of it. Asks for the
-   * password again first, so an open phone in someone else's hands is not enough to do it.
+   * Marks the account for deletion and signs out: the data stays in the cloud for `DELETE_GRACE_DAYS` days, and signing in
+   * again within that time brings the account back; after it, the data is erased for good. Everything this phone keeps of the
+   * account goes at once. Asks for the password again first, so an open phone in someone else's hands is not enough to do it.
    */
   deleteAccount: (password: string) => Promise<void>;
+  /** True when the person signed in during this run of the app (not a session restored from before). */
+  signedInThisSession: () => boolean;
+  /** Signing in brought back an account marked for deletion: the mark is taken off. */
+  restoreAccount: () => Promise<void>;
+  /** The days passed: erases the data in the cloud, the account itself, and the phone's copy, and signs out. */
+  endAccount: () => Promise<void>;
+  /** The account was marked for deletion on another device: this one signs out. */
+  handleRemoteDeletion: () => Promise<void>;
+  /** A short message for after something happened to the account (deleted, brought back); shown by CloudSyncGate. */
+  notice: string | null;
+  showNotice: (text: string) => void;
+  clearNotice: () => void;
   enterDemoMode: () => void;
 }
 
@@ -66,7 +80,6 @@ const MESSAGES: Record<string, string> = {
   'auth/user-disabled': 'Kjo llogari është çaktivizuar.',
   'auth/user-token-expired': 'Sesioni ka skaduar. Dil dhe hyr përsëri.',
   timeout: 'Nuk ka lidhje me internetin. Provo përsëri.',
-  'account-partly-deleted': 'Të dhënat u fshinë, por llogaria jo. Trokit përsëri për ta përfunduar.',
   'auth/credential-already-in-use': 'Ky email ka tashmë një llogari tjetër.',
   'google-native-unavailable':
     'Hyrja me Google në telefon kërkon një development build. Hyr me email dhe fjalëkalim, ose përdore Google në web.',
@@ -82,6 +95,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(isFirebaseConfigured);
   const [version, setVersion] = useState(0);
   const [demoMode, setDemoMode] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Set while the person signs in here, so an old session that is still on this device does not count as coming back.
+  const freshSignIn = useRef(false);
+  const deleting = useRef(false);
 
   useEffect(() => {
     if (!auth) return;
@@ -96,12 +113,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (Platform.OS !== 'web') throw new Error('google-native-unavailable');
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
-    await signInWithPopup(auth, provider);
+    freshSignIn.current = true;
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (e) {
+      freshSignIn.current = false;
+      throw e;
+    }
   }, []);
 
   const signInWithPassword = useCallback(async (email: string, password: string) => {
     if (!auth) return;
-    await signInWithEmailAndPassword(auth, email.trim(), password);
+    freshSignIn.current = true;
+    try {
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+    } catch (e) {
+      freshSignIn.current = false;
+      throw e;
+    }
   }, []);
 
   const setAccountPassword = useCallback(async (password: string) => {
@@ -119,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     setDemoMode(false);
+    freshSignIn.current = false;
     if (auth) await firebaseSignOut(auth);
   }, []);
 
@@ -132,15 +162,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       reauthenticateWithCredential(current, EmailAuthProvider.credential(email, password)),
       DELETE_STEP_TIMEOUT_MS,
     );
+    const ref = doc(db, 'users', uid);
+    const snap = await withTimeout(getDoc(ref), DELETE_STEP_TIMEOUT_MS);
+    if (!snap.exists()) {
+      // Nothing is kept in the cloud, so there is nothing to wait for or to bring back: the account goes now.
+      await withTimeout(deleteUser(current), DELETE_STEP_TIMEOUT_MS);
+      forgetPhoneData(uid, true);
+      return;
+    }
+    // The data stays in the cloud, marked with the moment it is erased; the next sign-in before that moment cancels it.
+    const eraseAt = Date.now() + DELETE_GRACE_MS;
+    await withTimeout(
+      updateDoc(ref, { deleteAt: Timestamp.fromMillis(eraseAt), updatedAt: serverTimestamp() }),
+      DELETE_STEP_TIMEOUT_MS,
+    );
+    deleting.current = true;
+    forgetPhoneData(uid, true);
+    setNotice(`Llogaria do të fshihet më ${formatDeleteMoment(eraseAt)}. Hyr përsëri para kësaj date për ta rikthyer.`);
+    try {
+      freshSignIn.current = false;
+      await firebaseSignOut(auth);
+    } finally {
+      deleting.current = false;
+    }
+  }, []);
+
+  const signedInThisSession = useCallback(() => freshSignIn.current, []);
+
+  const restoreAccount = useCallback(async () => {
+    const current = auth?.currentUser;
+    if (!db || !current) return;
+    await withTimeout(
+      updateDoc(doc(db, 'users', current.uid), { deleteAt: deleteField(), updatedAt: serverTimestamp() }),
+      DELETE_STEP_TIMEOUT_MS,
+    );
+  }, []);
+
+  const endAccount = useCallback(async () => {
+    const current = auth?.currentUser;
+    if (!auth || !db || !current) return;
+    const { uid } = current;
+    // The data first: if that fails, the account stays marked and this is tried again at the next sign-in.
     await withTimeout(deleteDoc(doc(db, 'users', uid)), DELETE_STEP_TIMEOUT_MS);
     try {
       await withTimeout(deleteUser(current), DELETE_STEP_TIMEOUT_MS);
-    } catch {
-      // The data is gone but the account is not: say so plainly, so the user knows to press the button again to finish.
-      throw Object.assign(new Error('account-partly-deleted'), { code: 'account-partly-deleted' });
+    } catch (e) {
+      // A session this old usually cannot prove itself recent enough to delete the sign-in itself (Firebase asks for that),
+      // so the email can stay registered with no data behind it. Clearing that for good needs a scheduled Cloud Function
+      // (Firebase's paid plan); this only logs it; it does not retry, since the next load would hit the same wall.
+      if (__DEV__) console.warn('endAccount: could not delete the Firebase Auth user', e);
     }
     forgetPhoneData(uid, true);
+    freshSignIn.current = false;
+    try {
+      await firebaseSignOut(auth);
+    } catch {}
   }, []);
+
+  const handleRemoteDeletion = useCallback(async () => {
+    // The device that asked for the deletion signs itself out and says it in its own words.
+    if (deleting.current) return;
+    setNotice(
+      `Llogaria u caktua për fshirje nga një pajisje tjetër. Hyr përsëri brenda ${DELETE_GRACE_DAYS} ditëve për ta rikthyer.`,
+    );
+    freshSignIn.current = false;
+    if (auth) await firebaseSignOut(auth);
+  }, []);
+
+  const showNotice = useCallback((text: string) => setNotice(text), []);
+  const clearNotice = useCallback(() => setNotice(null), []);
 
   const enterDemoMode = useCallback(() => {
     setDemoMode(true);
@@ -159,10 +249,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetPassword,
       signOut,
       deleteAccount,
+      signedInThisSession,
+      restoreAccount,
+      endAccount,
+      handleRemoteDeletion,
+      notice,
+      showNotice,
+      clearNotice,
       enterDemoMode,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loading, user, version, demoMode],
+    [loading, user, version, demoMode, notice],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

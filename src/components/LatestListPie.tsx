@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BottomSheet } from '@/components/BottomSheet';
 import { PieChart } from '@/components/charts/PieChart';
+import { usePrivacy } from '@/context/PrivacyContext';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import { formatDateAlbanian } from '@/utils/dates';
 import { CATEGORY_COLORS, type SectionSpend } from '@/utils/reports';
@@ -22,6 +23,8 @@ interface LatestListPieProps {
   income: number;
   /** A category of the legend (or its slice) was tapped: the key is its section, to open Të shpenzuarat at that part. */
   onPressSection?: (sectionKey: string) => void;
+  /** The card was tapped anywhere that is not the chart, a legend entry or the title: to open the list on Më të rëndësishmet. */
+  onPressCard?: () => void;
   /** The lists to switch between (newest first). With more than one, the title opens a choice of them. */
   choices?: PieChoice[];
   selectedId?: string;
@@ -31,8 +34,19 @@ interface LatestListPieProps {
 // More entries than this and the legend is laid out in two columns instead of one long list.
 const TWO_COLUMNS_FROM = 4;
 
-export function LatestListPie({ listName, sections, income, onPressSection, choices, selectedId, onSelect }: LatestListPieProps) {
+export function LatestListPie({
+  listName,
+  sections,
+  income,
+  onPressSection,
+  onPressCard,
+  choices,
+  selectedId,
+  onSelect,
+}: LatestListPieProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  // The amount of each category stays; the totals (of the list and of the income) are dots in private mode.
+  const { price } = usePrivacy();
   const total = sections.reduce((sum, s) => sum + s.spent, 0);
   // Only the categories with spending, so all the categories do not make this card a long list of zeros.
   const spent = sections.filter((s) => s.spent > 0);
@@ -40,7 +54,15 @@ export function LatestListPie({ listName, sections, income, onPressSection, choi
   const switchable = !!choices && choices.length > 1 && !!onSelect;
 
   return (
-    <View style={[styles.card, shadow]}>
+    <>
+    {/* Not a button for the screen reader (and not a button element on the web): it holds the buttons of the title and the
+        legend, and buttons cannot be nested. The tap on the empty parts of the card is only for fingers and the mouse. */}
+    <Pressable
+      onPress={onPressCard}
+      disabled={!onPressCard}
+      accessible={false}
+      style={({ pressed }) => [styles.card, shadow, pressed && onPressCard && styles.cardPressed]}
+    >
       <View style={styles.header}>
         {switchable ? (
           <Pressable
@@ -60,7 +82,7 @@ export function LatestListPie({ listName, sections, income, onPressSection, choi
             {listName}
           </Text>
         )}
-        <Text style={styles.total}>{formatPrice(total)}</Text>
+        <Text style={styles.total}>{price(total)}</Text>
       </View>
       {spent.length === 0 ? (
         <Text style={styles.none}>Asnjë shpenzim ende</Text>
@@ -119,9 +141,10 @@ export function LatestListPie({ listName, sections, income, onPressSection, choi
         </View>
         <View style={styles.plannedRow}>
           <Text style={styles.plannedLabel}>Të ardhurat</Text>
-          <Text style={styles.plannedValue}>{formatPrice(income)}</Text>
+          <Text style={styles.plannedValue}>{price(income)}</Text>
         </View>
       </View>
+    </Pressable>
 
       {switchable && (
         <BottomSheet visible={pickerOpen} onClose={() => setPickerOpen(false)} title="Zgjidh listën">
@@ -152,7 +175,7 @@ export function LatestListPie({ listName, sections, income, onPressSection, choi
           </ScrollView>
         </BottomSheet>
       )}
-    </View>
+    </>
   );
 }
 
@@ -180,6 +203,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     gap: spacing.sm,
   },
+  cardPressed: { opacity: 0.85 },
   header: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
   title: { flex: 1, fontSize: 12, fontWeight: '600', color: colors.textMuted },
   total: { fontSize: 13, fontWeight: '700', color: colors.text },

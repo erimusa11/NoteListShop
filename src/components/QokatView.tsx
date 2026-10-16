@@ -5,15 +5,17 @@ import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 
 import { EmptyState } from '@/components/EmptyState';
+import { usePrivacy } from '@/context/PrivacyContext';
 import { useTrips } from '@/context/TripsContext';
 import { useTabSwipe } from '@/hooks/useTabSwipe';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import { CATEGORIES } from '@/utils/categories';
 import { buildQokat, buildQokatForUs, filterQokat, type QokaEntry } from '@/utils/qokat';
-import { formatPrice } from '@/utils/totals';
 
 interface QokatViewProps {
   onOpenTrip: (id: string) => void;
+  /** A swipe went past the first or last of the two tabs: the page around takes it (1: to the next page, -1: to the previous). */
+  onEdgeSwipe?: (dir: number) => void;
 }
 
 // Shows this many qokat at first and this many more each time "load more" is pressed.
@@ -63,14 +65,14 @@ const ORDER = TABS.map((tab) => tab.value);
 // ne the incomes of the kind Qoka; swipe sideways or tap to go from one to the other.
 // Nothing is built until the Qokat menu is opened, and a tab only the first time it is opened, so the lists screen and
 // the reports do not pay for it.
-export function QokatView({ onOpenTrip }: QokatViewProps) {
+export function QokatView({ onOpenTrip, onEdgeSwipe }: QokatViewProps) {
   const [active, setActive] = useState<QokaTab>('tona');
   const [mounted, setMounted] = useState<QokaTab[]>(['tona']);
   const select = useCallback((next: QokaTab) => {
     setActive(next);
     setMounted((prev) => (prev.includes(next) ? prev : [...prev, next]));
   }, []);
-  const { gesture, slideStyle } = useTabSwipe(ORDER, active, select);
+  const { gesture, slideStyle } = useTabSwipe(ORDER, active, select, onEdgeSwipe);
 
   return (
     <View style={styles.flex}>
@@ -119,6 +121,7 @@ export function QokatView({ onOpenTrip }: QokatViewProps) {
 // screen yet is still found.
 function QokaList({ tab, onOpenTrip }: { tab: QokaTabInfo; onOpenTrip: (id: string) => void }) {
   const { trips } = useTrips();
+  const { price } = usePrivacy();
   const [query, setQuery] = useState('');
   const [shownCount, setShownCount] = useState(PAGE_SIZE);
 
@@ -170,7 +173,7 @@ function QokaList({ tab, onOpenTrip }: { tab: QokaTabInfo; onOpenTrip: (id: stri
               <View style={styles.summaryDivider} />
               <View style={styles.summaryHalf}>
                 <Text style={styles.summaryLabel}>Gjithsej</Text>
-                <Text style={[styles.summaryTotal, { color: tab.color }]}>{formatPrice(total)}</Text>
+                <Text style={[styles.summaryTotal, { color: tab.color }]}>{price(total)}</Text>
               </View>
             </View>
           </View>
@@ -205,11 +208,12 @@ function QokaList({ tab, onOpenTrip }: { tab: QokaTabInfo; onOpenTrip: (id: stri
 }
 
 function QokaRow({ entry, color, onPress }: { entry: QokaEntry; color: string; onPress: () => void }) {
+  const { price } = usePrivacy();
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${entry.name}, ${formatPrice(entry.amount)}, ${entry.tripName}. Hap listën`}
+      accessibilityLabel={`${entry.name}, ${price(entry.amount)}, ${entry.tripName}. Hap listën`}
       style={({ pressed }) => [styles.row, shadow, pressed && styles.rowPressed]}
     >
       <View style={[styles.iconCircle, { backgroundColor: color + '22' }]}>
@@ -223,7 +227,7 @@ function QokaRow({ entry, color, onPress }: { entry: QokaEntry; color: string; o
           {entry.tripName}
         </Text>
       </View>
-      <Text style={[styles.rowAmount, { color }]}>{formatPrice(entry.amount)}</Text>
+      <Text style={[styles.rowAmount, { color }]}>{price(entry.amount)}</Text>
     </Pressable>
   );
 }
