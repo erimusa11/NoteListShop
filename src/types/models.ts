@@ -121,20 +121,21 @@ export type ItemListKey =
   | 'playstation'
   | 'health'
   | 'children'
-  | 'bathroom'
+  | 'parents'
+  | 'lost'
   | 'home'
   | 'daily'
   | 'school'
   | 'qoka';
 
-// Besides `items` (Produktet), a list may not have every category yet (lists saved before it was added).
+// Besides `items` (Ushqimet & Fruta), a list may not have every category yet (lists saved before it was added).
 // The categories and their names are in utils/categories.ts.
 export interface ShoppingTrip extends Partial<Record<Exclude<ItemListKey, 'items'>, ShoppingItem[]>> {
   id: string;
   name: string;
   createdAt: number;
   budget: number | null;
-  /** Produktet */
+  /** Ushqimet & Fruta */
   items: ShoppingItem[];
   incomes?: IncomeEntry[];
   /** The calendar of the category that counts days (Kopesht & Shkolle): what the children did on each day. */

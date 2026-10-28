@@ -36,8 +36,8 @@ const T = tones.orange;
 
 const countText = (n: number) => `${n} ${n === 1 ? 'artikull' : 'artikuj'}`;
 
-// Sends a copy of the checked items to the newest list of Note Shop List: Ushqime into its Produktet, Detergjente into its
-// Detergjente & Extra. Everything that was not sent there yet starts out selected, so one tap on "Dërgo" sends what is new;
+// Sends a copy of the checked items to the newest list of Note Shop List: Ushqime into its Ushqimet & Fruta, Detergjente into its
+// Detergjente, Pastrime & Extra. Everything that was not sent there yet starts out selected, so one tap on "Dërgo" sends what is new;
 // each item can be unselected (or an item that went already can be selected again).
 export function NoteSendSheet({ sheet, onClose, items, target, onSend }: NoteSendSheetProps) {
   return (

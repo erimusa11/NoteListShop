@@ -539,6 +539,7 @@ export default function TripDetailScreen() {
                   showQuantity={activeCategory.showQuantity}
                   title={activeCategory.addTitle}
                   namePlaceholder={activeCategory.namePlaceholder}
+                  defaultName={activeCategory.defaultName}
                   nameOptions={activeCategory.nameOptions}
                   optionsLabel={activeCategory.optionsLabel}
                   otherOption={activeCategory.otherOption}

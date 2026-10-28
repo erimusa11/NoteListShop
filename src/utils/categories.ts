@@ -21,6 +21,10 @@ export interface Category {
   totalLabel: string;
   addTitle: string;
   namePlaceholder?: string;
+  /** Adding an item only needs the amount: the name becomes an optional description, and an item without one is called this. */
+  defaultName?: string;
+  /** Items are added already checked: money that is gone counts as spent straight away, it is not waiting to be bought. */
+  addsSpent?: boolean;
   /** When set, adding an item is a choice between these names instead of free text. */
   nameOptions?: string[];
   /** Heading above the choices while adding (default "Lloji"). */
@@ -57,25 +61,29 @@ export const CATEGORIES: Category[] = [
   {
     key: 'items',
     section: 'products',
-    label: 'Produktet',
+    label: 'Ushqimet & Fruta',
     icon: 'basket-outline',
     activeIcon: 'basket',
     color: '#E06A00',
     showQuantity: true,
-    totalLabel: 'Gjithsej produktet',
+    totalLabel: 'Gjithsej ushqimet & fruta',
     addTitle: 'Shto artikull',
     emptyText: 'Kjo listë nuk ka artikuj.',
   },
+  // Also holds what was once its own category, "Banjo & Produkte Pastrimi" (see `mergeBathroomIntoSupplies`).
   {
     key: 'supplies',
     section: 'supplies',
-    label: 'Detergjente & Extra',
+    label: 'Detergjente, Pastrime & Extra',
+    // Shorter than the name so it fits on two lines in the narrow tab.
+    tabLabel: 'Detergjente\n& Pastrime',
     icon: 'sparkles-outline',
     activeIcon: 'sparkles',
     color: '#1F9E89',
     showQuantity: false,
-    totalLabel: 'Gjithsej detergjente & extra',
+    totalLabel: 'Gjithsej detergjente, pastrime & extra',
     addTitle: 'Shto artikull',
+    namePlaceholder: 'P.sh. Detergjent, Shampo, Sapun…',
     emptyText: 'Nuk ka ende asnjë artikull.',
   },
   {
@@ -223,6 +231,41 @@ export const CATEGORIES: Category[] = [
     optionsReportTitle: 'Fëmijët sipas personit',
     emptyText: 'Nuk ka ende asnjë shpenzim.',
   },
+  // The same for the parents: for Prindi 1, for Prindi 2 (as they are named in the profile), or for both.
+  {
+    key: 'parents',
+    section: 'parents',
+    label: 'Prindërit',
+    icon: 'people-outline',
+    activeIcon: 'people',
+    color: '#A23FB3',
+    showQuantity: false,
+    totalLabel: 'Gjithsej prindërit',
+    addTitle: 'Shto shpenzim',
+    namePlaceholder: 'P.sh. Rroba, Dhuratë, Ilaçe…',
+    nameOptions: ['Alma', 'Eri'],
+    optionsLabel: 'Për kë',
+    otherOption: 'Të dy',
+    showNote: true,
+    optionsReportTitle: 'Prindërit sipas personit',
+    emptyText: 'Nuk ka ende asnjë shpenzim.',
+  },
+  // Money that cannot be accounted for: a sum that does not add up, or cash that was lost or forgotten. Only the amount is asked.
+  {
+    key: 'lost',
+    section: 'lost',
+    label: 'Të harruara & Humbura',
+    icon: 'help-circle-outline',
+    activeIcon: 'help-circle',
+    color: '#9C3D54',
+    showQuantity: false,
+    totalLabel: 'Gjithsej të harruara & humbura',
+    addTitle: 'Shto shumë të humbur',
+    namePlaceholder: 'P.sh. Llogaria nuk doli, Humba paratë…',
+    defaultName: 'Shumë e humbur',
+    addsSpent: true,
+    emptyText: 'Nuk ka ende asnjë shumë të humbur.',
+  },
   {
     key: 'online',
     section: 'online',
@@ -249,21 +292,6 @@ export const CATEGORIES: Category[] = [
     totalLabel: 'Gjithsej guzhina & enë guzhine',
     addTitle: 'Shto artikull',
     namePlaceholder: 'P.sh. Tenxhere, Pjata…',
-    emptyText: 'Nuk ka ende asnjë artikull.',
-  },
-  {
-    key: 'bathroom',
-    section: 'bathroom',
-    label: 'Banjo & Produkte Pastrimi',
-    // Shorter than the name so it fits on two lines in the narrow tab.
-    tabLabel: 'Banjo &\nPastrimi',
-    icon: 'water-outline',
-    activeIcon: 'water',
-    color: '#A23FB3',
-    showQuantity: false,
-    totalLabel: 'Gjithsej banjo & produkte pastrimi',
-    addTitle: 'Shto artikull',
-    namePlaceholder: 'P.sh. Shampo, Sapun, Pastrues…',
     emptyText: 'Nuk ka ende asnjë artikull.',
   },
   {

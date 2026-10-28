@@ -100,14 +100,16 @@ export function buildSuggestions(items: SuggestionSource[], groups?: SuggestionG
 }
 
 // Suggestions for one kind of item in the current list, built from every list (including what was deleted from them),
-// leaving out what it already has.
+// leaving out what it still has to buy. What was already bought or paid in it stays suggested, so an expense that comes
+// back (a second Drekë, another Naftë) is one tap away again.
 export function buildListSuggestions(
   trips: ShoppingTrip[],
   current: ShoppingTrip | undefined,
   key: ItemListKey,
   groups?: SuggestionGroups,
 ): Suggestion[] {
-  const present = new Set(buildSuggestions(current?.[key] ?? [], groups).map((s) => s.key));
+  const waiting = (current?.[key] ?? []).filter((item) => !item.bought);
+  const present = new Set(buildSuggestions(waiting, groups).map((s) => s.key));
   const sources = trips.flatMap((trip): SuggestionSource[] => [
     ...(trip[key] ?? []),
     // `Array.isArray` because a list from damaged saved data may hold something else here.
@@ -116,11 +118,12 @@ export function buildListSuggestions(
   return buildSuggestions(sources, groups).filter((s) => !present.has(s.key));
 }
 
+// A name typed out in full is still suggested (first), so it can be added in one tap with the price it had last time.
 export function pickSuggestions(all: Suggestion[], query: string, limit = 6): Suggestion[] {
   const q = normalizeText(query);
-  const rank = (s: Suggestion) => (s.search.startsWith(q) ? 0 : 1);
+  const rank = (s: Suggestion) => (s.search === q ? 0 : s.search.startsWith(q) ? 1 : 2);
   return all
-    .filter((s) => (q ? s.search.includes(q) && s.search !== q : true))
+    .filter((s) => (q ? s.search.includes(q) : true))
     .sort((a, b) => rank(a) - rank(b) || b.count - a.count || b.lastUsed - a.lastUsed)
     .slice(0, limit);
 }

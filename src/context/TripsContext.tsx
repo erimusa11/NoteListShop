@@ -14,7 +14,15 @@ import { CATEGORIES } from '@/utils/categories';
 import { formatDateAlbanian } from '@/utils/dates';
 import { moveCalendarItems } from '@/utils/attendance';
 import { isTrashExpired } from '@/utils/trash';
-import { copyToTrip, deleteItem, moveToCategory, patchItem, starredItems, toggleStar } from '@/utils/tripLists';
+import {
+  copyToTrip,
+  deleteItem,
+  mergeBathroomIntoSupplies,
+  moveToCategory,
+  patchItem,
+  starredItems,
+  toggleStar,
+} from '@/utils/tripLists';
 
 // Only the starred items of the existing lists come along, unchecked and at normal priority.
 function buildTrip(name: string, now: number, existing: ShoppingTrip[] = []): ShoppingTrip {
@@ -122,7 +130,9 @@ export function TripsProvider({ children }: { children: ReactNode }) {
 
   const itemActions = useMemo<TripActions>(
     () => ({
-      addItem: (tripId, list, name, quantity, price, priority = 1, note, person) =>
+      addItem: (tripId, list, name, quantity, price, priority = 1, note, person) => {
+        const now = Date.now();
+        const spent = CATEGORIES.some((category) => category.key === list && category.addsSpent);
         setTrips((prev) =>
           mapItems(prev, tripId, list, (items) => [
             ...items,
@@ -131,14 +141,16 @@ export function TripsProvider({ children }: { children: ReactNode }) {
               name,
               quantity,
               price,
-              bought: false,
-              createdAt: Date.now(),
+              bought: spent,
+              ...(spent ? { boughtAt: now } : {}),
+              createdAt: now,
               priority,
               ...(note ? { note } : {}),
               ...(person ? { person } : {}),
             },
           ]),
-        ),
+        );
+      },
       addItems: (tripId, entries) => {
         const now = Date.now();
         // The ids are made here, not inside the update, so they can be handed back (and an update that runs twice makes no new ones).
@@ -270,7 +282,8 @@ export function TripsProvider({ children }: { children: ReactNode }) {
   // Lists that have waited in the trash for the full time are dropped when the saved lists are loaded.
   const hydrate = (next: ShoppingTrip[]) => {
     const now = Date.now();
-    setTrips(moveCalendarItems(next.filter((trip) => trip.deletedAt === undefined || !isTrashExpired(trip.deletedAt, now))));
+    const kept = next.filter((trip) => trip.deletedAt === undefined || !isTrashExpired(trip.deletedAt, now));
+    setTrips(mergeBathroomIntoSupplies(moveCalendarItems(kept)));
   };
 
   const value = useMemo<TripsContextValue>(
