@@ -188,6 +188,34 @@ export function latestTrip(trips: ShoppingTrip[]): ShoppingTrip | undefined {
   return trips.reduce<ShoppingTrip | undefined>((latest, trip) => (!latest || trip.createdAt >= latest.createdAt ? trip : latest), undefined);
 }
 
+// "Banjo & Produkte Pastrimi" was once a category of its own, saved under `bathroom`; it is now part of Detergjente,
+// Pastrime & Extra. Lists saved before that have their items moved there (in the order they were added), and the items
+// deleted from it are remembered there too, so they are still suggested. Lists that have none are returned as they are.
+type ListWithBathroom = ShoppingTrip & { bathroom?: unknown };
+
+export function mergeBathroomIntoSupplies(trips: ShoppingTrip[]): ShoppingTrip[] {
+  return trips.map((trip) => {
+    const removed = Array.isArray(trip.removed) ? trip.removed : [];
+    const removedThere = removed.some((entry) => entry && (entry.list as string) === 'bathroom');
+    if (!('bathroom' in trip) && !removedThere) return trip;
+
+    const { bathroom, ...rest } = trip as ListWithBathroom;
+    const supplies = trip.supplies ?? [];
+    const taken = new Set(supplies.map((item) => item.id));
+    // Two items made in the same millisecond in the two categories would share an id; the one that moves gets a new one.
+    const moved = (Array.isArray(bathroom) ? (bathroom as ShoppingItem[]) : [])
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => (taken.has(item.id) ? { ...item, id: `${item.id}:pastrime` } : item));
+    return {
+      ...rest,
+      supplies: [...supplies, ...moved].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0)),
+      ...(removedThere
+        ? { removed: removed.map((entry) => (entry && (entry.list as string) === 'bathroom' ? { ...entry, list: 'supplies' as const } : entry)) }
+        : {}),
+    };
+  });
+}
+
 // Before every list had its own supplies, bills and wishlist, they were three lists shared by all trips, saved beside them.
 // `boughtInTripId` said which list a checked item was bought in.
 type LegacyItem = ShoppingItem & { boughtInTripId?: string | null };

@@ -106,7 +106,7 @@ export function FamilyLabelsCard() {
     <View style={[styles.card, shadow]}>
       <Text style={styles.cardTitle}>Emrat në lista</Text>
       <Text style={styles.cardHint}>
-        Emrat që shfaqen te zgjedhjet (Dëshirat, Fëmijët, Shendeti, Kopesht & Shkolle, Makina…). Ruhen në llogarinë tënde dhe
+        Emrat që shfaqen te zgjedhjet (Dëshirat, Fëmijët, Prindërit, Shendeti, Kopesht & Shkolle, Makina…). Ruhen në llogarinë tënde dhe
         të ndjekin në çdo pajisje.
       </Text>
 

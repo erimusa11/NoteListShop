@@ -50,6 +50,8 @@ interface AddItemButtonProps {
   priceLabel?: string;
   submitLabel?: string;
   requirePrice?: boolean;
+  /** Only the amount is needed: the name becomes an optional description, and this is the name when none is typed. */
+  defaultName?: string;
   /** Months that were filled in on a calendar: picking one (with a level and a person) fills in the amount from it. */
   calendar?: CalendarChoice;
 }
@@ -69,6 +71,7 @@ export function AddItemButton({
   priceLabel = 'Çmimi (opsionale)',
   submitLabel = 'Shto në listë',
   requirePrice = false,
+  defaultName,
   showPriority = true,
   calendar,
 }: AddItemButtonProps) {
@@ -100,10 +103,11 @@ export function AddItemButton({
   };
 
   const priceValue = parseFloat(price.replace(',', '.'));
+  const amountOnly = defaultName !== undefined;
   const canSubmit =
-    name.trim().length > 0 &&
+    (name.trim().length > 0 || amountOnly) &&
     (!secondOptions || second !== '') &&
-    (!requirePrice || (Number.isFinite(priceValue) && priceValue > 0));
+    (!(requirePrice || amountOnly) || (Number.isFinite(priceValue) && priceValue > 0));
   const canAdd = monthKey ? monthLines.length > 0 : canSubmit;
   // With choices (Drion, Kia Morning…), `name` is the choice picked and what is typed is the description (`note`), or, with
   // the "other" choice, the name itself. What is suggested follows: before a choice is picked, everything used before;
@@ -154,7 +158,7 @@ export function AddItemButton({
     if (!canSubmit) return;
     const parsedPrice = parseFloat(price.replace(',', '.'));
     onAdd(
-      other ? nameFrom(name.trim()) : name.trim(),
+      other ? nameFrom(name.trim()) : name.trim() || (defaultName ?? ''),
       showQuantity ? normalizeQuantity(quantity) : '',
       Number.isFinite(parsedPrice) ? parsedPrice : null,
       priority,
@@ -294,14 +298,14 @@ export function AddItemButton({
           </>
         ) : (
           <>
-            <Text style={styles.label}>Emri</Text>
+            <Text style={styles.label}>{amountOnly ? 'Përshkrimi (opsionale)' : 'Emri'}</Text>
             <TextInput
               value={name}
               onChangeText={setName}
               placeholder={namePlaceholder}
               placeholderTextColor={colors.textMuted}
               style={styles.input}
-              autoFocus
+              autoFocus={!amountOnly}
               returnKeyType="next"
             />
             {secondSelect}
@@ -359,7 +363,7 @@ export function AddItemButton({
           </View>
         ) : (
           <>
-            <Text style={styles.label}>{priceLabel}</Text>
+            <Text style={styles.label}>{amountOnly ? 'Shuma' : priceLabel}</Text>
             <TextInput
               value={price}
               onChangeText={setPrice}
@@ -367,6 +371,7 @@ export function AddItemButton({
               placeholderTextColor={colors.textMuted}
               keyboardType="numeric"
               style={styles.input}
+              autoFocus={amountOnly}
               onSubmitEditing={submit}
             />
           </>
@@ -376,7 +381,7 @@ export function AddItemButton({
           <Text style={styles.total}>Gjithsej: {formatNumber(priceValue * parseQuantity(quantity))} Lekë</Text>
         )}
 
-        {!monthKey && showPriority && (
+        {!monthKey && showPriority && !amountOnly && (
           <View style={styles.priority}>
             <Text style={styles.label}>Rëndësia</Text>
             <PrioritySelector value={priority} onChange={setPriority} />

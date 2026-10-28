@@ -4,15 +4,15 @@ import { isFinished, isProductList, NOTE_SECTIONS, sectionOf, UNITS } from '@/ut
 import { parseQuantity } from '@/utils/quantity';
 
 /**
- * Where the items of each part of a shopping list go in the latest list of Note Shop List: the food into Produktet, the
- * detergents into Detergjente & Extra.
+ * Where the items of each part of a shopping list go in the latest list of Note Shop List: the food into Ushqimet & Fruta, the
+ * detergents into Detergjente, Pastrime & Extra.
  */
 export const SECTION_TARGET: Record<NoteSection, ItemListKey> = {
   ushqime: 'items',
   detergjente: 'supplies',
 };
 
-/** The name of the category a part goes to, as it is called in the list ("Produktet", "Detergjente & Extra"). */
+/** The name of the category a part goes to, as it is called in the list ("Ushqimet & Fruta", "Detergjente, Pastrime & Extra"). */
 export function targetLabel(section: NoteSection): string {
   return CATEGORIES.find((category) => category.key === SECTION_TARGET[section])?.label ?? '';
 }
@@ -52,10 +52,10 @@ function amountText(item: NoteItem): string {
 
 /**
  * What an item of a note list becomes in the list it is sent to. The row there costs the same as the line did:
- * - Produktet counts a number of items: copë keep their amount (the price becomes the price of one). Any other unit (kg, gr,
+ * - Ushqimet & Fruta counts a number of items: copë keep their amount (the price becomes the price of one). Any other unit (kg, gr,
  *   l) has no place there, so the amount goes in the name ("Domate (1,5 kg)") and the quantity stays 1. So does an amount the
  *   list could not read back as the same number, or a price that cannot be split into whole cents.
- * - Detergjente & Extra counts no quantity at all: the price is the whole line, and an amount other than one copë goes in the name.
+ * - Detergjente, Pastrime & Extra counts no quantity at all: the price is the whole line, and an amount other than one copë goes in the name.
  * The copy is checked off, as the item was.
  */
 export function tripEntryFor(item: NoteItem): NewTripItem {
