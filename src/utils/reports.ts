@@ -8,11 +8,17 @@ import {
   personChoices,
   personColor,
 } from '@/utils/options';
+import { isParaprake } from '@/utils/paraprake';
 import { computeSpentTotal, computeTotal, tripAllItems, tripIncomeTotal } from '@/utils/totals';
+
+// A paraprake list carries its flag into the savings built from it, so the breakdown can show the dot; a normal one carries nothing.
+const paraprakeFlag = (trip: ShoppingTrip): { paraprake?: true } => (isParaprake(trip) ? { paraprake: true } : {});
 
 export interface ListSpend {
   id: string;
   name: string;
+  /** Set for a paraprake list. */
+  paraprake?: boolean;
   spent: number;
   planned: number;
   budget: number | null;
@@ -77,6 +83,7 @@ export function buildListSpend(trips: ShoppingTrip[]): ListSpend[] {
     return {
       id: trip.id,
       name: trip.name,
+      ...paraprakeFlag(trip),
       spent: computeSpentTotal(items),
       planned: computeTotal(items),
       budget: tripIncomeTotal(trip) > 0 ? tripIncomeTotal(trip) : null,
@@ -104,6 +111,8 @@ export interface Savings {
 export interface ListSavings {
   id: string;
   name: string;
+  /** Set for a paraprake list. */
+  paraprake?: boolean;
   income: number;
   spent: number;
   /** Income minus spending: below zero when the list went over. */
@@ -123,6 +132,7 @@ export function buildSavings(trips: ShoppingTrip[]): Savings {
     savings.perList.push({
       id: list.id,
       name: list.name,
+      ...(list.paraprake ? { paraprake: true } : {}),
       income: list.budget,
       spent: list.spent,
       left: list.budget - list.spent,

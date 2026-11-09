@@ -58,7 +58,10 @@ function SendForm({ items, target, onSend }: Pick<NoteSendSheetProps, 'items' | 
       <View style={styles.message}>
         <Ionicons name="albums-outline" size={34} color={colors.textMuted} />
         <Text style={styles.messageTitle}>Nuk ke ende asnjë listë</Text>
-        <Text style={styles.messageText}>Krijo një listë te Note Shop List dhe pastaj kthehu këtu për t&apos;i dërguar artikujt.</Text>
+        <Text style={styles.messageText}>
+          Krijo një listë normale te Note Shop List dhe pastaj kthehu këtu për t&apos;i dërguar artikujt. Listat paraprake nuk
+          marrin artikuj nga këtu.
+        </Text>
       </View>
     );
   }

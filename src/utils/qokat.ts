@@ -1,5 +1,6 @@
 import type { ShoppingTrip } from '@/types/models';
 import { incomeKindInfo } from '@/utils/incomes';
+import { isParaprake } from '@/utils/paraprake';
 import { normalizeText } from '@/utils/suggestions';
 import { itemTotal } from '@/utils/totals';
 
@@ -8,6 +9,8 @@ export interface QokaEntry {
   key: string;
   tripId: string;
   tripName: string;
+  /** Set when the list it was given in is a paraprake one. */
+  paraprake?: boolean;
   name: string;
   amount: number;
   /** What the filter looks in, already normalized: the name, and the name of the list it was given in. */
@@ -28,6 +31,7 @@ export function buildQokat(trips: ShoppingTrip[]): QokaEntry[] {
             key: `${trip.id}:${item.id}`,
             tripId: trip.id,
             tripName: trip.name,
+            ...(isParaprake(trip) ? { paraprake: true } : {}),
             name,
             amount: itemTotal(item),
             search: normalizeText(`${name} ${trip.name}`),
@@ -50,6 +54,7 @@ export function buildQokatForUs(trips: ShoppingTrip[]): QokaEntry[] {
             key: `${trip.id}:${income.id}`,
             tripId: trip.id,
             tripName: trip.name,
+            ...(isParaprake(trip) ? { paraprake: true } : {}),
             name,
             amount: Number.isFinite(income.amount) ? income.amount : 0,
             search: normalizeText(`${name} ${trip.name}`),

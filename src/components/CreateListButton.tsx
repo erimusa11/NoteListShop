@@ -1,25 +1,30 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { BottomSheet } from '@/components/BottomSheet';
+import { LIST_KINDS } from '@/components/ListKindSheet';
+import { ParaprakeDot } from '@/components/ParaprakeDot';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 
 interface CreateListButtonProps {
-  onCreate: (name: string) => void;
+  /** `paraprake` is set when the list is made as a preliminary one. */
+  onCreate: (name: string, paraprake: boolean) => void;
 }
 
 export function CreateListButton({ onCreate }: CreateListButtonProps) {
   const [visible, setVisible] = useState(false);
   const [name, setName] = useState('');
+  const [paraprake, setParaprake] = useState(false);
 
   const close = () => {
     setVisible(false);
     setName('');
+    setParaprake(false);
   };
 
   const submit = () => {
-    onCreate(name.trim());
+    onCreate(name.trim(), paraprake);
     close();
   };
 
@@ -41,6 +46,30 @@ export function CreateListButton({ onCreate }: CreateListButtonProps) {
           onSubmitEditing={submit}
           returnKeyType="done"
         />
+        <Text style={[styles.label, styles.kindLabel]}>Lloji</Text>
+        <View style={styles.kinds} accessibilityRole="radiogroup">
+          {LIST_KINDS.map((kind) => {
+            const selected = kind.paraprake === paraprake;
+            return (
+              <Pressable
+                key={kind.label}
+                onPress={() => setParaprake(kind.paraprake)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                accessibilityLabel={kind.label}
+                style={[styles.kind, selected && styles.kindSelected]}
+              >
+                {kind.paraprake && <ParaprakeDot size={7} />}
+                <Text style={[styles.kindText, selected && styles.kindTextSelected]}>{kind.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.kindHint}>
+          {paraprake
+            ? 'Qëndron gjithmonë në krye të listave. Mund ta kthesh në normale më vonë.'
+            : 'Renditet sipas datës, më e reja lart.'}
+        </Text>
         <Pressable onPress={submit} style={styles.submitButton}>
           <Text style={styles.submitText}>Krijo listën</Text>
         </Pressable>
@@ -67,6 +96,24 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
   },
+  kindLabel: { marginTop: spacing.xs },
+  kinds: { flexDirection: 'row', gap: spacing.sm },
+  kind: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: radii.pill,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    paddingVertical: spacing.sm + 1,
+  },
+  kindSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  kindText: { fontSize: 14, fontWeight: '600', color: colors.textMuted },
+  kindTextSelected: { color: colors.primaryDark, fontWeight: '700' },
+  kindHint: { fontSize: 12, color: colors.textMuted },
   submitButton: {
     backgroundColor: colors.primary,
     borderRadius: radii.sm,

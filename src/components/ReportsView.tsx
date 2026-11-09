@@ -13,6 +13,7 @@ import { useTrips } from '@/context/TripsContext';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import { CATEGORIES } from '@/utils/categories';
 import { formatDayMonthShort } from '@/utils/dates';
+import { isParaprake } from '@/utils/paraprake';
 import {
   buildCategoryHistory,
   buildOptionHistory,
@@ -177,7 +178,9 @@ type ReportRow =
   | { kind: 'totals'; key: string };
 
 export function ReportsView({ onOpenTrip }: ReportsViewProps) {
-  const { trips } = useTrips();
+  const { trips: allTrips } = useTrips();
+  // A paraprake list is not drawn in any chart, so everything below is built without it.
+  const trips = useMemo(() => allTrips.filter((trip) => !isParaprake(trip)), [allTrips]);
   const histories = useMemo(() => buildCategoryHistory(trips), [trips]);
   // What each of the last lists spent, as small columns at the top (the card that used to be on the home page).
   const recent = useMemo(

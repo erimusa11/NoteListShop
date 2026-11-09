@@ -25,7 +25,7 @@ import {
 } from '@/utils/tripLists';
 
 // Only the starred items of the existing lists come along, unchecked and at normal priority.
-function buildTrip(name: string, now: number, existing: ShoppingTrip[] = []): ShoppingTrip {
+function buildTrip(name: string, now: number, existing: ShoppingTrip[] = [], paraprake = false): ShoppingTrip {
   const id = String(now);
   const lists = Object.fromEntries(
     CATEGORIES.map(({ key }) => [key, starredItems(existing, key).map((item) => copyToTrip(item, id))]),
@@ -37,6 +37,8 @@ function buildTrip(name: string, now: number, existing: ShoppingTrip[] = []): Sh
     budget: null,
     ...lists,
     incomes: [],
+    // A normal list has no flag at all (it is what every list was before the kinds existed).
+    ...(paraprake ? { paraprake: true } : {}),
   };
 }
 
@@ -91,8 +93,11 @@ interface TripsContextValue extends TripActions {
   trashedTrips: ShoppingTrip[];
   /** Every list, the trash too: this is what is saved to the account. */
   allTrips: ShoppingTrip[];
-  createList: (name: string) => string;
+  /** Makes a list and returns its id; `paraprake` makes it a preliminary one, which stays on top of the lists. */
+  createList: (name: string, paraprake?: boolean) => string;
   renameTrip: (tripId: string, name: string) => void;
+  /** Makes a list paraprake (preliminary) or brings it back to normal. Nothing else about the list changes. */
+  setParaprake: (tripId: string, paraprake: boolean) => void;
   /** Moves the list to the trash. */
   deleteTrip: (tripId: string) => void;
   restoreTrip: (tripId: string) => void;
@@ -223,10 +228,22 @@ export function TripsProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const createList = (name: string): string => {
+  const createList = (name: string, paraprake = false): string => {
     const now = Date.now();
-    setTrips((prev) => [...prev, buildTrip(name, now, prev.filter((trip) => trip.deletedAt === undefined))]);
+    setTrips((prev) => [...prev, buildTrip(name, now, prev.filter((trip) => trip.deletedAt === undefined), paraprake)]);
     return String(now);
+  };
+
+  const setParaprake = (tripId: string, paraprake: boolean) => {
+    setTrips((prev) =>
+      prev.map((trip) => {
+        if (trip.id !== tripId || (trip.paraprake === true) === paraprake) return trip;
+        // Normal is no flag at all rather than `false`: the account does not accept an undefined value, and a list that
+        // was never paraprake looks exactly like one that went back.
+        const { paraprake: _was, ...rest } = trip;
+        return paraprake ? { ...rest, paraprake: true } : rest;
+      }),
+    );
   };
 
   const renameTrip = (tripId: string, name: string) => {
@@ -293,6 +310,7 @@ export function TripsProvider({ children }: { children: ReactNode }) {
       allTrips,
       createList,
       renameTrip,
+      setParaprake,
       deleteTrip,
       restoreTrip,
       purgeTrip,

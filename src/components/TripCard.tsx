@@ -9,12 +9,14 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 
+import { ParaprakeBadge } from '@/components/ParaprakeDot';
 import { usePrivacy } from '@/context/PrivacyContext';
 import { HOLD_LIST_TO_DELETE_MS, useHoldToDelete } from '@/hooks/useHoldToDelete';
 import { ms, spring } from '@/theme/motion';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { ShoppingTrip } from '@/types/models';
 import { formatDateTimeAlbanian } from '@/utils/dates';
+import { isParaprake } from '@/utils/paraprake';
 import { computeSpentTotal, tripAllItems, tripIncomeTotal } from '@/utils/totals';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -85,9 +87,12 @@ export function TripCard({ trip, onPress, onLongPress, index = 0 }: TripCardProp
             <Ionicons name="cart-outline" size={20} color={colors.primary} />
           </View>
           <View style={styles.titleBlock}>
-            <Text style={styles.title} numberOfLines={1}>
-              {trip.name}
-            </Text>
+            <View style={styles.titleRow}>
+              <Text style={[styles.title, styles.titleText]} numberOfLines={1}>
+                {trip.name}
+              </Text>
+              {isParaprake(trip) && <ParaprakeBadge />}
+            </View>
             <Text style={styles.meta}>
               {boughtCount}/{allItems.length} artikuj të blerë
             </Text>
@@ -138,6 +143,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   titleBlock: { flex: 1 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  titleText: { flexShrink: 1 },
   title: { fontSize: 16, fontWeight: '700', color: colors.text },
   meta: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
   created: { fontSize: 11, color: colors.textMuted, marginTop: 1, opacity: 0.8 },

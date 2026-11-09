@@ -5,6 +5,7 @@ import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 
 import { EmptyState } from '@/components/EmptyState';
+import { ParaprakeDot } from '@/components/ParaprakeDot';
 import { usePrivacy } from '@/context/PrivacyContext';
 import { useTrips } from '@/context/TripsContext';
 import { useTabSwipe } from '@/hooks/useTabSwipe';
@@ -213,7 +214,7 @@ function QokaRow({ entry, color, onPress }: { entry: QokaEntry; color: string; o
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${entry.name}, ${price(entry.amount)}, ${entry.tripName}. Hap listën`}
+      accessibilityLabel={`${entry.name}, ${price(entry.amount)}, ${entry.tripName}${entry.paraprake ? ' (paraprake)' : ''}. Hap listën`}
       style={({ pressed }) => [styles.row, shadow, pressed && styles.rowPressed]}
     >
       <View style={[styles.iconCircle, { backgroundColor: color + '22' }]}>
@@ -223,9 +224,12 @@ function QokaRow({ entry, color, onPress }: { entry: QokaEntry; color: string; o
         <Text style={styles.rowName} numberOfLines={2}>
           {entry.name || 'Pa emër'}
         </Text>
-        <Text style={styles.rowList} numberOfLines={1}>
-          {entry.tripName}
-        </Text>
+        <View style={styles.rowListLine}>
+          <Text style={[styles.rowList, styles.rowListText]} numberOfLines={1}>
+            {entry.tripName}
+          </Text>
+          {entry.paraprake && <ParaprakeDot size={6} />}
+        </View>
       </View>
       <Text style={[styles.rowAmount, { color }]}>{price(entry.amount)}</Text>
     </Pressable>
@@ -279,6 +283,8 @@ const styles = StyleSheet.create({
   iconCircle: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   rowText: { flex: 1 },
   rowName: { fontSize: 15, fontWeight: '600', color: colors.text },
+  rowListLine: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  rowListText: { flexShrink: 1 },
   rowList: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
   rowAmount: { fontSize: 15, fontWeight: '700' },
   loadMore: {
