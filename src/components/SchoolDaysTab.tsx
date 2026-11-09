@@ -4,11 +4,13 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BottomSheet } from '@/components/BottomSheet';
 import { EmptyState } from '@/components/EmptyState';
+import { ParaprakeDot } from '@/components/ParaprakeDot';
 import { SchoolDaysView, TotalPill } from '@/components/SchoolDaysView';
 import { useTrips } from '@/context/TripsContext';
 import { colors, radii, spacing } from '@/theme/theme';
 import { CATEGORIES } from '@/utils/categories';
 import { formatDateAlbanian } from '@/utils/dates';
+import { isParaprake, pinParaprake } from '@/utils/paraprake';
 
 // The category that counts days (Kopesht & Shkolle).
 const CATEGORY = CATEGORIES.find((category) => category.attendancePlaces);
@@ -65,13 +67,14 @@ export function SchoolDaysTab({ tripId, onPickTrip, onGoToLists }: SchoolDaysTab
               onPress={() => setPickerOpen(true)}
               disabled={!several}
               accessibilityRole="button"
-              accessibilityLabel={`Lista: ${trip.name}${several ? '. Zgjidh një tjetër' : ''}`}
+              accessibilityLabel={`Lista: ${trip.name}${isParaprake(trip) ? ' (paraprake)' : ''}${several ? '. Zgjidh një tjetër' : ''}`}
               style={({ pressed }) => [styles.listPill, pressed && styles.pressed]}
             >
               <Ionicons name="albums-outline" size={18} color={colors.primaryDark} />
               <Text style={styles.listName} numberOfLines={1}>
                 {trip.name}
               </Text>
+              {isParaprake(trip) && <ParaprakeDot size={7} />}
               {several && <Ionicons name="chevron-down" size={16} color={colors.textMuted} />}
             </Pressable>
             <TotalPill amount={totalAmount} />
@@ -81,7 +84,8 @@ export function SchoolDaysTab({ tripId, onPickTrip, onGoToLists }: SchoolDaysTab
 
       <BottomSheet visible={pickerOpen} onClose={() => setPickerOpen(false)} title="Ditët shtohen në listën…">
         <ScrollView style={styles.pickerList} showsVerticalScrollIndicator={false}>
-          {newest.map((entry) => {
+          {/* The paraprake lists first, like on the lists page; the list that opens by itself is still the newest one. */}
+          {pinParaprake(newest).map((entry) => {
             const selected = entry.id === trip.id;
             return (
               <Pressable
@@ -92,12 +96,16 @@ export function SchoolDaysTab({ tripId, onPickTrip, onGoToLists }: SchoolDaysTab
                 }}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
+                accessibilityLabel={isParaprake(entry) ? `${entry.name}, paraprake` : undefined}
                 style={({ pressed }) => [styles.pickerRow, selected && styles.pickerRowSelected, pressed && styles.pressed]}
               >
                 <View style={styles.pickerText}>
-                  <Text style={styles.pickerName} numberOfLines={1}>
-                    {entry.name}
-                  </Text>
+                  <View style={styles.pickerNameRow}>
+                    <Text style={[styles.pickerName, styles.pickerNameText]} numberOfLines={1}>
+                      {entry.name}
+                    </Text>
+                    {isParaprake(entry) && <ParaprakeDot size={7} />}
+                  </View>
                   <Text style={styles.pickerDate}>Krijuar më {formatDateAlbanian(entry.createdAt)}</Text>
                 </View>
                 {selected && <Ionicons name="checkmark-circle" size={22} color={colors.primary} />}
@@ -138,6 +146,8 @@ const styles = StyleSheet.create({
   },
   pickerRowSelected: { backgroundColor: colors.primaryLight },
   pickerText: { flex: 1 },
+  pickerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  pickerNameText: { flexShrink: 1 },
   pickerName: { fontSize: 16, fontWeight: '700', color: colors.text },
   pickerDate: { fontSize: 12, color: colors.textMuted },
   goButton: {

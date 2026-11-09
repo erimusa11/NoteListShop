@@ -12,6 +12,9 @@ export const colors = {
   successLight: '#E3F6EC',
   danger: '#E2574C',
   border: '#F0E3D8',
+  /** The dot of a paraprake (preliminary) list, and the soft background behind it. */
+  paraprake: '#6C5CE7',
+  paraprakeLight: '#ECEAFD',
 };
 
 /** The two halves of the app icon: the peach of the shopping side and the sage green of the notes side. */

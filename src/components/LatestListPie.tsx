@@ -72,13 +72,13 @@ export function LatestListPie({
             accessibilityLabel={`${listName}. Zgjidh një listë tjetër`}
             style={({ pressed }) => [styles.titleButton, pressed && styles.pressed]}
           >
-            <Text style={[styles.title, styles.titleInButton]} numberOfLines={1}>
+            <Text style={styles.titleText} numberOfLines={1}>
               {listName}
             </Text>
             <Ionicons name="chevron-down" size={16} color={colors.primaryDark} />
           </Pressable>
         ) : (
-          <Text style={styles.title} numberOfLines={1}>
+          <Text style={styles.titleText} numberOfLines={1}>
             {listName}
           </Text>
         )}
@@ -181,7 +181,8 @@ export function LatestListPie({
 
 const styles = StyleSheet.create({
   titleButton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 },
-  titleInButton: { flex: 0, flexShrink: 1 },
+  // No `flex` here: on the web `flex: 0` means a basis of 0%, which squeezes a one-line text down to nothing.
+  titleText: { flexShrink: 1, fontSize: 12, fontWeight: '600', color: colors.textMuted },
   pickerList: { maxHeight: 360 },
   pickerRow: {
     flexDirection: 'row',
@@ -205,7 +206,6 @@ const styles = StyleSheet.create({
   },
   cardPressed: { opacity: 0.85 },
   header: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
-  title: { flex: 1, fontSize: 12, fontWeight: '600', color: colors.textMuted },
   total: { fontSize: 13, fontWeight: '700', color: colors.text },
   legend: { gap: 6 },
   legendGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.sm },

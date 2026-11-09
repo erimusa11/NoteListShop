@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { ParaprakeDot } from '@/components/ParaprakeDot';
 import { usePrivacy } from '@/context/PrivacyContext';
 import { colors, radii, shadow, spacing } from '@/theme/theme';
 import type { Savings } from '@/utils/reports';
@@ -71,13 +72,16 @@ export function SavingsCard({ savings, onOpenList }: SavingsCardProps) {
                 key={list.id}
                 onPress={onOpenList && (() => onOpenList(list.id))}
                 accessibilityRole="button"
-                accessibilityLabel={`${list.name}: mbeten ${signed(list.left)}. Hap listën`}
+                accessibilityLabel={`${list.name}${list.paraprake ? ' (paraprake)' : ''}: mbeten ${signed(list.left)}. Hap listën`}
                 style={({ pressed }) => [styles.row, pressed && styles.pressed]}
               >
                 <View style={styles.rowText}>
-                  <Text style={styles.rowName} numberOfLines={1}>
-                    {list.name}
-                  </Text>
+                  <View style={styles.rowNameLine}>
+                    <Text style={[styles.rowName, styles.rowNameText]} numberOfLines={1}>
+                      {list.name}
+                    </Text>
+                    {list.paraprake && <ParaprakeDot size={6} />}
+                  </View>
                   <Text style={styles.rowMeta} numberOfLines={1}>
                     {price(list.income)} − {price(list.spent)}
                   </Text>
@@ -133,6 +137,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   rowText: { flex: 1 },
+  rowNameLine: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  rowNameText: { flexShrink: 1 },
   rowName: { fontSize: 14, fontWeight: '600', color: colors.text },
   rowMeta: { fontSize: 11, color: colors.textMuted },
   rowValue: { fontSize: 15, fontWeight: '700' },

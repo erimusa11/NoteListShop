@@ -10,8 +10,8 @@ import { useRemoveItem } from '@/hooks/useRemoveItem';
 import { colors, radii, spacing } from '@/theme/theme';
 import type { ShoppingItem } from '@/types/models';
 import { formatDateAlbanian } from '@/utils/dates';
-import { boughtTime, type SpentEntry, type SpentGroup } from '@/utils/spent';
-import { computeSpentTotal, formatPrice } from '@/utils/totals';
+import type { SpentEntry, SpentGroup } from '@/utils/spent';
+import { boughtTime, computeSpentTotal, formatPrice } from '@/utils/totals';
 
 interface SpentListProps {
   tripId: string;

@@ -1,6 +1,7 @@
 import type { ItemListKey, RemovedItem, ShoppingItem, ShoppingTrip } from '@/types/models';
 import { CATEGORIES } from '@/utils/categories';
 import { withOption } from '@/utils/options';
+import { isParaprake } from '@/utils/paraprake';
 import { DEFAULT_PRIORITY } from '@/utils/priority';
 import { normalizeText } from '@/utils/suggestions';
 
@@ -186,6 +187,12 @@ export function patchItem(
 
 export function latestTrip(trips: ShoppingTrip[]): ShoppingTrip | undefined {
   return trips.reduce<ShoppingTrip | undefined>((latest, trip) => (!latest || trip.createdAt >= latest.createdAt ? trip : latest), undefined);
+}
+
+// The list that things coming from elsewhere (the checked items sent from Note List Shop) go to: the newest one that is not
+// paraprake. A paraprake list is for planning ahead, so it never receives anything by itself, even when it is the newest.
+export function latestNormalTrip(trips: ShoppingTrip[]): ShoppingTrip | undefined {
+  return latestTrip(trips.filter((trip) => !isParaprake(trip)));
 }
 
 // "Banjo & Produkte Pastrimi" was once a category of its own, saved under `bathroom`; it is now part of Detergjente,

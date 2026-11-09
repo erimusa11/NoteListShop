@@ -27,7 +27,7 @@ import {
 } from '@/utils/noteLists';
 import { isSentTo, sendableItems, timesSent, tripEntryFor } from '@/utils/noteSend';
 import { normalizeText } from '@/utils/suggestions';
-import { latestTrip } from '@/utils/tripLists';
+import { latestNormalTrip } from '@/utils/tripLists';
 
 // The part of the checked ones shows this many at first, and this many more each time "Shiko më shumë" is tapped.
 const DONE_FIRST = 10;
@@ -128,9 +128,10 @@ export function NoteListBody({ listId, accent }: NoteListBodyProps) {
     showUndo(`"${item.name}" u zhvendos te të kryerat`, () => archiveItems(sourceId, [item.id], false));
   };
 
-  // The checked items (the only ones that can be sent) go as copies to the newest list of Note Shop List.
+  // The checked items (the only ones that can be sent) go as copies to the newest list of Note Shop List that is not a
+  // paraprake one: those are for planning ahead and take nothing from here.
   const sendable = list ? sendableItems(list) : [];
-  const target = latestTrip(trips);
+  const target = latestNormalTrip(trips);
   // With no list to send to nothing is waiting (the sheet then says so).
   const waiting = target ? sendable.filter((item) => !isSentTo(item, target.id)).length : 0;
   const openSend = () => setSendSheet((prev) => ({ open: true, key: (prev?.key ?? 0) + 1 }));

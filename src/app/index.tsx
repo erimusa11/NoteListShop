@@ -26,6 +26,7 @@ import { useUndo } from '@/context/UndoContext';
 import { useTabSwipe } from '@/hooks/useTabSwipe';
 import { colors, spacing } from '@/theme/theme';
 import type { ShoppingTrip } from '@/types/models';
+import { isParaprake, pinParaprake } from '@/utils/paraprake';
 import { buildSavings, buildSectionSpend } from '@/utils/reports';
 import { SPENT_SECTION } from '@/utils/spent';
 import { tripAllItems, tripIncomeTotal } from '@/utils/totals';
@@ -59,6 +60,9 @@ export default function ListsOverviewScreen() {
   // The name from the profile page, or the account's (Google) name while the profile has none.
   const { firstName, fullName, initial } = useProfile();
   const sorted = [...trips].sort((a, b) => b.createdAt - a.createdAt);
+  // As the lists are shown: the paraprake ones always on top, then the rest, newest first. `sorted` stays the plain order by
+  // date, which is what "the newest list" (the pie's first pick) means.
+  const ordered = pinParaprake(sorted);
   // The app opens on the chooser; from there the user goes to the shopping pages or to Note List Shop.
   const [tab, setTab] = useState<Tab>('home');
   // The shopping page that was open last, so the way back to Note Shop List leads there.
@@ -96,7 +100,7 @@ export default function ListsOverviewScreen() {
   const [query, setQuery] = useState('');
   const [shownCount, setShownCount] = useState(PAGE_SIZE);
   const needle = normalizeText(query);
-  const visibleTrips = needle ? sorted.filter((trip) => normalizeText(trip.name).includes(needle)) : sorted;
+  const visibleTrips = needle ? ordered.filter((trip) => normalizeText(trip.name).includes(needle)) : ordered;
   const shownTrips = visibleTrips.slice(0, shownCount);
   const hiddenCount = visibleTrips.length - shownTrips.length;
   const changeQuery = (text: string) => {
@@ -107,12 +111,14 @@ export default function ListsOverviewScreen() {
     setSearching(false);
     changeQuery('');
   };
-  // The list the pie shows: the newest until another is picked on the card (or while the picked one is gone).
+  // A paraprake list is not drawn in any chart, so the pie only knows the normal lists: it shows the newest of them until
+  // another is picked on the card (or while the picked one is gone). With only paraprake lists there is no pie.
+  const chartTrips = sorted.filter((trip) => !isParaprake(trip));
   const [pieTripId, setPieTripId] = useState<string | null>(null);
-  const pieTrip = sorted.find((trip) => trip.id === pieTripId) ?? sorted[0];
+  const pieTrip = chartTrips.find((trip) => trip.id === pieTripId) ?? chartTrips[0];
   const latestSections = buildSectionSpend(pieTrip ? [pieTrip] : []);
-  // Newest list first, so the breakdown of the bank reads like the lists below.
-  const savings = buildSavings(sorted);
+  // In the order of the lists below, so the breakdown of the bank reads like them.
+  const savings = buildSavings(ordered);
 
   const openTrip = (id: string) => router.push({ pathname: '/trip/[id]', params: { id } });
   // A category of the pie opens that list on Të shpenzuarat, at the part of that category.
@@ -135,8 +141,8 @@ export default function ListsOverviewScreen() {
     showUndo(`"${name}" u fshi`, () => restoreTrip(id));
   };
 
-  const handleCreate = (name: string) => {
-    const id = createList(name);
+  const handleCreate = (name: string, paraprake: boolean) => {
+    const id = createList(name, paraprake);
     router.push({ pathname: '/trip/[id]', params: { id } });
   };
 
@@ -263,16 +269,18 @@ export default function ListsOverviewScreen() {
               trips.length > 0 && !needle ? (
                 <>
                   {savings.lists > 0 && <SavingsCard savings={savings} onOpenList={openTrip} />}
-                  <LatestListPie
-                    listName={`${pieTrip.name} · sipas kategorisë`}
-                    sections={latestSections}
-                    income={tripIncomeTotal(pieTrip)}
-                    onPressSection={(section) => openSpent(pieTrip.id, section)}
-                    onPressCard={() => openTrip(pieTrip.id)}
-                    choices={sorted}
-                    selectedId={pieTrip.id}
-                    onSelect={setPieTripId}
-                  />
+                  {pieTrip && (
+                    <LatestListPie
+                      listName={`${pieTrip.name} · sipas kategorisë`}
+                      sections={latestSections}
+                      income={tripIncomeTotal(pieTrip)}
+                      onPressSection={(section) => openSpent(pieTrip.id, section)}
+                      onPressCard={() => openTrip(pieTrip.id)}
+                      choices={chartTrips}
+                      selectedId={pieTrip.id}
+                      onSelect={setPieTripId}
+                    />
+                  )}
                 </>
               ) : null
             }

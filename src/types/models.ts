@@ -144,6 +144,8 @@ export interface ShoppingTrip extends Partial<Record<Exclude<ItemListKey, 'items
   calendarItems?: ShoppingItem[];
   /** Items deleted from this list, one per name and category. Only used for suggestions; they are not shown anywhere else. */
   removed?: RemovedItem[];
+  /** A preliminary (paraprake) list: it always stays on top of the lists and carries a dot wherever it is shown, and works like any other. Missing means a normal list. */
+  paraprake?: boolean;
   /** Set when the list is deleted: it waits in the trash, and can be brought back, until `TRASH_DAYS` have passed. */
   deletedAt?: number;
 }

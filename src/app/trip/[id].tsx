@@ -14,6 +14,8 @@ import { InlineEditableField } from '@/components/InlineEditableField';
 import { IncomeRow } from '@/components/IncomeRow';
 import { ImportantList } from '@/components/ImportantList';
 import { ItemList } from '@/components/ItemList';
+import { ListKindSheet } from '@/components/ListKindSheet';
+import { ParaprakeBadge } from '@/components/ParaprakeDot';
 import { SpentList } from '@/components/SpentList';
 import { TagGridSheet } from '@/components/TagGridSheet';
 import { TagString, type TagOption } from '@/components/TagString';
@@ -34,6 +36,7 @@ import {
   incomesOfKind,
 } from '@/utils/incomes';
 import { goBackOrHome } from '@/utils/navigation';
+import { isParaprake } from '@/utils/paraprake';
 import { buildOptionTotals, buildPersonTotals, itemOption, itemsForOption, itemsForPerson } from '@/utils/options';
 import { SPENT_COLOR, SPENT_SECTION, type SpentEntry, type SpentGroup, spentItems } from '@/utils/spent';
 import { buildListSuggestions, buildSuggestions, suggestionGroups } from '@/utils/suggestions';
@@ -160,8 +163,10 @@ export default function TripDetailScreen() {
   // `tab` and `category` come from the pie on the home page: open on Të shpenzuarat, at the part of that category.
   const { id, tab, category: focusCategory } = useLocalSearchParams<{ id: string; tab?: string; category?: string }>();
   const startSection: Section = tab === SPENT_SECTION ? SPENT_SECTION : IMPORTANT_SECTION;
-  const { trips, addItem, addIncome, updateIncome, removeIncome, renameTrip } = useTrips();
+  const { trips, addItem, addIncome, updateIncome, removeIncome, renameTrip, setParaprake } = useTrips();
   const trip = trips.find((t) => t.id === id);
+  const paraprake = trip ? isParaprake(trip) : false;
+  const [kindOpen, setKindOpen] = useState(false);
   // The category menu is in alphabetical order, so a category is always in the same place there.
   const categoryOrder = categoriesAlphabetically();
   // The strip puts the categories with the most items left first (the number on their tab); equal ones stay alphabetical.
@@ -371,6 +376,22 @@ export default function TripDetailScreen() {
             <Text style={styles.title}>Lista</Text>
           )}
           {trip && (
+            // The kind of the list: a quiet ring while it is normal, the paraprake dot with its name once it is not.
+            <Pressable
+              onPress={() => setKindOpen(true)}
+              hitSlop={8}
+              style={styles.headerButton}
+              accessibilityRole="button"
+              accessibilityLabel={`Lista është ${paraprake ? 'paraprake' : 'normale'}. Ndrysho llojin`}
+            >
+              {paraprake ? (
+                <ParaprakeBadge />
+              ) : (
+                <Ionicons name="ellipse-outline" size={20} color={colors.textMuted} />
+              )}
+            </Pressable>
+          )}
+          {trip && (
             <Pressable
               onPress={() => setGridOpen(true)}
               hitSlop={8}
@@ -382,6 +403,15 @@ export default function TripDetailScreen() {
             </Pressable>
           )}
         </View>
+
+        {trip && (
+          <ListKindSheet
+            visible={kindOpen}
+            onClose={() => setKindOpen(false)}
+            paraprake={paraprake}
+            onChange={(next) => setParaprake(trip.id, next)}
+          />
+        )}
 
         <TagGridSheet
           visible={gridOpen}
