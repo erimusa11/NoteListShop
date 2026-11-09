@@ -7,14 +7,19 @@ export function tripIncomeTotal(trip: ShoppingTrip): number {
   return (trip.incomes ?? []).reduce((sum, income) => sum + income.amount, 0);
 }
 
-// Unchecked items first, most urgent on top (same priority keeps its original order); checked items go last.
-export function sortBoughtLast<T extends { bought: boolean; priority?: number }>(items: T[]): T[] {
+/** When an item was checked off; an item checked before that was noted counts from the day it was added. */
+export const boughtTime = (item: ShoppingItem): number => item.boughtAt ?? item.createdAt;
+
+// Unchecked items first, most urgent on top (same priority keeps its original order); checked items go last, the one
+// checked most recently first and the oldest at the bottom (items checked in the same moment keep their list order).
+export function sortBoughtLast<T extends ShoppingItem>(items: T[]): T[] {
   const open = items
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => !item.bought)
     .sort((a, b) => normalizePriority(b.item.priority) - normalizePriority(a.item.priority) || a.index - b.index)
     .map(({ item }) => item);
-  return [...open, ...items.filter((item) => item.bought)];
+  const checked = items.filter((item) => item.bought).sort((a, b) => boughtTime(b) - boughtTime(a));
+  return [...open, ...checked];
 }
 
 // What the row costs: the price of one times the quantity.

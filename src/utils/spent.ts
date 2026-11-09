@@ -1,6 +1,6 @@
 import type { ShoppingItem, ShoppingTrip } from '@/types/models';
 import type { Category } from '@/utils/categories';
-import { computeSpentTotal } from '@/utils/totals';
+import { boughtTime, computeSpentTotal } from '@/utils/totals';
 
 /** The tab right after Më të rëndësishmet that gathers everything already checked off, split by its category. */
 export const SPENT_SECTION = 'spent';
@@ -8,7 +8,7 @@ export const SPENT_COLOR = '#2FA96B';
 
 export interface SpentGroup {
   category: Category;
-  /** The checked items of this category, in the order of its list. */
+  /** The checked items of this category, the one checked last first. */
   items: ShoppingItem[];
   /** What they add up to. */
   total: number;
@@ -19,9 +19,6 @@ export interface SpentEntry {
   category: Category;
   item: ShoppingItem;
 }
-
-/** When an item was checked off; an item checked before that was noted counts from the day it was added. */
-export const boughtTime = (item: ShoppingItem): number => item.boughtAt ?? item.createdAt;
 
 export interface SpentItems {
   /** One group per category that has something checked, the one that took the most money first. */
@@ -38,7 +35,7 @@ export function spentItems(trip: ShoppingTrip | undefined, categories: Category[
   const latest: SpentEntry[] = [];
   let count = 0;
   for (const category of categories) {
-    const items = (trip?.[category.key] ?? []).filter((item) => item.bought);
+    const items = (trip?.[category.key] ?? []).filter((item) => item.bought).sort((a, b) => boughtTime(b) - boughtTime(a));
     if (items.length === 0) continue;
     count += items.length;
     groups.push({ category, items, total: computeSpentTotal(items) });
